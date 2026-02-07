@@ -2,6 +2,10 @@
 <html>
   <head>
     <base target="_top">
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+    <script>
     // --- НАСТРОЙКИ ПРИЛОЖЕНИЯ ---
   const CLIENT_ID = '1007801132466-7n900gd7copmsp5b3k87kqt0cbu62sth.apps.googleusercontent.com';
   const WHITELIST = [
@@ -318,6 +322,7 @@
 
   // Подменяем объект google.script.run
   window.google = { script: { run: runAdapter } };
+      </script>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#FF5722">
@@ -9881,6 +9886,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
 
 
