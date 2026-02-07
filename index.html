@@ -17,11 +17,13 @@
   // Права доступа: чтение и запись таблиц + доступ к файлам (чтобы найти БД)
   const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
 // Глобальные переменные
+  
   let tokenClient;
   let gapiInited = false;
   let gisInited = false;
-  let CURRENT_USER_EMAIL = "";
-  let USER_DB_ID = localStorage.getItem('cake_db_id'); 
+  // Пытаемся сразу вспомнить почту
+  let CURRENT_USER_EMAIL = localStorage.getItem('user_email') || "";
+  let USER_DB_ID = localStorage.getItem('cake_db_id');
 
   // 1. Загрузка GAPI (Google API)
   function gapiLoaded() {
@@ -61,31 +63,54 @@
   }
 
   // 3. Проверка готовности и запуск
+  // 3. Проверка готовности и АВТО-ВХОД
   function checkAuth() {
     if (gapiInited && gisInited) {
       document.getElementById('loadingOverlay').style.display = 'none';
-      // Если email еще не известен — показываем кнопку входа (надо будет добавить кнопку)
-      if (!CURRENT_USER_EMAIL) {
-         showLoginButton();
+
+      // Пробуем найти сохраненный токен
+      const storedToken = localStorage.getItem('google_access_token');
+      
+      if (storedToken) {
+          try {
+              const token = JSON.parse(storedToken);
+              gapi.client.setToken(token); // Восстанавливаем токен
+              
+              // Проверяем, жив ли токен (запрашиваем профиль)
+              console.log("🔄 Восстанавливаем сессию...");
+              fetchUserProfile(token.access_token).catch(() => {
+                  // Если токен протух — удаляем и просим войти
+                  console.log("Токен истек, нужен вход.");
+                  localStorage.removeItem('google_access_token');
+                  showLoginButton();
+              });
+          } catch (e) {
+              showLoginButton();
+          }
+      } else {
+          // Если токена нет — показываем кнопку
+          showLoginButton();
       }
     }
-  }
+  }}
 
   // Функция Входа (вызывается кнопкой)
+// Функция Входа (вызывается кнопкой)
   function handleAuthClick() {
     tokenClient.callback = async (resp) => {
       if (resp.error) {
         throw (resp);
       }
-      // Успешный вход
+      // 1. Сохраняем Токен в память телефона
+      localStorage.setItem('google_access_token', JSON.stringify(resp));
+      
+      // 2. Идем за профилем
       await fetchUserProfile(resp.access_token);
     };
 
     if (gapi.client.getToken() === null) {
-      // Если токена нет - запрашиваем (появится окно Google)
       tokenClient.requestAccessToken({prompt: 'consent'});
     } else {
-      // Если есть - просто обновляем
       tokenClient.requestAccessToken({prompt: ''});
     }
   }
@@ -102,6 +127,7 @@
       // ПРОВЕРКА ДОСТУПА (WHITELIST)
       if (WHITELIST.includes(email)) {
         CURRENT_USER_EMAIL = email;
+        localStorage.setItem('user_email', email); // <-- Запоминаем почту
         alert(`Добро пожаловать, ${userInfo.name}!`);
         removeLoginButton();
         
@@ -154,6 +180,607 @@
       gisLoaded();
   };
 
+
+      /**
+ * Основной класс расчета
+ */
+class CakeCalculator {
+  constructor(data) {
+    this.data = data;
+    this.ingredients = data.ingredients || [];
+    this.recipes = data.recipes || [];
+    this.tiersData = data.tiers || [];
+    
+    // Глобальные настройки
+    this.shape = data.shape || 'cylinder';
+    this.polySides = data.polySides || 6;
+    
+    // Результаты
+    this.shoppingList = [];
+    this.detailedBlocks = [];
+    this.calculatedTiers = [];
+    this.totalCost = 0;
+    this.totalWeight = 0;
+    this.totalFillingWeight = 0;
+    this.totalCoatingWeight = 0;
+  }
+
+  calculate() {
+    // 1. Расчет каждого яруса
+    this.tiersData.forEach((tierInput, index) => {
+      const isBottom = (index === 0);
+      const tierResult = this._calculateSingleTier(tierInput, isBottom);
+      this.calculatedTiers.push(tierResult);
+      
+      this.totalWeight += tierResult.weight;
+    });
+
+    // 2. Ручные добавки (Extras)
+    if (this.data.extras && this.data.extras.length > 0) {
+      this._processExtras(this.data.extras);
+    }
+
+    // 3. Финансы
+    const rate = this.data.hourlyRate || 0;
+    let laborCost = 0;
+    if (this.data.laborList && this.data.laborList.length > 0) {
+      this.data.laborList.forEach(task => {
+        laborCost += (task.realHours || 0) * (task.coeff || 1) * rate;
+      });
+    } else {
+      laborCost = (this.data.hoursSpent || 0) * rate;
+    }
+
+    const finalPrice = Math.ceil((this.totalCost + laborCost) * (1 + (this.data.urgencyPercent || 0) / 100));
+    
+    // 4. Визуализация (SVG)
+    const viz = new CakeVisualizer();
+    const svgHtml = viz.renderStack(this.calculatedTiers, this.shape, this.polySides);
+
+    // 5. Сборка ответа
+    const totalH = this.calculatedTiers.reduce((acc, t) => acc + t.h, 0);
+    
+    // Нутриенты (КБЖУ)
+    const sumP = this.shoppingList.reduce((s, i) => s + (i.p_tot || 0), 0);
+    const sumF = this.shoppingList.reduce((s, i) => s + (i.f_tot || 0), 0);
+    const sumC = this.shoppingList.reduce((s, i) => s + (i.c_tot || 0), 0);
+    const sumK = this.shoppingList.reduce((s, i) => s + (i.k_tot || 0), 0);
+    const totalWeightG = this.totalWeight;
+
+    const kbju100 = {
+        p: totalWeightG > 0 ? ((sumP / totalWeightG) * 100).toFixed(1) : "0.0",
+        f: totalWeightG > 0 ? ((sumF / totalWeightG) * 100).toFixed(1) : "0.0",
+        c: totalWeightG > 0 ? ((sumC / totalWeightG) * 100).toFixed(1) : "0.0",
+        k: totalWeightG > 0 ? Math.round((sumK / totalWeightG) * 100) : 0
+    };
+
+    return {
+      svg: svgHtml,
+      data: {
+        tiers: this.calculatedTiers, 
+        kbju100: kbju100,
+        geometry: { 
+            d: Math.round(this.calculatedTiers[0].d), 
+            h: parseFloat(totalH.toFixed(1)), 
+            shape: this.shape
+        },
+        weights: { 
+            total: Math.round(this.totalWeight),
+            filling: Math.round(this.totalFillingWeight),
+            coating: Math.round(this.totalCoatingWeight)
+        },
+        costs: { 
+            totalProductionCost: Math.ceil(this.totalCost),
+            laborCost: laborCost,
+            finalPrice: finalPrice,
+            urgency: this.data.urgencyPercent
+        },
+        shoppingList: this.shoppingList.map(item => {
+            item.amount = parseFloat(item.amount.toFixed(1)); 
+            item.cost = Math.ceil(item.cost); 
+            return item;
+        }).sort((a, b) => b.cost - a.cost),
+        detailedBlocks: this.detailedBlocks
+      }
+    };
+  }
+
+  _calculateSingleTier(tierInput, isBottom) {
+    const recipe = this.recipes.find(r => r.id === tierInput.recipeId);
+    if (!recipe) throw new Error(`Рецепт не найден (ID: ${tierInput.recipeId})`);
+
+    const fillStats = this._analyzeRecipe(recipe);
+    let refVolume = fillStats.geom.volume; 
+    let density = fillStats.netWeight / refVolume;
+    
+    if (this.shape === 'sphere') {
+        const recipeFillPercent = parseFloat(recipe.fillPercent) || 100;
+        if (this.data.sphereFillMode === 'full' && recipeFillPercent < 100) {
+            const ratio = 100 / recipeFillPercent;
+            density = density * ratio;
+        }
+    }
+
+    let coatingConsumption = 0;
+    let coatingRec = null;
+    if (this.data.coatingId) {
+        coatingRec = this.recipes.find(r => r.id === this.data.coatingId);
+        if (coatingRec) {
+           const cStats = this._analyzeRecipe(coatingRec);
+           const area = this._calculateSurfaceArea(cStats.geom.shape, cStats.geom.d, cStats.geom.h);
+           const margin = 1 + ((this.data.coatingMarginPercent || 0) / 100);
+           coatingConsumption = (cStats.netWeight / area) * margin;
+        }
+    }
+
+    // ЛОГИКА 1: РЕЖИМ ГЕОМЕТРИИ
+    let geom;
+    if (tierInput.isGeometryMode || (tierInput.fixedDiameter && tierInput.fixedHeight && (!tierInput.weight || tierInput.weight <= 0))) {
+        const d = tierInput.fixedDiameter || 20;
+        const h = tierInput.fixedHeight || 10;
+        const w = tierInput.fixedWidth || (this.shape === 'rectangle' ? d * 0.75 : d);
+
+        const vInner = this._calcVolume(this.shape, d, h, w, this.polySides);
+        const areaCoat = this._calculateSurfaceArea(this.shape, d, h, false, w, this.polySides);
+        const coatingWeight = areaCoat * coatingConsumption;
+
+        tierInput.weight = (vInner * density) + coatingWeight;
+        geom = { d: d, h: h, w: w, volInner: vInner };
+    } 
+    // ЛОГИКА 2: РЕЖИМ ВЕСОВ
+    else {
+        if (tierInput.forceHeight) {
+             const fd = tierInput.fixedDiameter || 20;
+             const fh = parseFloat(tierInput.forceHeight);
+             const fw = tierInput.fixedWidth || (this.shape === 'rectangle' ? fd * 0.75 : undefined);
+             const tVol = this._calcVolume(this.shape, fd, fh, fw, this.polySides);
+             const tArea = this._calculateSurfaceArea(this.shape, fd, fh, false, fw, this.polySides);
+             tierInput.weight = (tVol * density) + (tArea * coatingConsumption);
+             tierInput.fixedHeight = fh; 
+        }
+
+        geom = this._solveGeometry({
+            targetWeight: tierInput.weight, 
+            shape: this.shape,
+            polySides: this.polySides,
+            fixedDiameter: tierInput.fixedDiameter,
+            fixedWidth: tierInput.fixedWidth,
+            fixedHeight: tierInput.fixedHeight,
+            fillingDensity: density,
+            coatingConsumption: coatingConsumption,
+            coatingMethod: this.data.coatingMethod 
+        });
+    }
+
+    const fillingBatchWeight = fillStats.netWeight; 
+    let scaleRatio = 1;
+    let coatingBatchWeight = 0;
+    if (coatingRec) {
+        const cStats = this._analyzeRecipe(coatingRec);
+        coatingBatchWeight = cStats.netWeight;
+    }
+
+    if (recipe.targetFinishedWeight && recipe.targetFinishedWeight > 0) {
+        scaleRatio = tierInput.weight / recipe.targetFinishedWeight;
+    } else {
+        scaleRatio = tierInput.weight / (fillingBatchWeight + coatingBatchWeight);
+    }
+
+    let neededFillWeight = 0;
+    let neededCoatWeight = 0;
+    let fillScale = scaleRatio;
+    let coatScale = scaleRatio;
+
+    if (this.data.coatingMethod === 'proportion') {
+        neededFillWeight = fillingBatchWeight * scaleRatio;
+        if (coatingRec) {
+            neededCoatWeight = coatingBatchWeight * scaleRatio;
+        }
+    } else {
+        neededFillWeight = geom.volInner * density;
+        fillScale = neededFillWeight / fillingBatchWeight;
+        if (coatingRec) {
+             const surfArea = this._calculateSurfaceArea(this.shape, geom.d, geom.h, false, geom.w, this.polySides);
+             neededCoatWeight = surfArea * coatingConsumption;
+             if (coatingBatchWeight > 0) coatScale = neededCoatWeight / coatingBatchWeight;
+        }
+    }
+
+    this.totalFillingWeight += neededFillWeight;
+    this.totalCoatingWeight += neededCoatWeight;
+
+    this._processRecipeComponents(recipe, fillScale, `Ярус ${tierInput.id}`, 'filling');
+    if (coatingRec) {
+        this._processRecipeComponents(coatingRec, coatScale, `Покрытие (Ярус ${tierInput.id})`, 'coating');
+    }
+
+    if (this.data.extraCoatingId) {
+        const exRec = this.recipes.find(r => r.id === this.data.extraCoatingId);
+        if (exRec) {
+            const surfArea = this._calculateSurfaceArea(this.shape, geom.d, geom.h, false, geom.w, this.polySides);
+            const exStats = this._analyzeRecipe(exRec);
+            const exAreaCalib = this._calculateSurfaceArea('cylinder', exStats.geom.d, exStats.geom.h);
+            const exScale = (surfArea / exAreaCalib) * (1 + (this.data.extraMarginPercent||0)/100);
+            this._processRecipeComponents(exRec, exScale, `Велюр (Ярус ${tierInput.id})`, 'extra');
+        }
+    }
+
+    const currentTierCost = this.detailedBlocks
+        .filter(blk => blk.name.includes(`Ярус ${tierInput.id}`))
+        .reduce((sum, blk) => sum + (blk.totalCost || 0), 0);
+
+    return {
+        id: tierInput.id,
+        d: geom.d,
+        h: geom.h,
+        w: geom.w,
+        weight: neededFillWeight + neededCoatWeight,
+        totalCost: currentTierCost, 
+        recipeName: recipe.name,
+        forceHeight: tierInput.forceHeight 
+    };
+  }
+
+  _processRecipeComponents(recipe, scale, blockPrefix, type) {
+      if (!recipe.blocks) return; 
+
+      recipe.blocks.forEach(block => {
+          let blockScale = scale;
+          let blockCost = 0;
+          let blockIngs = [];
+          
+          if (block.ingredients) {
+              block.ingredients.forEach(link => {
+                  const item = this.ingredients.find(i => i.id === link.id);
+                  if (item) {
+                      const rawAmount = link.weight * blockScale; 
+                      let cost = 0;
+                      let amountForShopping = rawAmount; 
+                      let unitForProduction = item.unit;
+                      let isPcsCalculation = (item.unit === 'шт');
+
+                      const singleW = parseFloat(item.singleWeight) || 0;
+                      const useWeight = item.useWeightInRecipe === true || item.useWeightInRecipe === "true"; 
+
+                      if (item.unit === 'шт' && singleW > 0 && useWeight) {
+                          const pieces = Math.ceil(rawAmount / singleW);
+                          amountForShopping = pieces;
+                          cost = pieces * (item.packPrice / item.packWeight); 
+                          unitForProduction = 'г'; 
+                      } 
+                      else {
+                          cost = rawAmount * (item.packPrice / item.packWeight);
+                      }
+                      
+                      this._addToShoppingList(item, amountForShopping, cost, isPcsCalculation);
+                      blockCost += cost;
+                      
+                      blockIngs.push({
+                          name: item.name, 
+                          amount: parseFloat(rawAmount.toFixed(1)), 
+                          unit: unitForProduction,
+                          cost: Math.ceil(cost)
+                      });
+                  }
+              });
+          }
+          
+          this.detailedBlocks.push({
+              name: `${blockPrefix}: ${block.name}`, type: type, ingredients: blockIngs, totalCost: Math.ceil(blockCost)
+          });
+          this.totalCost += blockCost;
+      });
+  }
+  _processExtras(extras) {
+      let exCost = 0;
+      let exIngs = [];
+      extras.forEach(ex => {
+          const item = this.ingredients.find(i => i.id === ex.id);
+          if (item) {
+             const cost = ex.amount * (item.packPrice / item.packWeight);
+             this._addToShoppingList(item, ex.amount, cost);
+             exCost += cost;
+             exIngs.push({name: item.name, amount: ex.amount, unit: item.unit, cost: Math.ceil(cost)});
+          }
+      });
+      this.detailedBlocks.push({
+          name: "📦 Декор и Упаковка", type: 'extra', ingredients: exIngs, totalCost: Math.ceil(exCost)
+      });
+      this.totalCost += exCost;
+  }
+
+  _addToShoppingList(item, amount, cost, isPcs = false) {
+    const exist = this.shoppingList.find(i => i.id === item.id);
+    
+    let weightInGrams = amount;
+    if (isPcs) {
+        weightInGrams = amount * (item.singleWeight || 0);
+    }
+
+    const p_contrib = (weightInGrams / 100) * (item.p || 0);
+    const f_contrib = (weightInGrams / 100) * (item.f || 0);
+    const c_contrib = (weightInGrams / 100) * (item.c || 0);
+    const k_contrib = (weightInGrams / 100) * (item.k || 0);
+
+    if(exist) { 
+        exist.amount += amount; 
+        exist.cost += cost; 
+        exist.p_tot = (exist.p_tot || 0) + p_contrib;
+        exist.f_tot = (exist.f_tot || 0) + f_contrib;
+        exist.c_tot = (exist.c_tot || 0) + c_contrib;
+        exist.k_tot = (exist.k_tot || 0) + k_contrib;
+    } else { 
+        this.shoppingList.push({
+            id: item.id, name: item.name, amount: amount, 
+            unit: isPcs ? 'шт' : item.unit, 
+            cost: cost,
+            p_tot: p_contrib, f_tot: f_contrib, c_tot: c_contrib, k_tot: k_contrib
+        }); 
+    }
+}
+  _analyzeRecipe(recipe) {
+    const d = parseFloat(recipe.calibrationD || 16);
+    const h = parseFloat(recipe.calibrationH || 10);
+    const shape = recipe.calibrationShape || 'cylinder';
+    
+    let vol;
+    if (shape === 'sphere') {
+        vol = (4/3) * Math.PI * Math.pow(d/2, 3);
+    } else if (shape === 'square') {
+        vol = d * d * h;
+    } else {
+        vol = Math.PI * Math.pow(d/2, 2) * h; 
+    }
+
+    let weight = parseFloat(recipe.outputWeight);
+    if (!weight || isNaN(weight)) {
+        weight = recipe.blocks.reduce((sum, b) => {
+          return sum + b.ingredients.reduce((s, link) => {
+              const ing = this.ingredients.find(i => i.id === link.id);
+              return s + (link.weight * (ing ? (ing.singleWeight || 1) : 1));
+          }, 0);
+        }, 0) || 1000;
+    }
+    
+    return { netWeight: weight, geom: { d, h, volume: vol, shape: shape } };
+  }
+
+  _solveGeometry(p) {
+    let d = p.fixedDiameter || 20;
+    let w = p.fixedWidth || (p.shape === 'rectangle' ? d * 0.75 : d); 
+    let h = p.fixedHeight || 10;
+    
+    if (p.shape === 'sphere' && p.fixedDiameter) { h = d; }
+    else if (p.shape === 'rectangle' && p.fixedDiameter && p.fixedWidth && p.fixedHeight) {}
+    else if ((p.shape === 'cylinder' || p.shape === 'square' || p.shape === 'polygon') && p.fixedDiameter && p.fixedHeight) {}
+    else {
+        const thick = 0.5; 
+        const coatingDensity = p.coatingConsumption / thick;
+
+        for(let i=0; i<15; i++) {
+            const vInner = this._calcVolume(p.shape, d, h, w, p.polySides);
+            const areaCoat = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides); 
+            const vCoat = areaCoat * thick;
+            
+            const estWeight = (vInner * p.fillingDensity) + (vCoat * coatingDensity);
+
+            if (Math.abs(estWeight - p.targetWeight) < 5) break;
+            
+            const ratio = p.targetWeight / estWeight;
+
+            if (p.shape === 'sphere') { 
+                d *= Math.pow(ratio, 1/3); h = d; 
+            } 
+            else if (p.shape === 'rectangle') {
+                 if (p.fixedDiameter && p.fixedWidth) h *= ratio; 
+                 else if (p.fixedHeight) { const f = Math.sqrt(ratio); d *= f; w *= f; }
+                 else if (p.fixedDiameter) h *= ratio; 
+                 else { const f = Math.pow(ratio, 1/3); d *= f; h *= f; w *= f; }
+            } 
+            else { 
+                 if (p.fixedDiameter) h *= ratio; 
+                 else if (p.fixedHeight) d *= Math.sqrt(ratio); 
+                 else { const f = Math.pow(ratio, 1/3); d *= f; h *= f; w *= f; }
+            }
+        }
+    }
+    
+    d = Math.round(d);
+    if (w) w = Math.round(w);
+    
+    if (p.shape === 'sphere') {
+        h = d; 
+    } else {
+        if (p.coatingMethod === 'proportion') {
+            h = Math.ceil(h); 
+        } else {
+            h = Math.round(h * 10) / 10;
+        }
+    }
+
+    const vFinal = this._calcVolume(p.shape, d, h, w, p.polySides);
+    return { d, h, w, volInner: vFinal };
+  }
+
+  _calcVolume(shape, d, h, w, n) {
+      if (shape === 'square') return d * d * h;
+      if (shape === 'rectangle') return d * (w || d) * h;
+      if (shape === 'sphere') return (4/3) * Math.PI * Math.pow(d/2, 3);
+      if (shape === 'polygon') {
+          const R = d / 2;
+          const area = 0.5 * n * R * R * Math.sin((2 * Math.PI) / n);
+          return area * h;
+      }
+      return Math.PI * Math.pow(d/2, 2) * h;
+  }
+
+  _calculateSurfaceArea(shape, d, h, bottom, w, n) {
+      let top, side;
+      if (shape === 'sphere') return 4 * Math.PI * Math.pow(d/2, 2);
+      
+      if (shape === 'polygon') {
+          const R = d / 2;
+          top = 0.5 * n * R * R * Math.sin((2 * Math.PI) / n);
+          const a = 2 * R * Math.sin(Math.PI / n);
+          side = (n * a) * h;
+      } 
+      else if (shape === 'square') { 
+          top = d * d; 
+          side = 4 * d * h; 
+      }
+      else if (shape === 'rectangle') { 
+          const width = w || d;
+          top = d * width; 
+          side = 2 * (d + width) * h;
+      }
+      else { 
+          top = Math.PI * Math.pow(d/2, 2); 
+          side = Math.PI * d * h;
+      }
+      return side + top + (bottom ? top : 0);
+  }
+}
+
+class CakeVisualizer {
+  renderStack(tiers, shape, sides) {
+      const W = 400, H = 500;
+      const cX = W / 2;
+      const n = sides || 6;
+
+      const totalStackH = tiers.reduce((sum, t) => sum + t.h, 0);
+      
+      const maxStackD = Math.max(...tiers.map(t => {
+          if (shape === 'rectangle' || shape === 'square') {
+              return Math.sqrt(Math.pow(t.d, 2) + Math.pow(t.w || t.d, 2));
+          }
+          return t.d;
+      }));
+
+      const safeW = W * 0.75;
+      const safeH = H * 0.85;
+      let SCALE = Math.min(safeW / maxStackD, safeH / totalStackH);
+      
+      if (SCALE > 10) SCALE = 10; 
+      if (tiers.length === 1 && SCALE > 6) SCALE = 6;
+
+      const pxTotalH = totalStackH * SCALE;
+      let currentBaseCenterY = H - (H - pxTotalH) / 2;
+
+      let svgContent = `<defs>
+        <radialGradient id="gradSphere" cx="35%" cy="35%" r="65%">
+            <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#e0e0e0;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#9e9e9e;stop-opacity:1" />
+        </radialGradient>
+      </defs>`;
+
+      const colFill = '#e0e0e0';
+      const colStr = '#757575';
+      const colDim = '#1976D2'; 
+
+      const fmt = (num) => (num % 1 === 0) ? num : num.toFixed(1);
+
+      tiers.forEach((t, idx) => {
+          const pxD = t.d * SCALE;
+          const pxH = t.h * SCALE;
+          const pxW = (t.w || t.d) * SCALE;
+          const pxR = pxD / 2;
+
+          if (shape === 'sphere') {
+              const r = pxD / 2;
+              const cySphere = currentBaseCenterY - r; 
+              if (idx === 0) svgContent += `<ellipse cx="${cX}" cy="${currentBaseCenterY}" rx="${r*0.8}" ry="${r*0.2}" fill="#000" opacity="0.15" />`;
+              svgContent += `<circle cx="${cX}" cy="${cySphere}" r="${r}" fill="url(#gradSphere)" stroke="${colStr}" stroke-width="1" />`;
+              svgContent += `<text x="${cX}" y="${cySphere}" text-anchor="middle" dominant-baseline="middle" fill="${colDim}" font-weight="bold" font-size="12">D${fmt(t.d)}</text>`;
+          
+          } else if (shape === 'polygon') {
+              const getPolyPoints = (cy) => {
+                  let pts = [];
+                  for(let i=0; i<n; i++) {
+                      const angle = (i * 2 * Math.PI / n) - (Math.PI / 2); 
+                      const x = cX + (pxR * Math.cos(angle));
+                      const y = cy + (pxR * Math.sin(angle) * 0.4); 
+                      pts.push({x, y, str:`${x},${y}`});
+                  }
+                  return pts;
+              };
+              const ptsBot = getPolyPoints(currentBaseCenterY);
+              const ptsTop = getPolyPoints(currentBaseCenterY - pxH);
+              const tierCenterY = currentBaseCenterY - pxH;
+
+              for(let i=0; i<n; i++) {
+                  const next = (i+1)%n;
+                  if (ptsTop[i].y > tierCenterY || ptsTop[next].y > tierCenterY) {
+                      svgContent += `<polygon points="${ptsTop[i].str} ${ptsTop[next].str} ${ptsBot[next].str} ${ptsBot[i].str}" fill="${(i%2===0)?'#f5f5f5':colFill}" stroke="${colStr}" stroke-width="1" />`;
+                  }
+              }
+              svgContent += `<polygon points="${ptsTop.map(p=>p.str).join(' ')}" fill="#fff" stroke="${colStr}" stroke-width="1" />`;
+              
+              svgContent += `<text x="${cX}" y="${currentBaseCenterY - 10}" text-anchor="middle" fill="${colDim}" font-weight="bold" font-size="12">D${fmt(t.d)}</text>`;
+              svgContent += `<text x="${cX + pxR + 10}" y="${currentBaseCenterY - pxH/2}" fill="${colDim}" font-size="12">H${fmt(t.h)}</text>`;
+
+          } else if (shape === 'rectangle' || shape === 'square') {
+              const cos30 = 0.866; const sin30 = 0.5;
+              const offRx = pxD * cos30; const offRy = pxD * sin30;
+              const offLx = pxW * cos30; const offLy = pxW * sin30;
+              
+              const shiftX = (pxD - pxW) * cos30 / 2;
+              const bCx = cX - shiftX; 
+              const shiftY = (pxD + pxW) * sin30 / 2;
+              const bCy = currentBaseCenterY + shiftY;
+              
+              const tCx = bCx; const tCy = bCy - pxH;
+              const tR = { x: tCx + offRx, y: tCy - offRy }; 
+              const tL = { x: tCx - offLx, y: tCy - offLy }; 
+              const tBack = { x: tCx + offRx - offLx, y: tCy - offRy - offLy }; 
+              const bR = { x: bCx + offRx, y: bCy - offRy }; 
+              const bL = { x: bCx - offLx, y: bCy - offLy };
+
+              svgContent += `<polygon points="${tCx},${tCy} ${tR.x},${tR.y} ${bR.x},${bR.y} ${bCx},${bCy}" fill="#d0d0d0" stroke="${colStr}" stroke-width="1" />`;
+              svgContent += `<polygon points="${tCx},${tCy} ${tL.x},${tL.y} ${bL.x},${bL.y} ${bCx},${bCy}" fill="${colFill}" stroke="${colStr}" stroke-width="1" />`;
+              svgContent += `<polygon points="${tCx},${tCy} ${tR.x},${tR.y} ${tBack.x},${tBack.y} ${tL.x},${tL.y}" fill="#fff" stroke="${colStr}" stroke-width="1" />`;
+
+              const midRx = (tCx + tR.x) / 2;
+              const midRy = (tCy + tR.y) / 2;
+              svgContent += `<text x="${midRx}" y="${midRy + 5}" fill="${colDim}" font-weight="bold" font-size="12" text-anchor="middle" transform="rotate(-30, ${midRx+10}, ${midRy-5})">${fmt(t.d)}</text>`;
+
+              if(shape === 'rectangle' || t.d !== t.w) {
+                   const midLx = (tCx + tL.x) / 2;
+                   const midLy = (tCy + tL.y) / 2;
+                   svgContent += `<text x="${midLx - 5}" y="${midLy + 5}" fill="${colDim}" font-weight="bold" font-size="12" text-anchor="middle" transform="rotate(30, ${midLx-10}, ${midLy-5})">${fmt(t.w)}</text>`;
+              }
+
+              const midHx = bCx;
+              const midHy = (bCy + tCy) / 2;
+              svgContent += `<text x="${midHx}" y="${midHy}" dx="8" fill="${colDim}" font-weight="bold" font-size="12" dominant-baseline="middle">H${fmt(t.h)}</text>`;
+
+          } else { 
+              const ry = pxR * 0.3;
+              const tierTopY = currentBaseCenterY - pxH;
+              svgContent += `<path d="M ${cX-pxR} ${tierTopY} v ${pxH} a ${pxR} ${ry} 0 0 0 ${pxD} 0 v -${pxH}" fill="${colFill}" stroke="${colStr}" stroke-width="1" />`;
+              svgContent += `<ellipse cx="${cX}" cy="${tierTopY}" rx="${pxR}" ry="${ry}" fill="#fff" stroke="${colStr}" stroke-width="1" />`;
+              svgContent += `<path d="M ${cX-pxR} ${currentBaseCenterY} a ${pxR} ${ry} 0 0 0 ${pxD} 0" fill="none" stroke="${colStr}" stroke-width="1" />`;
+
+              svgContent += `<text x="${cX}" y="${tierTopY + 5}" fill="#333" font-size="12" font-weight="bold" text-anchor="middle">D${fmt(t.d)}</text>`;
+              svgContent += `<text x="${cX + pxR + 5}" y="${currentBaseCenterY - pxH/2}" fill="${colDim}" font-size="12" font-weight="bold">H${fmt(t.h)}</text>`;
+          }
+          currentBaseCenterY -= pxH;
+      });
+
+      if (tiers.length > 0) {
+          const arrowX = 20;
+          const floorY = H - (H - pxTotalH) / 2;
+          const topY = floorY - pxTotalH;
+          svgContent += `<line x1="${arrowX}" y1="${floorY}" x2="${arrowX}" y2="${topY}" stroke="${colDim}" stroke-width="2"/>`;
+          svgContent += `<line x1="${arrowX-5}" y1="${floorY}" x2="${arrowX+5}" y2="${floorY}" stroke="${colDim}" stroke-width="2"/>`;
+          svgContent += `<line x1="${arrowX-5}" y1="${topY}" x2="${arrowX+5}" y2="${topY}" stroke="${colDim}" stroke-width="2"/>`;
+          
+          svgContent += `<text x="${arrowX + 20}" y="${floorY - (floorY-topY)/2}" fill="${colDim}" font-size="14" font-weight="bold" transform="rotate(-90 ${arrowX + 20},${floorY - (floorY-topY)/2})" text-anchor="middle">Всего: ${fmt(totalStackH)} см</text>`;
+      }
+
+      return `<svg width="100%" height="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="font-family:Arial, sans-serif;">${svgContent}</svg>`;
+  }
+}
   // ============================================
   // ДВИЖОК БАЗЫ ДАННЫХ (GOOGLE SHEETS API)
   // ============================================
@@ -9913,6 +10540,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
 
 
