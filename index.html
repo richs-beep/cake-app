@@ -15,7 +15,7 @@
   ];
   
   // Права доступа: чтение и запись таблиц + доступ к файлам (чтобы найти БД)
-  const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
+  const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
   const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
 
   // Глобальные переменные
@@ -95,7 +95,7 @@
         removeLoginButton();
         
         // ЗАПУСК ПРИЛОЖЕНИЯ
-        apiInitDatabase(); 
+        initializeApp(); 
       } else {
         alert("⛔ Доступ запрещен для " + email);
         // Сброс токена
@@ -9428,7 +9428,8 @@ function saveToCloud(node, data) {
       .apiSaveData(node, data);
 }
 // --- ИНИЦИАЛИЗАЦИЯ ПЕРСОНАЛЬНОЙ БАЗЫ ---
-(function connectToPersonalDB() {
+// --- ИНИЦИАЛИЗАЦИЯ ПЕРСОНАЛЬНОЙ БАЗЫ ---
+function initializeApp() {
     const statusDiv = document.createElement('div');
     statusDiv.style.cssText = "position:fixed; bottom:10px; left:10px; font-size:11px; color:#444; z-index:9999; background:rgba(255,255,255,0.9); padding:4px 8px; border-radius:20px; box-shadow:0 2px 5px rgba(0,0,0,0.1); display:flex; align-items:center; gap:5px; font-weight:bold;";
     statusDiv.id = "dbStatus";
@@ -9449,11 +9450,10 @@ function saveToCloud(node, data) {
                 if(data.clients) { clientsDataLocal = data.clients; localStorage.setItem('cachedClients', JSON.stringify(clientsDataLocal)); renderClientsCloud(); }
                 if(data.archive) { archiveOrders = data.archive; }
                 if(data.history_stock) { stockHistory = data.history_stock; }
-                // Настройки (простая реализация через перезапись localStorage)
+                // Настройки
                 if(data.settings) {
                    if(data.settings.hourlyRate) localStorage.setItem('cakeHourlyRate', data.settings.hourlyRate);
                    if(data.settings.tax) localStorage.setItem('cakeFinTax', data.settings.tax);
-                   // Обновляем поля в модалке настроек, если она будет открыта
                    loadHourlyRate(); loadFinance();
                 }
 
@@ -9461,23 +9461,25 @@ function saveToCloud(node, data) {
             }).apiLoadAllData();
 
         } else {
+            // Если ошибка "Email missing", просто молчим (пользователь еще не вошел)
+            if (res.error === "Email missing") return;
+            
             alert('Ошибка подключения БД: ' + res.error);
             document.getElementById('dbStatus').innerHTML = "🔴 Ошибка облака";
             document.getElementById('dbStatus').style.color = "red";
         }
     }).apiInitDatabase();
+    
     // --- МОНИТОРИНГ ОФФЛАЙН РЕЖИМА ---
     function updateOnlineStatus() {
         const statusEl = document.getElementById('dbStatus');
         if (!statusEl) return;
         
         if (navigator.onLine) {
-            // Если интернет вернулся, восстанавливаем статус БД
             const dbId = typeof USER_DB_ID !== 'undefined' && USER_DB_ID ? "🟢" : "⏳";
             statusEl.innerHTML = `${dbId} В сети`;
             statusEl.style.color = "#2E7D32";
         } else {
-            // Если интернет пропал
             statusEl.innerHTML = `⚠️ Оффлайн (сохранение в память)`;
             statusEl.style.color = "#d32f2f";
         }
@@ -9485,9 +9487,8 @@ function saveToCloud(node, data) {
 
     window.addEventListener('online',  updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
-    // Запускаем проверку сразу при загрузке
     updateOnlineStatus();
-})();
+}
 
 // --- МОБИЛЬНАЯ АДАПТАЦИЯ (АВТОМАТИЧЕСКАЯ) ---
 // --- МОБИЛЬНАЯ АДАПТАЦИЯ (ГЛОБАЛЬНАЯ) ---
@@ -9886,6 +9887,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
 
 
