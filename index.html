@@ -144,11 +144,21 @@
   // ============================================
 
   // 1. Инициализация (Поиск или Создание файла)
+// 1. Инициализация (Поиск или Создание Персональной БД)
   async function apiInitDatabaseImpl() {
     try {
-        // Ищем файл CakePro_DB, который не в корзине
+        // Проверка: мы должны знать почту, чтобы найти личную базу
+        if (!CURRENT_USER_EMAIL) {
+            console.error("Email не определен. Вход не выполнен.");
+            return { success: false, error: "Email missing" };
+        }
+
+        // Формируем уникальное имя: CakePro_DB_email@gmail.com
+        const targetName = `CakePro_DB_${CURRENT_USER_EMAIL}`;
+
+        // Ищем файл по ТОЧНОМУ имени (name = '...')
         const response = await gapi.client.drive.files.list({
-            q: "name = 'CakePro_DB' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false",
+            q: `name = '${targetName}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
             fields: 'files(id, name)',
             spaces: 'drive'
         });
@@ -158,13 +168,13 @@
             // Файл найден
             USER_DB_ID = files[0].id;
             localStorage.setItem('cake_db_id', USER_DB_ID);
-            console.log('✅ БД найдена:', USER_DB_ID);
+            console.log(`✅ Найдена БД пользователя: ${targetName}`, USER_DB_ID);
             return { success: true, id: USER_DB_ID, status: 'connected' };
         } else {
-            // Файл не найден - создаем новый
-            console.log('⚠️ БД не найдена, создаем новую...');
+            // Файл не найден - создаем новый именно с этим именем
+            console.log(`⚠️ БД не найдена, создаем: ${targetName}...`);
             const createResp = await gapi.client.sheets.spreadsheets.create({
-                properties: { title: "CakePro_DB" },
+                properties: { title: targetName },
                 sheets: [
                     { properties: { title: "ingredients" } },
                     { properties: { title: "recipes" } },
@@ -178,7 +188,7 @@
             });
             USER_DB_ID = createResp.result.spreadsheetId;
             localStorage.setItem('cake_db_id', USER_DB_ID);
-            console.log('✅ БД создана:', USER_DB_ID);
+            console.log('✅ Персональная БД создана:', USER_DB_ID);
             return { success: true, id: USER_DB_ID, status: 'created' };
         }
     } catch (e) {
@@ -9871,6 +9881,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
 
 
