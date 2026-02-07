@@ -162,16 +162,20 @@
 // 1. Инициализация (Поиск или Создание Персональной БД)
   async function apiInitDatabaseImpl() {
     try {
-        // Проверка: мы должны знать почту, чтобы найти личную базу
+        // Проверка Email
         if (!CURRENT_USER_EMAIL) {
-            console.error("Email не определен. Вход не выполнен.");
-            return { success: false, error: "Email missing" };
+            return { success: false, error: "Email не определен. Попробуйте войти заново." };
         }
 
-        // Формируем уникальное имя: CakePro_DB_email@gmail.com
+        // Проверка загрузки библиотеки Drive (Диск)
+        if (!gapi.client.drive) {
+            return { success: false, error: "Библиотека Google Drive API не загрузилась. Обновите страницу." };
+        }
+
+        // Формируем имя файла
         const targetName = `CakePro_DB_${CURRENT_USER_EMAIL}`;
 
-        // Ищем файл по ТОЧНОМУ имени (name = '...')
+        // Ищем файл
         const response = await gapi.client.drive.files.list({
             q: `name = '${targetName}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
             fields: 'files(id, name)',
@@ -183,10 +187,10 @@
             // Файл найден
             USER_DB_ID = files[0].id;
             localStorage.setItem('cake_db_id', USER_DB_ID);
-            console.log(`✅ Найдена БД пользователя: ${targetName}`, USER_DB_ID);
+            console.log(`✅ Найдена БД: ${targetName}`, USER_DB_ID);
             return { success: true, id: USER_DB_ID, status: 'connected' };
         } else {
-            // Файл не найден - создаем новый именно с этим именем
+            // Файл не найден - создаем
             console.log(`⚠️ БД не найдена, создаем: ${targetName}...`);
             const createResp = await gapi.client.sheets.spreadsheets.create({
                 properties: { title: targetName },
@@ -203,12 +207,14 @@
             });
             USER_DB_ID = createResp.result.spreadsheetId;
             localStorage.setItem('cake_db_id', USER_DB_ID);
-            console.log('✅ Персональная БД создана:', USER_DB_ID);
+            console.log('✅ БД создана:', USER_DB_ID);
             return { success: true, id: USER_DB_ID, status: 'created' };
         }
     } catch (e) {
-        console.error("Ошибка БД:", e);
-        return { success: false, error: e.message };
+        console.error("Полная ошибка API:", e);
+        // Пытаемся достать текст ошибки из разных мест объекта Google
+        let msg = e.message || (e.result && e.result.error && e.result.error.message) || JSON.stringify(e);
+        return { success: false, error: msg };
     }
   }
 
@@ -9898,6 +9904,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
 
 
