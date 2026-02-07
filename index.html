@@ -2,55 +2,141 @@
 <html>
   <head>
     <base target="_top">
-    <script>
-  // Глобальная переменная с почтой текущего пользователя
-  // (Будет заполнена после входа через Google)
-  var CURRENT_USER_EMAIL = ""; 
-  var USER_DB_ID = null; // Сюда прилетит ID твоей личной таблицы
-
-  // Список доступа (Перенесено из серверной части)
+    // --- НАСТРОЙКИ ПРИЛОЖЕНИЯ ---
+  const CLIENT_ID = '1007801132466-7n900gd7copmsp5b3k87kqt0cbu62sth.apps.googleusercontent.com';
   const WHITELIST = [
     "richsulpak@gmail.com",
     "aptdayana@gmail.com", 
     "socanastasiya@gmail.com"
   ];
-// --- ЗАГЛУШКА ДЛЯ БРАУЗЕРА (MOCK) ---
-  // Это позволяет интерфейсу открываться без реального сервера Google
-  if (typeof google === 'undefined') {
-    const mockRunner = {
-      _success: null,
-      withFailureHandler: function() { return this; },
-      
-      // Имитация функций сервера:
-      apiInitDatabase: function() { 
-        console.log('🔌 Mock: База данных инициализирована (Оффлайн)');
-        if(this._success) this._success({success:true, id:'offline_db'}); 
-      },
-      apiLoadAllData: function() {
-        console.log('🔌 Mock: Загрузка данных (пусто)');
-        if(this._success) this._success({}); 
-      },
-      apiSaveData: function(node, data) {
-        console.log('💾 Mock: Сохранение в', node, data);
-      },
-      apiCalculateOrder: function(data) {
-        console.log('🧮 Mock: Запрос расчета', data);
-        alert("В режиме PWA расчет будет перенесен на телефон в следующем шаге.");
+  
+  // Права доступа: чтение и запись таблиц + доступ к файлам (чтобы найти БД)
+  const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
+  const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
+
+  // Глобальные переменные
+  let tokenClient;
+  let gapiInited = false;
+  let gisInited = false;
+  let CURRENT_USER_EMAIL = "";
+  let USER_DB_ID = localStorage.getItem('cake_db_id'); // Пытаемся найти ID базы в памяти
+
+  // 1. Загрузка GAPI (Google API)
+  function gapiLoaded() {
+    gapi.load('client', initializeGapiClient);
+  }
+
+  async function initializeGapiClient() {
+    await gapi.client.init({
+      discoveryDocs: [DISCOVERY_DOC],
+    });
+    gapiInited = true;
+    checkAuth();
+  }
+
+  // 2. Загрузка GIS (Google Identity Services)
+  function gisLoaded() {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPES,
+      callback: '', // Будет определен при нажатии кнопки
+    });
+    gisInited = true;
+    checkAuth();
+  }
+
+  // 3. Проверка готовности и запуск
+  function checkAuth() {
+    if (gapiInited && gisInited) {
+      document.getElementById('loadingOverlay').style.display = 'none';
+      // Если email еще не известен — показываем кнопку входа (надо будет добавить кнопку)
+      if (!CURRENT_USER_EMAIL) {
+         showLoginButton();
       }
+    }
+  }
+
+  // Функция Входа (вызывается кнопкой)
+  function handleAuthClick() {
+    tokenClient.callback = async (resp) => {
+      if (resp.error) {
+        throw (resp);
+      }
+      // Успешный вход
+      await fetchUserProfile(resp.access_token);
     };
 
-    window.google = {
-      script: {
-        run: {
-          withSuccessHandler: function(cb) {
-            mockRunner._success = cb;
-            return mockRunner;
-          }
+    if (gapi.client.getToken() === null) {
+      // Если токена нет - запрашиваем (появится окно Google)
+      tokenClient.requestAccessToken({prompt: 'consent'});
+    } else {
+      // Если есть - просто обновляем
+      tokenClient.requestAccessToken({prompt: ''});
+    }
+  }
+
+  // Получение Email пользователя
+  async function fetchUserProfile(token) {
+    try {
+      const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const userInfo = await response.json();
+      const email = userInfo.email;
+
+      // ПРОВЕРКА ДОСТУПА (WHITELIST)
+      if (WHITELIST.includes(email)) {
+        CURRENT_USER_EMAIL = email;
+        alert(`Добро пожаловать, ${userInfo.name}!`);
+        removeLoginButton();
+        
+        // ЗАПУСК ПРИЛОЖЕНИЯ
+        apiInitDatabase(); 
+      } else {
+        alert("⛔ Доступ запрещен для " + email);
+        // Сброс токена
+        const tok = gapi.client.getToken();
+        if (tok !== null) {
+            google.accounts.oauth2.revoke(tok.access_token);
+            gapi.client.setToken('');
         }
       }
-    };
+    } catch (err) {
+      console.error(err);
+    }
   }
-</script>
+
+  // --- UI ФУНКЦИИ ВХОДА ---
+  function showLoginButton() {
+    // Создаем кнопку входа поверх всего, если её нет
+    if (document.getElementById('googleLoginBtn')) return;
+    
+    const btn = document.createElement('button');
+    btn.id = 'googleLoginBtn';
+    btn.innerText = '🔑 Войти через Google';
+    btn.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:10000; padding:15px 30px; font-size:18px; background:#4285F4; color:white; border:none; border-radius:5px; cursor:pointer; box-shadow:0 4px 15px rgba(0,0,0,0.3);';
+    btn.onclick = handleAuthClick;
+    document.body.appendChild(btn);
+    
+    // Затемняем фон
+    const overlay = document.createElement('div');
+    overlay.id = 'loginOverlay';
+    overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.9); z-index:9999;';
+    document.body.appendChild(overlay);
+  }
+
+  function removeLoginButton() {
+    const btn = document.getElementById('googleLoginBtn');
+    const ovr = document.getElementById('loginOverlay');
+    if (btn) btn.remove();
+    if (ovr) ovr.remove();
+  }
+
+  // Запуск загрузчиков при старте
+  window.onload = function() {
+      gapiLoaded();
+      gisLoaded();
+  };
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#FF5722">
@@ -1404,6 +1490,8 @@ body {
     }
   };
 </script>
+<script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>    
   </head>
   <body>
     <datalist id="allIngsDatalist"></datalist>
@@ -9612,4 +9700,5 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
