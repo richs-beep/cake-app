@@ -10217,7 +10217,15 @@ function applyRecipeAdjustment() {
 document.getElementById('toggleKbju').checked = false;
 toggleKbjuColumns();
 // --- ЗАМЕНА FIREBASE (СИНХРОНИЗАЦИЯ) ---
+// --- ЗАМЕНА FIREBASE (СИНХРОНИЗАЦИЯ) ---
 function saveToCloud(node, data) {
+    // ЗАЩИТА: Если ID базы еще не получен (подключение идет), просто выходим.
+    // Данные и так останутся в телефоне (LocalStorage).
+    if (!USER_DB_ID) {
+        console.log(`⏳ Пропуск сохранения '${node}': база еще не подключена.`);
+        return;
+    }
+
     // node совпадает с именем листа: 'ingredients', 'recipes' и т.д.
     google.script.run
       .withFailureHandler(err => console.error("Ошибка сохранения " + node, err))
@@ -10775,6 +10783,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
 
 
