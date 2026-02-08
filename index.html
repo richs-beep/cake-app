@@ -85,25 +85,25 @@
         }
     }
 
-    // Функция Входа (вызывается кнопкой)
-    function handleAuthClick() {
-        tokenClient.callback = async (resp) => {
-            if (resp.error) {
-                throw (resp);
-            }
-            // 1. Сохраняем Токен в память телефона
-            localStorage.setItem('google_access_token', JSON.stringify(resp));
-            
-            // 2. Идем за профилем
-            await fetchUserProfile(resp.access_token);
-        };
+  
+   // Функция Входа (вызывается кнопкой)
+  function handleAuthClick() {
+    tokenClient.callback = async (resp) => {
+      if (resp.error) {
+        throw (resp);
+      }
+      // 1. Сохраняем Токен в память телефона
+      localStorage.setItem('google_access_token', JSON.stringify(resp));
+      
+      // 2. Идем за профилем
+      await fetchUserProfile(resp.access_token);
+    };
 
-        if (gapi.client.getToken() === null) {
-            tokenClient.requestAccessToken({prompt: 'consent'});
-        } else {
-            tokenClient.requestAccessToken({prompt: ''});
-        }
-    }
+    // ИСПРАВЛЕНИЕ ЗДЕСЬ:
+    // Мы убрали проверку на null и prompt: 'consent'.
+    // prompt: '' означает "не спрашивай разрешения, если они уже есть".
+    tokenClient.requestAccessToken({prompt: ''});
+  }}
 
     // Получение Email пользователя
     async function fetchUserProfile(token) {
@@ -10670,6 +10670,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
 
 
