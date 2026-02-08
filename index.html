@@ -105,42 +105,58 @@
   }
 
     // Получение Email пользователя
+  // Получение Email пользователя (ОБНОВЛЕННАЯ ВЕРСИЯ)
     async function fetchUserProfile(token) {
         try {
             const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+            
+            // Если токен протух (ошибка 401 или 403)
+            if (!response.ok) {
+                throw new Error("Токен недействителен (Status: " + response.status + ")");
+            }
+
             const userInfo = await response.json();
             const email = userInfo.email;
 
+            // Если Google вернул ответ, но в нем нет Email
+            if (!email) {
+                console.error("Ответ Google без email:", userInfo);
+                alert("Ошибка входа: Google не передал Email. Попробуйте войти заново.");
+                localStorage.removeItem('google_access_token');
+                showLoginButton();
+                return;
+            }
+
             // ПРОВЕРКА ДОСТУПА (WHITELIST)
-            if (WHITELIST.includes(email)) {
+            // .trim() и .toLowerCase() убирают случайные пробелы и проблемы регистра
+            if (WHITELIST.map(e => e.toLowerCase()).includes(email.toLowerCase().trim())) {
                 CURRENT_USER_EMAIL = email;
-                localStorage.setItem('user_email', email); // <-- Запоминаем почту
+                localStorage.setItem('user_email', email);
                 
-                // Убираем кнопку входа (если была)
                 removeLoginButton();
-                
-                // Если это был "тихий" авто-вход, не показываем alert
-                // Но для надежности можем просто запустить инициализацию
                 console.log(`Добро пожаловать, ${userInfo.name}!`);
                 
-                // ЗАПУСК ПРИЛОЖЕНИЯ
                 initializeApp(); 
             } else {
-                alert("⛔ Доступ запрещен для " + email);
-                // Сброс токена
+                alert("⛔ Доступ запрещен для: " + email + "\nВашей почты нет в списке разрешенных.");
+                // Сброс
                 const tok = gapi.client.getToken();
                 if (tok !== null) {
                     google.accounts.oauth2.revoke(tok.access_token);
                     gapi.client.setToken('');
                 }
+                localStorage.removeItem('google_access_token');
+                showLoginButton();
             }
         } catch (err) {
-            console.error(err);
+            console.error("Ошибка авторизации:", err);
+            // Если любая ошибка - чистим токен и показываем кнопку входа
+            localStorage.removeItem('google_access_token');
+            showLoginButton();
         }
     }
-
     // --- UI ФУНКЦИИ ВХОДА ---
     function showLoginButton() {
         if (document.getElementById('googleLoginBtn')) return;
@@ -10672,6 +10688,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
 
 
