@@ -3202,6 +3202,10 @@ body {
                 <button class="del-btn" onclick="forcePushClientsToCloud()" style="width:100%; background:#FFEBEE; border:1px solid #FFCDD2; color:#D32F2F; text-align:left; padding:10px; display:flex; align-items:center;">
                     <span style="font-size:18px; margin-right:10px;">⚠️</span> 
                     <div><b>Восстановить в Облако</b><br><small style="color:#D32F2F;">Перезаписывает базу клиентов из локального файла</small></div>
+                  <button class="main-btn" onclick="forceLoadFromCloud()" style="width:100%; background:#7E57C2; margin-bottom:10px; display:flex; align-items:center;">
+    <span style="font-size:18px; margin-right:10px;">📥</span> 
+    <div><b>Загрузить из Облака</b><br><small>Заменяет данные в телефоне данными из Таблицы</small></div>
+</button>
                     <button class="main-btn" onclick="syncAllToCloud()" style="width:100%; background:#4CAF50; margin-top:10px; display:flex; align-items:center;">
     <span style="font-size:18px; margin-right:10px;">☁️</span> 
     <div><b>Выгрузить всё в Облако</b><br><small>Нажмите 1 раз, чтобы заполнить сервер</small></div>
@@ -10219,6 +10223,89 @@ function saveToCloud(node, data) {
       .withFailureHandler(err => console.error("Ошибка сохранения " + node, err))
       .apiSaveData(node, data);
 }
+
+// --- ПРИНУДИТЕЛЬНАЯ ЗАГРУЗКА ИЗ ОБЛАКА ---
+function forceLoadFromCloud() {
+    if (!confirm("⚠️ ВНИМАНИЕ!\n\nЭто действие удалит несохраненные локальные изменения и ЗАМЕНИТ их данными из вашей Google Таблицы.\n\nУверены, что хотите обновить телефон данными из базы?")) return;
+
+    // Показываем крутилку
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    const statusEl = document.getElementById('dbStatus');
+    if (statusEl) statusEl.innerText = "⏳ Загрузка...";
+
+    google.script.run.withSuccessHandler(function(data) {
+        // 1. Обновляем Ингредиенты
+        if (data.ingredients) {
+            myIngredients = data.ingredients;
+            localStorage.setItem('myCakeIngredients', JSON.stringify(myIngredients));
+        }
+
+        // 2. Обновляем Рецепты
+        if (data.recipes) {
+            myRecipes = data.recipes;
+            localStorage.setItem('myCakeRecipes', JSON.stringify(myRecipes));
+        }
+
+        // 3. Обновляем Работы
+        if (data.labor) {
+            myLaborServices = data.labor;
+            localStorage.setItem('myCakeLabor', JSON.stringify(myLaborServices));
+        }
+
+        // 4. Обновляем Очередь (План)
+        if (data.queue) {
+            productionQueue = data.queue;
+            localStorage.setItem('cakeProductionQueue', JSON.stringify(productionQueue));
+        }
+
+        // 5. Обновляем Клиентов
+        if (data.clients) {
+            clientsDataLocal = data.clients;
+            localStorage.setItem('cachedClients', JSON.stringify(clientsDataLocal));
+        }
+
+        // 6. Обновляем Архив и Историю
+        if (data.archive) archiveOrders = data.archive;
+        if (data.history_stock) stockHistory = data.history_stock;
+
+        // 7. Обновляем Настройки
+        if (data.settings) {
+            if (data.settings.hourlyRate) document.getElementById('hourlyRate').value = data.settings.hourlyRate;
+            if (data.settings.tax) document.getElementById('finTax').value = data.settings.tax;
+            if (data.settings.bank) document.getElementById('finBank').value = data.settings.bank;
+            if (data.settings.overhead) document.getElementById('finOverhead').value = data.settings.overhead;
+            if (data.settings.currency) changeCurrency(data.settings.currency);
+            
+            // Сохраняем настройки локально
+            saveHourlyRate();
+            saveFinance();
+        }
+
+        // 8. Перерисовываем ВЕСЬ интерфейс
+        updateUI(); 
+        renderRecipesList();
+        renderLaborTable();
+        renderQueue();
+        updateQueueBadge();
+        renderClientsCloud();
+
+        // Финал
+        document.getElementById('loadingOverlay').style.display = 'none';
+        if (statusEl) {
+            statusEl.innerText = "🟢 Обновлено из облака";
+            statusEl.style.color = "#2E7D32";
+        }
+        
+        // Закрываем окно настроек, чтобы видеть результат
+        document.getElementById('settingsModal').style.display = 'none';
+        alert("✅ Данные успешно загружены из Таблицы!");
+
+    }).withFailureHandler(function(err) {
+        document.getElementById('loadingOverlay').style.display = 'none';
+        alert("❌ Ошибка загрузки: " + err);
+    }).apiLoadAllData();
+}
+  
 // --- ИНИЦИАЛИЗАЦИЯ ПЕРСОНАЛЬНОЙ БАЗЫ ---
 // --- ИНИЦИАЛИЗАЦИЯ ПЕРСОНАЛЬНОЙ БАЗЫ ---
 function initializeApp() {
@@ -10688,6 +10775,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
 
 
