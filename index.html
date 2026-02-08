@@ -4877,6 +4877,7 @@ function resIng(el, b, i) {
     const found = myIngredients.find(x => x.name.toLowerCase() === rawName.toLowerCase());
 
     if (found) {
+      saveToHistory();
         // Нашли - сохраняем ID
         const r = myRecipes.find(x => x.id === activeRecId);
         r.blocks[b].ingredients[i].id = found.id;
@@ -5005,10 +5006,14 @@ function delBI(bIndex, iIndex) {
     loadRec(activeRecId);
 }
 
+
 // Обновить вес ингредиента
 function updBI(bIndex, iIndex, val) {
     const r = myRecipes.find(x => x.id === activeRecId);
     if (!r) return;
+
+    // СНАЧАЛА сохраняем текущее состояние в историю (до изменения веса)
+    saveToHistory();
 
     // Замена запятой на точку для мобильных
     let num = parseFloat(String(val).replace(',', '.'));
@@ -5016,13 +5021,11 @@ function updBI(bIndex, iIndex, val) {
     
     r.blocks[bIndex].ingredients[iIndex].weight = num;
     
-    // Сохраняем тихо (без сохранения в историю на каждую цифру), чтобы не забивать Undo
-    // Но пишем в облако
+    // Сохраняем в память и облако
     localStorage.setItem('myCakeRecipes', JSON.stringify(myRecipes)); 
     saveToCloud('recipes', myRecipes); 
     
-    // Пересчитываем общий вес на экране (без полной перезагрузки, чтобы фокус не слетал)
-    // Но для простоты пока оставим renderBlocks, если фокус будет слетать - поправим.
+    // Пересчитываем визуализацию (чтобы обновились итоги)
     renderBlocks(r); 
 }
 
@@ -10669,6 +10672,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
 
 
