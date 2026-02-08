@@ -3,12 +3,12 @@
   "name": "Калькулятор Кондитера PRO",
   "icons": [
     {
-      "src": "https://img.icons8.com/color/192/cake.png",
+      "src": "/Logo mini.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "https://img.icons8.com/color/512/cake.png",
+      "src": "/Logo.png",
       "type": "image/png",
       "sizes": "512x512"
     }
