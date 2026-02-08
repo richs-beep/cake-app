@@ -312,51 +312,7 @@
         }
     }
 
-    // ============================================
-    // ADAPTER (МОСТ)
-    // ============================================
-    const runAdapter = {
-        _cb: null,
-        _fail: null,
-        
-        withSuccessHandler: function(cb) {
-            this._cb = cb;
-            return this;
-        },
-        withFailureHandler: function(cb) {
-            this._fail = cb;
-            return this;
-        },
-        
-        // Перехват функций
-        apiInitDatabase: async function() {
-            const res = await apiInitDatabaseImpl();
-            if(this._cb) this._cb(res);
-        },
-        apiLoadAllData: async function() {
-            const res = await apiLoadAllDataImpl();
-            if(this._cb) this._cb(res);
-        },
-        apiSaveData: async function(node, data) {
-            const res = await apiSaveDataImpl(node, data);
-            if(this._cb) this._cb(res); 
-        },
-        apiCalculateOrder: function(data) {
-            const res = apiCalculateOrderImpl(data);
-            if(this._cb) this._cb(res);
-        },
-        // Добавляем старое имя для совместимости, если где-то кнопка его вызывает
-        calculateOrder: function(data) {
-            const res = apiCalculateOrderImpl(data);
-            if(this._cb) this._cb(res);
-        }
-    };
-
-    // Подменяем объект google.script.run
-    window.google = { script: { run: runAdapter } };
-/**
- * Основной класс расчета
- */
+   
 class CakeCalculator {
   constructor(data) {
     this.data = data;
@@ -10714,6 +10670,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
 
 
