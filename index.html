@@ -1116,8 +1116,39 @@ class CakeVisualizer {
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#FF5722">
     <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/cake.png">
+    
     <style>
 
+/* --- СТИЛИ ЗАЩИТЫ РЕЦЕПТА --- */
+.recipe-locked input, 
+.recipe-locked select {
+    pointer-events: none;       /* Запрет нажатия */
+    background: transparent !important; /* Прозрачный фон */
+    border: none !important;    /* Без рамок */
+    color: #333 !important;     /* Цвет текста */
+    font-weight: bold;
+    padding: 0;
+}
+
+/* Скрываем кнопки удаления и добавления в режиме защиты */
+.recipe-locked .del-btn,
+.recipe-locked .add-btn-small,
+.recipe-locked button.main-btn[onclick="addBlock()"],
+.recipe-locked .move-btn { 
+    display: none !important; 
+}
+
+/* Скрываем кнопки удаления самого рецепта */
+.recipe-locked button.del-btn[onclick="deleteCurrentRecipe()"] {
+    display: none !important;
+}
+
+/* Чтобы поля выглядели аккуратно */
+.recipe-locked .form-group {
+    border-bottom: 1px solid #eee; /* Линия снизу вместо рамки */
+    padding-bottom: 2px;
+}
+      
       /* --- КОНТЕКСТНОЕ МЕНЮ (LONG PRESS) --- */
 .context-menu {
     position: fixed;
@@ -2952,6 +2983,15 @@ body {
            style="display:none; width:100%; margin-bottom:15px; background:#f0f0f0; border:1px solid #ccc; color:#333;">
        ⬅️ Назад к списку
    </button>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#f5f5f5; padding:8px 12px; border-radius:8px; margin-bottom:15px; border:1px solid #ddd;">
+    <div style="font-size:12px; font-weight:bold; color:#555;">
+        <span id="recLockStatus">🔒 Режим просмотра</span>
+    </div>
+    <label class="switch" style="transform:scale(0.8);">
+        <input type="checkbox" id="recLockToggle" onchange="toggleRecipeLock()">
+        <span class="slider"></span>
+    </label>
+</div>
                <div class="form-row">
                  <div class="form-group" style="flex:2"><span class="form-label">Название</span><input id="editRecName" onchange="saveMeta()"></div>
                  <div class="form-group" style="flex:1">
@@ -4750,6 +4790,7 @@ function loadRec(id){
     toggleFinishedWeight(false); // false = не сохранять при загрузке, просто обновить UI
 
     renderBlocks(r);
+  setRecipeLockState(true);
 }
 
 // --- 2. ОТРИСОВКА БЛОКОВ (С защитой от ошибок) ---
@@ -10770,6 +10811,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+     // --- ФУНКЦИИ ЗАЩИТЫ РЕЦЕПТА ---
+
+function toggleRecipeLock() {
+    const chk = document.getElementById('recLockToggle');
+    setRecipeLockState(!chk.checked); // Если включен - значит редактируем (не заблокирован)
+}
+
+function setRecipeLockState(isLocked) {
+    const editor = document.getElementById('recipeEditor');
+    const chk = document.getElementById('recLockToggle');
+    const label = document.getElementById('recLockStatus');
+
+    if (isLocked) {
+        // РЕЖИМ: ЗАБЛОКИРОВАНО 🔒
+        editor.classList.add('recipe-locked');
+        chk.checked = false; // Тумблер выключен
+        label.innerHTML = "🔒 Только чтение";
+        label.style.color = "#555";
+    } else {
+        // РЕЖИМ: РЕДАКТИРОВАНИЕ ✏️
+        editor.classList.remove('recipe-locked');
+        chk.checked = true; // Тумблер включен
+        label.innerHTML = "✏️ Режим правки";
+        label.style.color = "#E65100";
+    }
+}
+
     </script>
 
 <script>
@@ -10783,6 +10851,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </body>
 
 </html>
+
 
 
 
