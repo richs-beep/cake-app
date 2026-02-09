@@ -420,7 +420,9 @@ class CakeCalculator {
             urgency: this.data.urgencyPercent
         },
         shoppingList: this.shoppingList.map(item => {
-            item.amount = parseFloat(item.amount.toFixed(1)); 
+            // БЫЛО: item.amount.toFixed(1)
+            // СТАЛО: toFixed(2) - точность до 0.01 г
+            item.amount = parseFloat(item.amount.toFixed(2)); 
             item.cost = Math.ceil(item.cost); 
             return item;
         }).sort((a, b) => b.cost - a.cost),
@@ -701,45 +703,47 @@ class CakeCalculator {
         const thick = 0.5; 
         const coatingDensity = p.coatingConsumption / thick;
 
-        for(let i=0; i<15; i++) {
-            const vInner = this._calcVolume(p.shape, d, h, w, p.polySides);
-            const areaCoat = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides); 
-            const vCoat = areaCoat * thick;
-            
-            const estWeight = (vInner * p.fillingDensity) + (vCoat * coatingDensity);
+        // ... начало функции (расчет thick и coatingDensity оставляем) ...
 
-            if (Math.abs(estWeight - p.targetWeight) < 1) break;
-            
-            const ratio = p.targetWeight / estWeight;
+      for(let i=0; i<20; i++) { // Увеличили число попыток до 20
+          const vInner = this._calcVolume(p.shape, d, h, w, p.polySides);
+          const areaCoat = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides); 
+          const vCoat = areaCoat * thick;
+          
+          const estWeight = (vInner * p.fillingDensity) + (vCoat * coatingDensity);
 
-            if (p.shape === 'sphere') { 
-                d *= Math.pow(ratio, 1/3); h = d; 
-            } 
-            else if (p.shape === 'rectangle') {
-                 if (p.fixedDiameter && p.fixedWidth) h *= ratio; 
-                 else if (p.fixedHeight) { const f = Math.sqrt(ratio); d *= f; w *= f; }
-                 else if (p.fixedDiameter) h *= ratio; 
-                 else { const f = Math.pow(ratio, 1/3); d *= f; h *= f; w *= f; }
-            } 
-            else { 
-                 if (p.fixedDiameter) h *= ratio; 
-                 else if (p.fixedHeight) d *= Math.sqrt(ratio); 
-                 else { const f = Math.pow(ratio, 1/3); d *= f; h *= f; w *= f; }
-            }
-        }
+          // ВАЖНО: Снизили порог погрешности с 5г до 0.5г для точности
+          if (Math.abs(estWeight - p.targetWeight) < 0.5) break; 
+          
+          const ratio = p.targetWeight / estWeight;
+
+          if (p.shape === 'sphere') { 
+              d *= Math.pow(ratio, 1/3); h = d; 
+          } 
+          else if (p.shape === 'rectangle') {
+               if (p.fixedDiameter && p.fixedWidth) h *= ratio; 
+               else if (p.fixedHeight) { const f = Math.sqrt(ratio); d *= f; w *= f; }
+               else if (p.fixedDiameter) h *= ratio; 
+               else { const f = Math.pow(ratio, 1/3); d *= f; h *= f; w *= f; }
+          } 
+          else { 
+               if (p.fixedDiameter) h *= ratio; 
+               else if (p.fixedHeight) d *= Math.sqrt(ratio); 
+               else { const f = Math.pow(ratio, 1/3); d *= f; h *= f; w *= f; }
+          }
+      }
     }
     
-    d = Math.round(d);
+    // ОКРУГЛЕНИЕ РАЗМЕРОВ
+    d = Math.round(d); // Диаметр обычно целое число (форма)
     if (w) w = Math.round(w);
     
+    // ВЫСОТА:
     if (p.shape === 'sphere') {
         h = d; 
     } else {
-        if (p.coatingMethod === 'proportion') {
-            h = Math.ceil(h); 
-        } else {
-            h = Math.round(h * 10) / 10;
-        }
+        // ВАЖНО: Округляем до СОТЫХ (2 знака), чтобы не терять миллиметры
+        h = Math.round(h * 100) / 100;
     }
 
     const vFinal = this._calcVolume(p.shape, d, h, w, p.polySides);
@@ -6373,12 +6377,23 @@ ordersToProcess.forEach(ord => {
         
         // --- ИЗМЕНЕНИЕ: ПЕРЕБОР ПО ЗНАЧЕНИЯМ (так как ключи теперь цифры 0,1,2...) ---
         Object.values(b.ingredients).forEach(data => {
-            const ingName = data.name; // Имя берем изнутри объекта
-            let val = data.amount;
-            let displayVal = (data.unit === 'шт' || val < 50) ? (val % 1 === 0 ? val : val.toFixed(1)) : Math.round(val);
-            if (parseFloat(displayVal) === 0 && val > 0) displayVal = val.toFixed(2); 
+            const ingName = data.name; 
+        let val = data.amount;
+        
+        // ЛОГИКА ОТОБРАЖЕНИЯ:
+        // Если это штуки (шт) - оставляем как есть (1 или 1.5)
+        // Если это граммы - показываем 2 знака (120.45 г)
+        // Если число целое - показываем без дроби
+        
+        let displayVal;
+        if (data.unit === 'шт') {
+             displayVal = (val % 1 === 0) ? val : val.toFixed(1);
+        } else {
+             // Для веса используем сотые
+             displayVal = (val % 1 === 0) ? val : val.toFixed(2);
+        }
 
-            let displayAmount = `${displayVal} ${data.unit}`;
+        let displayAmount = `${displayVal} ${data.unit}`;
             if (ingName.toLowerCase().includes('яйцо') && data.unit === 'г') {
                 let approxPcs = Math.round(val / 55);
                 displayAmount += ` <small style="color:#666; font-weight:normal;">(~${approxPcs} шт)</small>`;
@@ -10851,6 +10866,7 @@ function setRecipeLockState(isLocked) {
   </body>
 
 </html>
+
 
 
 
