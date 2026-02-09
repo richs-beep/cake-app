@@ -708,7 +708,7 @@ class CakeCalculator {
             
             const estWeight = (vInner * p.fillingDensity) + (vCoat * coatingDensity);
 
-            if (Math.abs(estWeight - p.targetWeight) < 5) break;
+            if (Math.abs(estWeight - p.targetWeight) < 1) break;
             
             const ratio = p.targetWeight / estWeight;
 
@@ -10851,6 +10851,7 @@ function setRecipeLockState(isLocked) {
   </body>
 
 </html>
+
 
 
 
