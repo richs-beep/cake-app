@@ -2307,51 +2307,42 @@ select:hover {
 
 .hide-kbju .col-kbju { display: none; }
 
-/* --- ЛАНДШАФТНЫЙ РЕЖИМ (ГОРИЗОНТАЛЬНЫЙ) --- */
-@media (orientation: landscape) {
-  #ui-layer { flex-direction: row; }
-  
-  /* Боковая панель навигации (слева) */
-  .toolbar { 
-      width: 70px; height: 100%; 
-      flex-direction: column; justify-content: center; 
-      border-top: none; border-left: none; border-right: 1px solid #eee; 
-      order: 1; padding: 0; 
-  }
-  .toolbar.hidden { transform: translateX(-100%); }
-  
-  /* Шторка превращается в Боковую панель (справа) */
-  .bottom-sheet { 
-      left: auto; right: 0; bottom: 0; top: 0; 
-      width: 320px; 
-      height: 100% !important;     /* Игнорируем JS-высоту */
-      max-height: 100% !important; 
-      min-height: 100% !important;
-      
-      border-radius: 0; border-left: 1px solid #eee; border-top: none;
-      
-      /* Позиция по умолчанию (Открыто) */
-      transform: translateX(0); 
-  }
-  
-  /* Скрытое состояние для боковой панели (Уезжает вправо) */
-  .bottom-sheet.hidden-sheet { 
-      transform: translateX(100%) !important; /* Перебиваем translateY */
-  }
-  
-  /* Скрываем ручку, так как тянуть нельзя */
-  .sheet-handle-area { display: none; }
-  
-  /* Верхний бар */
-  .top-bar { 
-      position: absolute; top: 0; left: 50%; 
-      transform: translateX(-50%); width: auto; 
-  }
-  .top-tools { top: 10px; right: 340px; } /* Сдвигаем левее, чтобы не наехать на панель */
-  
-  #compare-overlay { left: 80px; top: 20px; }
+
+/* --- ЛАНДШАФТНЫЙ РЕЖИМ (ПОВОРОТ ТЕЛЕФОНА) --- */
+@media (max-width: 900px) and (orientation: landscape) {
+    
+    /* 1. Возвращаем сетку из двух колонок */
+    .comparison-wrapper {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+    
+    /* 2. Показываем ОБЕ колонки принудительно */
+    .compare-col {
+        display: block !important;
+    }
+    
+    /* 3. Скрываем переключатель табов (он не нужен) */
+    .mobile-tabs {
+        display: none !important;
+    }
+    
+    /* 4. Скрываем нижний липкий футер (он занимает слишком много высоты в горизонтали) */
+    /* Цены и так видны внутри колонок */
+    .sticky-footer {
+        display: none !important;
+    }
+    
+    /* 5. Уменьшаем отступы, чтобы влезло по высоте */
+    .visual-container {
+        height: 200px; /* Делаем торты поменьше по высоте */
+    }
+    body {
+        padding-bottom: 20px !important; /* Убираем отступ под футер */
+    }
 }
-  
+
     
     /* --- 8. ФИКС СКРОЛЛА И ЗАПРЕТ ОБНОВЛЕНИЯ (ФИНАЛ) --- */
 html {
@@ -11123,6 +11114,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
