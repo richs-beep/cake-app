@@ -431,36 +431,60 @@ class CakeCalculator {
     };
   }
 
-  _calculateSingleTier(tierInput, isBottom) {
+ _calculateSingleTier(tierInput, isBottom) {
     const recipe = this.recipes.find(r => r.id === tierInput.recipeId);
     if (!recipe) throw new Error(`Рецепт не найден (ID: ${tierInput.recipeId})`);
 
+    // 1. АНАЛИЗ НАЧИНКИ (Плотность)
     const fillStats = this._analyzeRecipe(recipe);
     let refVolume = fillStats.geom.volume; 
-    let density = fillStats.netWeight / refVolume;
+    let fillingDensity = fillStats.netWeight / refVolume;
     
+    // Корректировка плотности для сфер (если в рецепте указано неполное заполнение)
     if (this.shape === 'sphere') {
         const recipeFillPercent = parseFloat(recipe.fillPercent) || 100;
         if (this.data.sphereFillMode === 'full' && recipeFillPercent < 100) {
             const ratio = 100 / recipeFillPercent;
-            density = density * ratio;
+            fillingDensity = fillingDensity * ratio;
         }
     }
 
-    let coatingConsumption = 0;
+    // 2. АНАЛИЗ ПОКРЫТИЯ (КРЕМ)
     let coatingRec = null;
+    let coatingConsumption = 0; // расход г/см2
+    let coatingProportionRatio = 0; // Доля крема от общего веса (напр. 0.25)
+
     if (this.data.coatingId) {
         coatingRec = this.recipes.find(r => r.id === this.data.coatingId);
         if (coatingRec) {
            const cStats = this._analyzeRecipe(coatingRec);
-           const area = this._calculateSurfaceArea(cStats.geom.shape, cStats.geom.d, cStats.geom.h);
+           
+           // А. Расчет расхода на площадь (для Режима "Геометрия")
+           // Считаем площадь эталонного торта из рецепта крема (обычно цилиндр)
+           const refArea = this._calculateSurfaceArea(cStats.geom.shape, cStats.geom.d, cStats.geom.h, false, cStats.geom.d, 6); 
            const margin = 1 + ((this.data.coatingMarginPercent || 0) / 100);
-           coatingConsumption = (cStats.netWeight / area) * margin;
+           coatingConsumption = (cStats.netWeight / refArea) * margin;
+
+           // Б. Расчет пропорции (для Режима "Вес")
+           // Если в рецепте крема указан "Вес готового торта", считаем долю от него.
+           const targetFin = parseFloat(coatingRec.targetFinishedWeight);
+           if (targetFin && targetFin > 0) {
+                coatingProportionRatio = (cStats.netWeight / targetFin) * margin;
+           } else {
+                // Если эталон не задан, берем отношение веса крема к (Начинка+Крем) из рецептов
+                coatingProportionRatio = cStats.netWeight / (fillStats.netWeight + cStats.netWeight);
+           }
         }
     }
 
-    // ЛОГИКА 1: РЕЖИМ ГЕОМЕТРИИ
-    let geom;
+    // --- ПЕРЕМЕННЫЕ ДЛЯ РЕЗУЛЬТАТА ---
+    let neededFillWeight = 0;
+    let neededCoatWeight = 0;
+    let geom = {};
+
+    // ==========================================
+    // ВЕТКА 1: РЕЖИМ "ПО РАЗМЕРУ" (Geometry Mode)
+    // ==========================================
     if (tierInput.isGeometryMode || (tierInput.fixedDiameter && tierInput.fixedHeight && (!tierInput.weight || tierInput.weight <= 0))) {
         const d = tierInput.fixedDiameter || 20;
         const h = tierInput.fixedHeight || 10;
@@ -468,81 +492,87 @@ class CakeCalculator {
 
         const vInner = this._calcVolume(this.shape, d, h, w, this.polySides);
         const areaCoat = this._calculateSurfaceArea(this.shape, d, h, false, w, this.polySides);
-        const coatingWeight = areaCoat * coatingConsumption;
+        
+        // Считаем вес исходя из объема
+        neededFillWeight = vInner * fillingDensity;
+        neededCoatWeight = areaCoat * coatingConsumption; 
 
-        tierInput.weight = (vInner * density) + coatingWeight;
-        geom = { d: d, h: h, w: w, volInner: vInner };
+        tierInput.weight = neededFillWeight + neededCoatWeight; // Обновляем вес в поле ввода (обратная связь)
+        geom = { d, h, w, volInner: vInner, area: areaCoat };
     } 
-    // ЛОГИКА 2: РЕЖИМ ВЕСОВ
+    // ==========================================
+    // ВЕТКА 2: РЕЖИМ "ПО ВЕСУ" (Weight Mode)
+    // ==========================================
     else {
-        if (tierInput.forceHeight) {
-             const fd = tierInput.fixedDiameter || 20;
-             const fh = parseFloat(tierInput.forceHeight);
-             const fw = tierInput.fixedWidth || (this.shape === 'rectangle' ? fd * 0.75 : undefined);
-             const tVol = this._calcVolume(this.shape, fd, fh, fw, this.polySides);
-             const tArea = this._calculateSurfaceArea(this.shape, fd, fh, false, fw, this.polySides);
-             tierInput.weight = (tVol * density) + (tArea * coatingConsumption);
-             tierInput.fixedHeight = fh; 
-        }
+        // СЦЕНАРИЙ А: ПРОПОРЦИЯ (Новая логика: Вычитание)
+        if (this.data.coatingMethod === 'proportion' && coatingRec) {
+            // 1. Считаем вес крема как долю от ИТОГОВОГО веса
+            neededCoatWeight = tierInput.weight * coatingProportionRatio;
+            
+            // 2. Остаток - это чистая начинка
+            neededFillWeight = tierInput.weight - neededCoatWeight;
+            if (neededFillWeight <= 0) neededFillWeight = 100; // Защита от дурака
 
-        geom = this._solveGeometry({
-            targetWeight: tierInput.weight, 
-            shape: this.shape,
-            polySides: this.polySides,
-            fixedDiameter: tierInput.fixedDiameter,
-            fixedWidth: tierInput.fixedWidth,
-            fixedHeight: tierInput.fixedHeight,
-            fillingDensity: density,
-            coatingConsumption: coatingConsumption,
-            coatingMethod: this.data.coatingMethod 
-        });
+            // 3. Подбираем размеры ТОЛЬКО под вес начинки.
+            // Передаем coatingConsumption: 0, чтобы решатель нашел геометрию "голого" торта.
+            geom = this._solveGeometry({
+                targetWeight: neededFillWeight, 
+                shape: this.shape,
+                polySides: this.polySides,
+                fixedDiameter: tierInput.fixedDiameter,
+                fixedWidth: tierInput.fixedWidth,
+                fixedHeight: tierInput.fixedHeight,
+                fillingDensity: fillingDensity,
+                coatingConsumption: 0, // <--- КЛЮЧЕВОЙ МОМЕНТ: Ищем размер без учета толщины крема
+                coatingMethod: 'geometry' // Принудительно геометрия для внутренней математики
+            });
+        }
+        // СЦЕНАРИЙ Б: ГЕОМЕТРИЯ (Старая логика: Баланс)
+        else {
+            // Решатель подбирает D и H так, чтобы (V*P_fill) + (Area*C_coat) = Целевой Вес
+            geom = this._solveGeometry({
+                targetWeight: tierInput.weight, 
+                shape: this.shape,
+                polySides: this.polySides,
+                fixedDiameter: tierInput.fixedDiameter,
+                fixedWidth: tierInput.fixedWidth,
+                fixedHeight: tierInput.fixedHeight,
+                fillingDensity: fillingDensity,
+                coatingConsumption: coatingConsumption,
+                coatingMethod: 'geometry'
+            });
+            
+            neededFillWeight = geom.volInner * fillingDensity;
+            neededCoatWeight = geom.area * coatingConsumption;
+        }
     }
 
-    const fillingBatchWeight = fillStats.netWeight; 
-    let scaleRatio = 1;
-    let coatingBatchWeight = 0;
+    // --- МАСШТАБИРОВАНИЕ РЕЦЕПТОВ (РАСХОД ПРОДУКТОВ) ---
+    const fillScale = neededFillWeight / fillStats.netWeight;
+    let coatScale = 0;
+    
     if (coatingRec) {
+        // Для крема масштаб считаем от эталонного веса партии
         const cStats = this._analyzeRecipe(coatingRec);
-        coatingBatchWeight = cStats.netWeight;
-    }
-
-    if (recipe.targetFinishedWeight && recipe.targetFinishedWeight > 0) {
-        scaleRatio = tierInput.weight / recipe.targetFinishedWeight;
-    } else {
-        scaleRatio = tierInput.weight / (fillingBatchWeight + coatingBatchWeight);
-    }
-
-    let neededFillWeight = 0;
-    let neededCoatWeight = 0;
-    let fillScale = scaleRatio;
-    let coatScale = scaleRatio;
-
-    if (this.data.coatingMethod === 'proportion') {
-        neededFillWeight = fillingBatchWeight * scaleRatio;
-        if (coatingRec) {
-            neededCoatWeight = coatingBatchWeight * scaleRatio;
-        }
-    } else {
-        neededFillWeight = geom.volInner * density;
-        fillScale = neededFillWeight / fillingBatchWeight;
-        if (coatingRec) {
-             const surfArea = this._calculateSurfaceArea(this.shape, geom.d, geom.h, false, geom.w, this.polySides);
-             neededCoatWeight = surfArea * coatingConsumption;
-             if (coatingBatchWeight > 0) coatScale = neededCoatWeight / coatingBatchWeight;
+        if (cStats.netWeight > 0) {
+            coatScale = neededCoatWeight / cStats.netWeight;
         }
     }
 
     this.totalFillingWeight += neededFillWeight;
     this.totalCoatingWeight += neededCoatWeight;
 
+    // Генерируем блоки ингредиентов
     this._processRecipeComponents(recipe, fillScale, `Ярус ${tierInput.id}`, 'filling');
     if (coatingRec) {
         this._processRecipeComponents(coatingRec, coatScale, `Покрытие (Ярус ${tierInput.id})`, 'coating');
     }
 
+    // Дополнительное покрытие (Велюр)
     if (this.data.extraCoatingId) {
         const exRec = this.recipes.find(r => r.id === this.data.extraCoatingId);
         if (exRec) {
+            // Площадь берем ту, что насчитали выше
             const surfArea = this._calculateSurfaceArea(this.shape, geom.d, geom.h, false, geom.w, this.polySides);
             const exStats = this._analyzeRecipe(exRec);
             const exAreaCalib = this._calculateSurfaceArea('cylinder', exStats.geom.d, exStats.geom.h);
@@ -551,6 +581,7 @@ class CakeCalculator {
         }
     }
 
+    // Считаем стоимость яруса (суммируем созданные блоки)
     const currentTierCost = this.detailedBlocks
         .filter(blk => blk.name.includes(`Ярус ${tierInput.id}`))
         .reduce((sum, blk) => sum + (blk.totalCost || 0), 0);
@@ -566,7 +597,6 @@ class CakeCalculator {
         forceHeight: tierInput.forceHeight 
     };
   }
-
   _processRecipeComponents(recipe, scale, blockPrefix, type) {
       if (!recipe.blocks) return; 
 
@@ -746,8 +776,10 @@ class CakeCalculator {
         h = Math.round(h * 100) / 100;
     }
 
+    
     const vFinal = this._calcVolume(p.shape, d, h, w, p.polySides);
-    return { d, h, w, volInner: vFinal };
+    const areaFinal = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides);
+    return { d, h, w, volInner: vFinal, area: areaFinal };
   }
 
   _calcVolume(shape, d, h, w, n) {
@@ -5362,18 +5394,15 @@ function updateRecTypeUI() {
     grpFill.style.visibility = 'visible'; 
     lblOutput.innerText = 'Выход (г)';
 
-    // 1. НАЧИНКА (Единственный тип, где нужна привязка к весу торта)
-    if (type === 'filling') {
+    // 1. НАЧИНКА ИЛИ КРЕМ (Разрешаем привязку к весу готового торта)
+    if (type === 'filling' || type === 'coating') {
         blockFinWeight.style.display = 'block';
+        
+        if (type === 'coating') {
+            grpFill.style.visibility = 'hidden'; // Кремы не пекутся, заполнение не нужно
+        }
     } 
-    // 2. ПОКРЫТИЕ (КРЕМ) - Скрываем привязку и принудительно снимаем галочку
-    else if (type === 'coating') {
-        blockFinWeight.style.display = 'none'; // Скрываем блок
-        chkFinishedWeight.checked = false;     // Снимаем галочку
-        toggleFinishedWeight(true);            // Сохраняем состояние "выключено"
-        grpFill.style.visibility = 'hidden';   // Кремы не пекутся, заполнение не нужно
-    }
-    // 3. ДЕКОР (Штучный)
+    // 2. ДЕКОР (Штучный)
     else if (type === 'decor') {
         blockFinWeight.style.display = 'none';
         chkFinishedWeight.checked = false;
@@ -5382,7 +5411,7 @@ function updateRecTypeUI() {
         rowDims.style.display = 'none';
         lblOutput.innerText = 'Вес всей партии (г)';
     } 
-    // 4. ВЕЛЮР / ГЛЯССАЖ
+    // 3. ВЕЛЮР / ГЛЯССАЖ
     else {
         blockFinWeight.style.display = 'none';
         chkFinishedWeight.checked = false;
@@ -10866,6 +10895,7 @@ function setRecipeLockState(isLocked) {
   </body>
 
 </html>
+
 
 
 
