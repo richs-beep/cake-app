@@ -3570,15 +3570,7 @@ let laborSort = { field: 'name', dir: 'asc' }; // Для работ
     // 1. Покрытия (Крем)
     const selC=document.getElementById('coatingIdSelect'); 
     if(selC) {
-        const savedVal = selC.value; // <--- ЗАПОМНИЛИ!
-        selC.innerHTML='<option value="">-- Голый --</option>';
-        myRecipes.filter(r=>r.type==='coating').forEach(r=>{
-            const o=document.createElement('option');
-            o.value=r.id;
-            o.innerText=r.name;
-            selC.appendChild(o);
-        });
-        selC.value = savedVal; // <--- ВСПОМНИЛИ!
+       renderCoatingOptions(); // <--- Вставьте это вместо старого цикла заполнения selC
     }
 
     // 2. Доп. покрытия (Велюр)
@@ -3846,6 +3838,7 @@ function moveTier(idx, direction) {
 }
 
 function updateTierUI() {
+  renderCoatingOptions(); // <--- ДОБАВИТЬ СЮДА ПЕРВОЙ СТРОКОЙ
     const sh = document.getElementById('globalShape').value;
     
     // Показываем/скрываем специфичные поля
@@ -10920,6 +10913,59 @@ function setRecipeLockState(isLocked) {
     }
 }
 
+// --- ФУНКЦИЯ: УМНЫЙ ФИЛЬТР СПИСКА ПОКРЫТИЙ ---
+function renderCoatingOptions() {
+    const shapeSelect = document.getElementById('globalShape');
+    const coatingSelect = document.getElementById('coatingIdSelect');
+    
+    if (!shapeSelect || !coatingSelect) return;
+
+    // 1. Сохраняем то, что выбрано сейчас (чтобы не сбрасывать без нужды)
+    const currentVal = coatingSelect.value;
+    const shape = shapeSelect.value;
+
+    // 2. Очищаем список
+    coatingSelect.innerHTML = '<option value="">-- Голый --</option>';
+
+    // 3. Настраиваем фильтр
+    // Ищем текст "корпус бомба" (маленькими буквами для надежности)
+    const searchKey = "корпус бомба"; 
+    const isBombShape = (shape === 'sphere');
+
+    // 4. Фильтруем массив рецептов
+    const filteredRecipes = myRecipes.filter(r => {
+        // Берем только тип "coating" (Крем/Покрытие)
+        if (r.type !== 'coating') return false;
+
+        const nameLower = r.name.toLowerCase();
+        
+        if (isBombShape) {
+            // Если выбрана БОМБА -> Показываем ТОЛЬКО то, где есть "корпус бомба"
+            return nameLower.includes(searchKey);
+        } else {
+            // Если выбран ЦИЛИНДР/КВАДРАТ -> Показываем ВСЁ, КРОМЕ "корпус бомба"
+            return !nameLower.includes(searchKey);
+        }
+    });
+
+    // 5. Заполняем список отфильтрованным
+    filteredRecipes.forEach(r => {
+        const o = document.createElement('option');
+        o.value = r.id;
+        o.innerText = r.name;
+        coatingSelect.appendChild(o);
+    });
+
+    // 6. Проверяем: остался ли старый выбор в новом списке?
+    // Если да — возвращаем его. Если нет — сбрасываем на "Голый".
+    const stillExists = filteredRecipes.find(r => r.id === currentVal);
+    if (stillExists) {
+        coatingSelect.value = currentVal;
+    } else {
+        coatingSelect.value = "";
+    }
+}
+          
   // --- ФУНКЦИЯ АВТОПОДБОРА УПАКОВКИ ---
 // --- ФУНКЦИЯ АВТОПОДБОРА УПАКОВКИ (БЕЗ БЕСКОНЕЧНОГО ЦИКЛА) ---
 function autoAddPackaging(res) {
@@ -11067,6 +11113,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
