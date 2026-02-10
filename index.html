@@ -4200,6 +4200,13 @@ function calculateSide(side) {
             appState.results[side] = res.data;
             state = appState.results; // Синхронизация
 
+          if (autoAddPackaging(res.data)) {
+                renderExtras();
+                console.log("Упаковка обновлена, перезапуск расчета...");
+                calculateSide(side); 
+                return; 
+            }
+
             document.getElementById('svg' + side).innerHTML = res.svg;
             updateStats(side);
             
@@ -10882,6 +10889,157 @@ function setRecipeLockState(isLocked) {
     }
 }
 
+  // --- ФУНКЦИЯ АВТОПОДБОРА УПАКОВКИ ---
+function autoAddPackaging(res) {
+    // 1. Удаляем старую авто-упаковку (чтобы не дублировалась при пересчете)
+    // Мы будем помечать такие товары флагом isAutoPack: true
+    const oldLength = extrasList.length;
+    extrasList = extrasList.filter(item => !item.isAutoPack);
+    let hasChanges = (extrasList.length !== oldLength);
+
+    const shape = res.geometry.shape;
+    
+    // --- ЛОГИКА ДЛЯ ПРЯМОУГОЛЬНИКОВ ---
+    if (shape === 'rectangle') {
+        // Если это прямоугольник и мы только что стерли упаковку (или её не было)
+        // покажем уведомление один раз
+        // (Можно добавить флаг, чтобы не спамить, но пока просто alert)
+        /* Чтобы не надоедать при каждом клике "Рассчитать", 
+           можно раскомментировать alert ниже, если нужно явное действие.
+           Или просто ничего не добавлять.
+        */
+        // alert("⚠️ Для прямоугольного торта авто-подбор упаковки не работает.\nПожалуйста, выберите подложку и коробку вручную.");
+        // document.getElementById('extrasContainer').scrollIntoView({behavior: 'smooth'});
+        return hasChanges; 
+    }
+
+    // Размеры торта
+    const cakeD = res.geometry.d; // Диаметр (или сторона квадрата)
+    const cakeH = res.geometry.h; // Общая высота
+
+    // --- 2. ВЫБОР ПОДЛОЖКИ ---
+    // Логика: D торта + 4 см
+    const neededBoardSize = cakeD + 4;
+    
+    // Ищем подходящие подложки на складе
+    // Формат имени: "Подложка 20см"
+    let bestBoard = null;
+    let bestBoardSize = Infinity;
+
+    myIngredients.forEach(ing => {
+        const name = ing.name.toLowerCase();
+        if (name.includes('подложка')) {
+            // Вытаскиваем число из названия (например "24")
+            const match = name.match(/подложка\s*(\d+)/); 
+            if (match) {
+                const size = parseInt(match[1]);
+                // Она должна быть больше или равна нужного размера
+                // И меньше, чем текущий "лучший" вариант (ищем самую компактную из подходящих)
+                if (size >= neededBoardSize && size < bestBoardSize) {
+                    bestBoardSize = size;
+                    bestBoard = ing;
+                }
+            }
+        }
+    });
+
+    if (bestBoard) {
+        extrasList.push({
+            id: bestBoard.id,
+            name: bestBoard.name,
+            amount: 1,
+            unit: 'шт',
+            type: 'extra',
+            isAutoPack: true // Метка, что это авто-товар
+        });
+        hasChanges = true;
+    } else {
+        // Если подложка не найдена, коробку искать нет смысла (не на чем стоять)
+        return hasChanges;
+    }
+
+    // --- 3. ВЫБОР КОРОБКИ ---
+    // Логика: Диаметр >= Подложки, Высота > Торта + 2см
+    const minBoxD = bestBoardSize; 
+    const minBoxH = cakeH + 2; 
+
+    let bestBox = null;
+    // Для сортировки коробок: сначала смотрим на диаметр (чтобы плотно), потом на высоту
+    // Храним "штрафные очки": чем больше лишнего места, тем хуже коробка
+    let minBoxWaste = Infinity; 
+
+    myIngredients.forEach(ing => {
+        const name = ing.name.toLowerCase();
+        // Формат: "Коробка тубус 30/40" или "30\40" (D/H)
+        // Регулярка ищет два числа, разделенных слэшем или обратным слэшем
+        if (name.includes('коробка') && name.includes('тубус')) {
+            const match = name.match(/(\d+)[\/\\](\d+)/);
+            if (match) {
+                const boxD = parseInt(match[1]);
+                const boxH = parseInt(match[2]);
+
+                if (boxD >= minBoxD && boxH >= minBoxH) {
+                    // Оцениваем, насколько коробка "велика"
+                    // Приоритет: минимальный диаметр важнее, чем минимальная высота
+                    // (чтобы торт не болтался)
+                    const wasteD = boxD - minBoxD;
+                    const wasteH = boxH - minBoxH;
+                    
+                    // Формула "штрафа": каждый лишний см диаметра стоит "дорого" (100 очков),
+                    // каждый лишний см высоты - "дешево" (1 очко).
+                    const currentWaste = (wasteD * 100) + wasteH;
+
+                    if (currentWaste < minBoxWaste) {
+                        minBoxWaste = currentWaste;
+                        bestBox = { ing: ing, d: boxD, h: boxH };
+                    }
+                }
+            }
+        }
+    });
+
+    if (bestBox) {
+        extrasList.push({
+            id: bestBox.ing.id,
+            name: bestBox.ing.name,
+            amount: 1,
+            unit: 'шт',
+            type: 'extra',
+            isAutoPack: true
+        });
+        hasChanges = true;
+
+        // --- 4. РАСЧЕТ ЛЕНТЫ ---
+        // Формула крест-накрест: (4 * Высота) + (2 * Диаметр) + 50см бант
+        // Результат в метрах
+        const ribbonCm = (4 * bestBox.h) + (2 * bestBox.d) + 50;
+        const ribbonM = parseFloat((ribbonCm / 100).toFixed(2)); // Округляем до 2 знаков (2.45 м)
+
+        // Ищем ленту на складе
+        const ribbonIng = myIngredients.find(i => i.name.toLowerCase().includes('лента'));
+        // Если есть конкретная лента - берем её, иначе просто пишем "Лента атласная"
+        const ribbonId = ribbonIng ? ribbonIng.id : 'manual_ribbon';
+        const ribbonName = ribbonIng ? ribbonIng.name : 'Лента атласная (Авто)';
+        const ribbonUnit = ribbonIng ? ribbonIng.unit : 'м';
+        
+        // Если на складе лента в метрах - всё ок. Если в см - умножаем обратно.
+        // Предполагаем, что лента в метрах (unit='м')
+        let finalRibbonAmount = ribbonM;
+        if (ribbonUnit === 'см') finalRibbonAmount = ribbonCm;
+
+        extrasList.push({
+            id: ribbonId,
+            name: ribbonName,
+            amount: finalRibbonAmount,
+            unit: ribbonUnit,
+            type: 'extra',
+            isAutoPack: true
+        });
+    }
+
+    return hasChanges;
+}
+
     </script>
 
 <script>
@@ -10895,6 +11053,7 @@ function setRecipeLockState(isLocked) {
   </body>
 
 </html>
+
 
 
 
