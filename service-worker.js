@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cake-app-v6.3'; // Поменял версию, чтобы обновилось
+const CACHE_NAME = 'cake-app-v6.4'; // Поменял версию, чтобы обновилось
 const ASSETS = [
   './',
   './index.html',
