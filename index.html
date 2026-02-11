@@ -1189,6 +1189,34 @@ class CakeVisualizer {
     
     <style>
 
+      /* --- КОЛОРИСТИКА --- */
+.color-step-box {
+    flex: 1;
+    background: #fff;
+    border: 2px solid #eee;
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: 0.2s;
+}
+.color-step-box:hover { border-color: #90CAF9; }
+.color-step-box.active-picker {
+    border-color: #FF5722;
+    background: #FFF3E0;
+    box-shadow: 0 4px 10px rgba(255, 87, 34, 0.2);
+    transform: translateY(-2px);
+}
+.color-patch {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin: 5px auto;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+}
+.step-num { font-size: 10px; font-weight: bold; color: #999; text-transform: uppercase; }
+.step-desc { font-size: 11px; color: #333; font-weight: bold; }
+
 /* --- СТИЛИ ЗАЩИТЫ РЕЦЕПТА --- */
 .recipe-locked input, 
 .recipe-locked select {
@@ -2582,6 +2610,7 @@ body {
         <button class="tab-btn" onclick="switchTab('recipes')">📖 Рецепты</button>
         <button class="tab-btn" onclick="switchTab('production')">🏭 План <span id="badgeQueue" style="background:red; color:white; border-radius:10px; padding:2px 6px; font-size:10px; display:none;">0</span></button>
         <button class="tab-btn" onclick="switchTab('clients')">👥 Клиенты</button>
+      <button class="tab-btn" onclick="switchTab('colors')">🎨 Лаборатория цвета</button>
         
         <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div>
         <button class="tab-btn settings-btn" onclick="openSettingsModal()">⚙️ Настройки</button>
@@ -3186,7 +3215,59 @@ body {
            </div>
         </div>
       </div>
+<div id="tab-colors" class="tab-content" style="display:none;">
+    <div class="card">
+        <h2>🎨 Подбор цвета (Колорист)</h2>
+        <div style="font-size:12px; color:#666; margin-bottom:15px;">
+            Загрузите референс, откалибруйте свет и выберите цвета. Программа рассчитает пропорции красителей.
+        </div>
 
+        <div class="form-row" style="margin-bottom: 20px;">
+            <div class="form-group" style="flex: 1;">
+                <label class="main-btn" style="background:#607D8B; display:inline-block; text-align:center; cursor:pointer;">
+                    📸 Загрузить фото
+                    <input type="file" id="colorImageInput" accept="image/*" style="display:none;" onchange="handleColorImage(event)">
+                </label>
+            </div>
+            <div class="form-group" style="flex: 2; display: flex; gap: 10px; justify-content: space-between;">
+                <div class="color-step-box" id="boxWhite" onclick="activatePicker('white')">
+                    <div class="step-num">1. Свет</div>
+                    <div class="color-patch" id="patchWhite" style="background:#fff; border: 1px dashed #ccc;"></div>
+                    <div class="step-desc">Эталон белого</div>
+                </div>
+                
+                <div class="color-step-box" id="boxBase" onclick="activatePicker('base')">
+                    <div class="step-num">2. База</div>
+                    <div class="color-patch" id="patchBase" style="background:#fffac1;"></div>
+                    <div class="step-desc">Ваш крем</div>
+                </div>
+
+                <div class="color-step-box" id="boxTarget" onclick="activatePicker('target')">
+                    <div class="step-num">3. Цель</div>
+                    <div class="color-patch" id="patchTarget" style="background:#ff4081;"></div>
+                    <div class="step-desc">Цвет с фото</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="position: relative; width: 100%; max-width: 600px; margin: 0 auto; border: 2px dashed #ddd; border-radius: 8px; overflow: hidden; background: #fafafa;">
+            <canvas id="colorCanvas" style="width: 100%; height: auto; display: block; cursor: crosshair;"></canvas>
+            <div id="canvasPlaceholder" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:#999; text-align:center; pointer-events:none;">
+                📷 Фото не загружено
+            </div>
+            <div id="colorCursor" style="display:none; position:absolute; width:30px; height:30px; border:2px solid #fff; border-radius:50%; box-shadow:0 0 5px rgba(0,0,0,0.5); pointer-events:none;"></div>
+        </div>
+
+        <div style="margin-top: 20px; text-align: center;">
+            <button class="main-btn" onclick="calculateMix()" style="background:#E91E63; width: auto; padding: 10px 40px; font-size: 16px;">🧪 Рассчитать формулу</button>
+        </div>
+
+        <div id="colorResultBlock" style="display:none; margin-top: 20px; padding: 15px; background: #FCE4EC; border-radius: 8px; border: 1px solid #F8BBD0;">
+            <h3 style="margin-top:0; color:#C2185B; text-align:center;">Рецепт смешивания</h3>
+            <div id="colorResultText"></div>
+        </div>
+    </div>
+</div>
       <div id="importModal" class="modal-overlay">
          <div class="modal-box">
            <h3 id="importTitle">📥 Импорт</h3>
@@ -3620,28 +3701,19 @@ let laborSort = { field: 'name', dir: 'asc' }; // Для работ
     renderTierRows();
 }
 
-      function switchTab(t) {
-    // 1. Скрываем все содержимое вкладок
+     function switchTab(t) {
     document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+    document.querySelectorAll('.nav-group .tab-btn').forEach(b => b.classList.remove('active'));
     
-    // 2. Убираем оранжевую подсветку ("active") со всех кнопок
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    
-    // 3. Показываем выбранную вкладку
     const targetDiv = document.getElementById('tab-' + t);
     if (targetDiv) targetDiv.style.display = 'block';
     
-    // 4. Включаем подсветку для нужной кнопки (по её порядку в меню)
-    // Используем nav-group, чтобы не задеть кнопку настроек
-    const navButtons = document.querySelectorAll('.nav-group .tab-btn');
+    // Ищем кнопку, у которой onclick содержит нужное имя вкладки
+    const targetBtn = document.querySelector(`.nav-group .tab-btn[onclick*="'${t}'"]`);
+    if (targetBtn) targetBtn.classList.add('active');
     
-    if(t === 'calc')       navButtons[0].classList.add('active'); // 1-я кнопка
-    if(t === 'stock')      navButtons[1].classList.add('active'); // 2-я кнопка
-    if(t === 'recipes')    navButtons[2].classList.add('active'); // 3-я кнопка
-    if(t === 'production') navButtons[3].classList.add('active'); // 4-я кнопка (План)
-    if(t === 'clients')  {
-        navButtons[4].classList.add('active'); // 5-я кнопка (Клиенты)
-        renderClientsCloud(); // И сразу обновляем таблицу клиентов
+    if(t === 'clients') {
+        renderClientsCloud(); 
     }
 }
 
@@ -9264,6 +9336,110 @@ function syncAllToCloud() {
 }
 
 
+     // ==========================================
+// 🎨 МОДУЛЬ КОЛОРИСТИКИ (ЭТАП 1: ПИПЕТКА)
+// ==========================================
+
+let colorState = {
+    mode: null, // 'white', 'base', 'target'
+    ctx: null,
+    colors: {
+        white: { r: 255, g: 255, b: 255 }, // По умолчанию идеальный белый
+        base: { r: 255, g: 250, b: 205 },  // По умолчанию цвет масла
+        target: { r: 255, g: 64, b: 129 }  // По умолчанию розовый
+    }
+};
+
+// Загрузка фото на холст
+function handleColorImage(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            const canvas = document.getElementById('colorCanvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            
+            // Настраиваем размер холста под картинку, но ограничиваем ширину
+            const maxWidth = 800; 
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+                height = Math.round(height * (maxWidth / width));
+                width = maxWidth;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+
+            // Рисуем
+            ctx.drawImage(img, 0, 0, width, height);
+            colorState.ctx = ctx;
+            
+            document.getElementById('canvasPlaceholder').style.display = 'none';
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+// Активация нужной пипетки
+function activatePicker(mode) {
+    // Сбрасываем стили
+    document.querySelectorAll('.color-step-box').forEach(b => b.classList.remove('active-picker'));
+    
+    colorState.mode = mode;
+    
+    // Подсвечиваем активный блок
+    let boxId = mode === 'white' ? 'boxWhite' : (mode === 'base' ? 'boxBase' : 'boxTarget');
+    document.getElementById(boxId).classList.add('active-picker');
+}
+
+// Снятие цвета с клика по холсту
+document.addEventListener('DOMContentLoaded', () => {
+    const canvas = document.getElementById('colorCanvas');
+    if (!canvas) return;
+
+    // Работает и для мыши, и для пальца на телефоне
+    canvas.addEventListener('pointerdown', function(e) {
+        if (!colorState.ctx || !colorState.mode) {
+            alert("Сначала загрузите фото и выберите, ЧТО вы хотите указать (Свет, База или Цель)!");
+            return;
+        }
+
+        // Вычисляем координаты клика относительно холста
+        const rect = canvas.getBoundingClientRect();
+        // Масштабируем координаты (если холст сжат CSS-ом)
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+
+        // Берем пиксель
+        const pixel = colorState.ctx.getImageData(x, y, 1, 1).data;
+        const rgb = { r: pixel[0], g: pixel[1], b: pixel[2] };
+
+        // Сохраняем в память
+        colorState.colors[colorState.mode] = rgb;
+
+        // Красим плашку
+        let patchId = colorState.mode === 'white' ? 'patchWhite' : (colorState.mode === 'base' ? 'patchBase' : 'patchTarget');
+        document.getElementById(patchId).style.background = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+    });
+});
+
+// Заглушка для Этапа 2
+function calculateMix() {
+    alert("Пипетка работает отлично!\n\nБелый: " + JSON.stringify(colorState.colors.white) + 
+          "\nБаза: " + JSON.stringify(colorState.colors.base) + 
+          "\nЦель: " + JSON.stringify(colorState.colors.target) +
+          "\n\nЖду Этап 2 (математику), чтобы выдать рецепт!");
+}
+
 // --- ЛОГИКА СКЛАДА ---
 
 // 1. Переключатель режима Инвентаризации
@@ -11151,6 +11327,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
