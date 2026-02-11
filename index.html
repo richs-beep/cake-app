@@ -2610,7 +2610,7 @@ body {
         <button class="tab-btn" onclick="switchTab('recipes')">📖 Рецепты</button>
         <button class="tab-btn" onclick="switchTab('production')">🏭 План <span id="badgeQueue" style="background:red; color:white; border-radius:10px; padding:2px 6px; font-size:10px; display:none;">0</span></button>
         <button class="tab-btn" onclick="switchTab('clients')">👥 Клиенты</button>
-      <button class="tab-btn" onclick="switchTab('colors')">🎨 Лаборатория цвета</button>
+        <button class="tab-btn" onclick="switchTab('colors')">🎨 Лаборатория цвета</button>
         
         <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div>
         <button class="tab-btn settings-btn" onclick="openSettingsModal()">⚙️ Настройки</button>
@@ -3255,7 +3255,9 @@ body {
             <div id="canvasPlaceholder" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:#999; text-align:center; pointer-events:none;">
                 📷 Фото не загружено
             </div>
-            <div id="colorCursor" style="display:none; position:absolute; width:30px; height:30px; border:2px solid #fff; border-radius:50%; box-shadow:0 0 5px rgba(0,0,0,0.5); pointer-events:none;"></div>
+            <div id="colorCursor" style="display:none; position:absolute; width:100px; height:100px; border:4px solid #fff; border-radius:50%; box-shadow:0 0 15px rgba(0,0,0,0.5); overflow:hidden; pointer-events:none; z-index: 100; background:#000;">
+    <canvas id="loupeCanvas" width="100" height="100" style="width:100%; height:100%; display:block; image-rendering: pixelated; /* <- Важно для четкости пикселей */"></canvas>
+</div>
         </div>
 
         <div style="margin-top: 20px; text-align: center;">
@@ -9386,8 +9388,15 @@ function handleColorImage(event) {
     reader.readAsDataURL(file);
 }
 
+
 // Активация нужной пипетки
 function activatePicker(mode) {
+    // Защита: если фото еще нет, сразу открываем окно выбора файла!
+    if (!colorState.ctx) {
+        document.getElementById('colorImageInput').click();
+        return;
+    }
+
     // Сбрасываем стили
     document.querySelectorAll('.color-step-box').forEach(b => b.classList.remove('active-picker'));
     
@@ -9398,46 +9407,201 @@ function activatePicker(mode) {
     document.getElementById(boxId).classList.add('active-picker');
 }
 
-// Снятие цвета с клика по холсту
+// Снятие цвета с клика по холсту + ЛОГИКА ЛУПЫ
 document.addEventListener('DOMContentLoaded', () => {
-    const canvas = document.getElementById('colorCanvas');
-    if (!canvas) return;
+    const mainCanvas = document.getElementById('colorCanvas');
+    const cursorDiv = document.getElementById('colorCursor');
+    const loupeCanvas = document.getElementById('loupeCanvas');
 
-    // Работает и для мыши, и для пальца на телефоне
-    canvas.addEventListener('pointerdown', function(e) {
-        if (!colorState.ctx || !colorState.mode) {
-            alert("Сначала загрузите фото и выберите, ЧТО вы хотите указать (Свет, База или Цель)!");
+    if (!mainCanvas || !cursorDiv || !loupeCanvas) return;
+
+    // Контекст для мини-холста (лупы)
+    const loupeCtx = loupeCanvas.getContext('2d', { willReadFrequently: true });
+    // Отключаем сглаживание, чтобы видеть четкие квадратики пикселей
+    loupeCtx.imageSmoothingEnabled = false; 
+
+    // --- 1. ДВИЖЕНИЕ МЫШИ/ПАЛЬЦА (Рисуем лупу) ---
+    mainCanvas.addEventListener('pointermove', function(e) {
+        // Показывать лупу только если загружено фото и выбран режим пипетки
+        if (!colorState.ctx || !colorState.mode) return;
+        
+        cursorDiv.style.display = 'block';
+
+        // А. Вычисляем координаты на ГЛАВНОМ холсте
+        const rect = mainCanvas.getBoundingClientRect();
+        const scaleX = mainCanvas.width / rect.width;
+        const scaleY = mainCanvas.height / rect.height;
+        
+        // Координаты пикселя под курсором в исходном изображении
+        const sourceX = (e.clientX - rect.left) * scaleX;
+        const sourceY = (e.clientY - rect.top) * scaleY;
+
+        // Б. Двигаем саму лупу за курсором
+        // Центрируем div относительно курсора мыши
+        cursorDiv.style.left = `${e.clientX - rect.left - cursorDiv.offsetWidth / 2}px`;
+        cursorDiv.style.top = `${e.clientY - rect.top - cursorDiv.offsetHeight / 2}px`;
+
+        // В. Рисуем увеличенное изображение внутри лупы
+        const zoomLevel = 10; // Увеличение в 10 раз
+        // Размер области исходной картинки, которую надо вырезать (100px / 10 = 10px)
+        const sourceSize = loupeCanvas.width / zoomLevel; 
+
+        // Очищаем лупу
+        loupeCtx.clearRect(0, 0, loupeCanvas.width, loupeCanvas.height);
+
+        // Магия drawImage: вырезаем маленький кусочек и растягиваем на весь мини-холст
+        loupeCtx.drawImage(
+            mainCanvas,                                     // Источник
+            sourceX - sourceSize / 2, sourceY - sourceSize / 2, // Откуда начать вырезать (центр)
+            sourceSize, sourceSize,                         // Какой размер вырезать (10x10)
+            0, 0,                                           // Куда вставить на мини-холсте
+            loupeCanvas.width, loupeCanvas.height           // До какого размера растянуть (100x100)
+        );
+
+        // Г. Рисуем красный прицел в центре для точности
+        loupeCtx.fillStyle = 'rgba(255, 50, 50, 0.8)';
+        const centerX = loupeCanvas.width / 2;
+        const centerY = loupeCanvas.height / 2;
+        // Рисуем крестик 3x3 пикселя в центре
+        loupeCtx.fillRect(centerX - 1, centerY - 4, 2, 8); // Вертикальная палочка
+        loupeCtx.fillRect(centerX - 4, centerY - 1, 8, 2); // Горизонтальная палочка
+    });
+
+    // Убираем лупу, когда курсор уходит с холста
+    mainCanvas.addEventListener('pointerleave', function() {
+        cursorDiv.style.display = 'none';
+    });
+
+    // --- 2. КЛИК (Снятие цвета - Старый код) ---
+    mainCanvas.addEventListener('pointerdown', function(e) {
+        if (!colorState.ctx) {
+            document.getElementById('colorImageInput').click();
+            return;
+        }
+        if (!colorState.mode) {
+            alert("👆 Укажите, что именно вы сейчас ищете: нажмите кнопку '1. Свет', '2. База' или '3. Цель' над фото.");
             return;
         }
 
-        // Вычисляем координаты клика относительно холста
-        const rect = canvas.getBoundingClientRect();
-        // Масштабируем координаты (если холст сжат CSS-ом)
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
+        const rect = mainCanvas.getBoundingClientRect();
+        const scaleX = mainCanvas.width / rect.width;
+        const scaleY = mainCanvas.height / rect.height;
         
         const x = (e.clientX - rect.left) * scaleX;
         const y = (e.clientY - rect.top) * scaleY;
 
-        // Берем пиксель
         const pixel = colorState.ctx.getImageData(x, y, 1, 1).data;
         const rgb = { r: pixel[0], g: pixel[1], b: pixel[2] };
 
-        // Сохраняем в память
         colorState.colors[colorState.mode] = rgb;
 
-        // Красим плашку
         let patchId = colorState.mode === 'white' ? 'patchWhite' : (colorState.mode === 'base' ? 'patchBase' : 'patchTarget');
         document.getElementById(patchId).style.background = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+        
+        // После клика можно спрятать лупу на мгновение для визуального подтверждения
+        cursorDiv.style.display = 'none';
     });
 });
 
 // Заглушка для Этапа 2
+// ==========================================
+// 🧪 МОДУЛЬ КОЛОРИСТИКИ (ЭТАП 2: РАСЧЕТ ПРОПОРЦИЙ)
+// ==========================================
 function calculateMix() {
-    alert("Пипетка работает отлично!\n\nБелый: " + JSON.stringify(colorState.colors.white) + 
-          "\nБаза: " + JSON.stringify(colorState.colors.base) + 
-          "\nЦель: " + JSON.stringify(colorState.colors.target) +
-          "\n\nЖду Этап 2 (математику), чтобы выдать рецепт!");
+    if (!colorState.colors.base || !colorState.colors.target) {
+        alert("⚠️ Пожалуйста, выберите хотя бы Базу (ваш крем) и Цель (цвет на фото)!");
+        return;
+    }
+
+    // Если белый не выбран, считаем, что фото идеальное
+    let wb = colorState.colors.white || {r: 255, g: 255, b: 255};
+    let base = colorState.colors.base;
+    let target = colorState.colors.target;
+
+    // 1. КОРРЕКЦИЯ БАЛАНСА БЕЛОГО
+    const wbFactor = {
+        r: 255 / (wb.r || 255),
+        g: 255 / (wb.g || 255),
+        b: 255 / (wb.b || 255)
+    };
+
+    const fixRGB = (c) => ({
+        r: Math.min(255, Math.round(c.r * wbFactor.r)),
+        g: Math.min(255, Math.round(c.g * wbFactor.g)),
+        b: Math.min(255, Math.round(c.b * wbFactor.b))
+    });
+
+    let fixedBase = fixRGB(base);
+    let fixedTarget = fixRGB(target);
+
+    // 2. ПЕРЕВОД RGB В CMYK (Формат красок)
+    const rgbToCmyk = (c) => {
+        let r = c.r / 255, g = c.g / 255, b = c.b / 255;
+        let k = 1 - Math.max(r, g, b);
+        if (k === 1) return { c: 0, m: 0, y: 0, k: 1 };
+        return {
+            c: (1 - r - k) / (1 - k),
+            m: (1 - g - k) / (1 - k),
+            y: (1 - b - k) / (1 - k),
+            k: k
+        };
+    };
+
+    let baseCmyk = rgbToCmyk(fixedBase);
+    let targetCmyk = rgbToCmyk(fixedTarget);
+
+    // 3. СЧИТАЕМ РАЗНИЦУ (Что нужно ДОБАВИТЬ)
+    let diff = {
+        c: targetCmyk.c - baseCmyk.c,
+        m: targetCmyk.m - baseCmyk.m,
+        y: targetCmyk.y - baseCmyk.y,
+        k: targetCmyk.k - baseCmyk.k
+    };
+
+    // 4. ФОРМИРУЕМ РЕЦЕПТ
+    let recipe = [];
+    let warnings = [];
+
+    // Базовый множитель для "капель на 100г" (Можно калибровать под ваши красители)
+    const intensity = 20; 
+
+    // Проверка 1: Если цель светлее/чище, чем наша жирная база
+    if (targetCmyk.k < baseCmyk.k - 0.05 || (diff.c < 0 && diff.m < 0 && diff.y < 0)) {
+        warnings.push("⚠️ <b>Цель светлее вашей базы!</b><br>Вам нужно добавить <b>Диоксид титана</b> (белый), чтобы высветлить крем, иначе нужной яркости не добиться.");
+    }
+
+    // Проверка 2: Если база желтит (масло), а нам нужен холодный оттенок (синий/розовый)
+    if (baseCmyk.y > 0.15 && targetCmyk.y < 0.1 && diff.b > 0) {
+         warnings.push("⚠️ <b>Внимание на желтизну!</b><br>Ваш крем желтоват. Перед окрашиванием добавьте 1-2 капли <b>Фиолетового</b> (Красный+Синий), чтобы его отбелить (нейтрализовать). Иначе вместо голубого получите зеленый.");
+    }
+
+    // Составляем пропорции красителей (игнорируем отрицательные значения)
+    if (diff.c > 0.02) recipe.push(`🔵 <b>Синий (Голубой):</b> ~${Math.ceil(diff.c * intensity)} кап.`);
+    if (diff.m > 0.02) recipe.push(`🔴 <b>Красный (Малиновый):</b> ~${Math.ceil(diff.m * intensity)} кап.`);
+    if (diff.y > 0.02) recipe.push(`🟡 <b>Желтый:</b> ~${Math.ceil(diff.y * intensity)} кап.`);
+    if (diff.k > 0.02) recipe.push(`⚫ <b>Черный:</b> ~${Math.ceil(diff.k * intensity)} кап.`);
+
+    // 5. ВЫВОД НА ЭКРАН
+    let html = '';
+    if (warnings.length > 0) {
+        html += `<div style="background:#FFF3E0; padding:10px; border-left:4px solid #FF9800; border-radius:4px; margin-bottom:15px; font-size:13px; color:#E65100;">${warnings.join('<br><br>')}</div>`;
+    }
+
+    if (recipe.length > 0) {
+        html += `<div style="font-size:15px; line-height:1.6; color:#333; background:#fff; padding:15px; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+                    <b>🎨 На 100г крема:</b><br><br>
+                    ${recipe.join('<br>')}
+                 </div>`;
+        html += `<div style="font-size:11px; color:#888; margin-top:10px; text-align:center;">* Добавляйте по одной капле и вымешивайте. Сила пигмента зависит от бренда.</div>`;
+    } else if (warnings.length === 0) {
+        html += `<div style="color:#2E7D32; font-weight:bold; text-align:center; padding:10px;">Цвета практически совпадают! Краситель не нужен.</div>`;
+    }
+
+    document.getElementById('colorResultText').innerHTML = html;
+    document.getElementById('colorResultBlock').style.display = 'block';
+    
+    // Плавная прокрутка к результату
+    document.getElementById('colorResultBlock').scrollIntoView({behavior: 'smooth', block: 'center'});
 }
 
 // --- ЛОГИКА СКЛАДА ---
@@ -11327,6 +11491,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
