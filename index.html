@@ -8768,42 +8768,7 @@ function createCalendarLinks(item) {
         }
         if (item.color) cakeDesc += `\n🎨 Цвет: ${item.color}`;
 
-        // --- Б. РАСЧЕТ СТОИМОСТЕЙ (МАТЕРИАЛЫ vs ДЕКОР) ---
-        let extrasCost = 0;
-        // Пытаемся найти стоимость декора в детальных блоках расчета
-        if (item.data && item.data.detailedBlocks) {
-            extrasCost = item.data.detailedBlocks
-                .filter(b => b.type === 'extra')
-                .reduce((sum, b) => sum + b.totalCost, 0);
-        }
         
-        const totalMatCost = item.data.costs.totalProductionCost || 0;
-        const cakeOnlyCost = totalMatCost - extrasCost; // Чистая себестоимость торта
-        const totalLaborCost = item.data.costs.laborCost || 0;
-
-        // --- В. СПИСКИ РАБОТ И ДЕКОРА ---
-        let workList = "";
-        let suppliesList = "";
-
-        // Список Декора
-        if (item.extras && item.extras.length > 0) {
-            suppliesList += "\n📦 РАСХОДНИКИ:\n";
-            item.extras.forEach(ex => {
-                suppliesList += `- ${ex.name} (${ex.amount} ${ex.unit})\n`;
-            });
-        }
-
-        // Список Работ (с ценами)
-        if (item.labor && item.labor.length > 0) {
-            workList += "\n🛠️ РАБОТЫ:\n";
-            item.labor.forEach(l => {
-                const diff = l.coeff > 1 ? ` [x${l.coeff}]` : '';
-                // Считаем стоимость конкретной задачи
-                const taskCost = Math.round(l.realHours * l.coeff * hourlyRate);
-                workList += `- ${l.name} (${l.realHours}ч)${diff} = ${taskCost} ${currency}\n`;
-            });
-        }
-
         // --- Г. СБОРКА ИТОГОВОГО ТЕКСТА ---
       
         let headerInfo = "";
@@ -11693,6 +11658,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
