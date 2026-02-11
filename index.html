@@ -6092,10 +6092,17 @@ function handleClientSelection() {
     });
 
     if (foundId) {
-        clientIdInput.value = foundId; // Нашли! Используем старую карточку
-        // Опционально: можно подтянуть телефон найденного клиента в консоль для проверки
-        // console.log("Клиент найден:", clientsDataLocal[foundId]);
-    }
+            clientIdInput.value = foundId; // Нашли! Используем старую карточку
+            const client = clientsDataLocal[foundId];
+            
+            // Автоматически подтягиваем данные существующего клиента в форму
+            if (client.phone) document.getElementById('orderPhone').value = client.phone;
+            if (client.social) document.getElementById('orderSocial').value = client.social;
+        } else {
+            // Если клиент не найден (вводят нового), очищаем поля, чтобы не висели чужие данные
+            document.getElementById('orderPhone').value = '';
+            document.getElementById('orderSocial').value = '';
+        }
 }
 
 // 3. Сохранение заказа и пересчет суммы
@@ -11693,6 +11700,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
