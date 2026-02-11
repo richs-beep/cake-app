@@ -3667,16 +3667,26 @@ function renderTierRows() {
         div.className = 'tier-card';
         
         // Генерация списка начинок
+        // --- УМНЫЙ ФИЛЬТР НАЧИНОК ---
+        const isBombShape = (shape === 'sphere');
+        const validFillings = myRecipes.filter(r => {
+            if (r.type !== 'filling') return false;
+            const hasBomb = r.name.toLowerCase().includes('бомба');
+            return isBombShape ? hasBomb : !hasBomb;
+        });
+
+        // Если форма изменилась и текущая начинка ей не подходит — переключаем на первую доступную
+        if (!validFillings.find(r => r.id === t.recipeId) && validFillings.length > 0) {
+            t.recipeId = validFillings[0].id;
+        }
+
+        // Генерация списка
         let recOptions = '';
-        myRecipes.filter(r => r.type === 'filling').forEach(r => {
+        validFillings.forEach(r => {
             const sel = (t.recipeId === r.id) ? 'selected' : '';
             recOptions += `<option value="${r.id}" ${sel}>${r.name}</option>`;
         });
-        
-        // Автовыбор первой начинки
-        if (!t.recipeId && myRecipes.find(r => r.type === 'filling')) {
-             t.recipeId = myRecipes.find(r => r.type === 'filling').id;
-        }
+        // ------------------------------
 
         // Определяем, рисовать ли стрелки
         const isFirst = (idx === 0);
@@ -11117,6 +11127,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
