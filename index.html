@@ -9460,7 +9460,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // ОПТИМИЗАЦИЯ 1: Двигаем лупу через видеокарту (transform), а не процессор (left/top)
         cursorDiv.style.transform = `translate3d(${posX}px, ${posY}px, 0)`;
 
-        const zoomLevel = 10;
+        const zoomLevel = 5;
         const sourceSize = loupeCanvas.width / zoomLevel; 
 
         // ОПТИМИЗАЦИЯ 2: Рисуем лупу
@@ -9527,8 +9527,34 @@ document.addEventListener('DOMContentLoaded', () => {
         const sourceY = (e.clientY - cachedRect.top) * scaleY;
 
         // Берем цвет
-        const pixel = colorState.ctx.getImageData(sourceX, sourceY, 1, 1).data;
-        const rgb = { r: pixel[0], g: pixel[1], b: pixel[2] };
+        // --- УМНОЕ УСРЕДНЕНИЕ (5х5 ПИКСЕЛЕЙ) ---
+        const sampleSize = 5; // Квадрат 5х5 пикселей вокруг центра
+        const halfSize = Math.floor(sampleSize / 2);
+        
+        // Высчитываем координаты угла, не давая им выйти за края фото
+        const startX = Math.max(0, Math.floor(sourceX) - halfSize);
+        const startY = Math.max(0, Math.floor(sourceY) - halfSize);
+        
+        // Берем сразу 25 пикселей
+        const imgData = colorState.ctx.getImageData(startX, startY, sampleSize, sampleSize).data;
+        
+        let sumR = 0, sumG = 0, sumB = 0, count = 0;
+        
+        // Складываем их цвета вместе
+        for (let i = 0; i < imgData.length; i += 4) {
+            sumR += imgData[i];
+            sumG += imgData[i + 1];
+            sumB += imgData[i + 2];
+            count++;
+        }
+        
+        // Получаем средний идеальный оттенок
+        const rgb = { 
+            r: Math.round(sumR / count), 
+            g: Math.round(sumG / count), 
+            b: Math.round(sumB / count) 
+        };
+        // ---------------------------------------
 
         // Сохраняем
         colorState.colors[colorState.mode] = rgb;
@@ -11550,6 +11576,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
