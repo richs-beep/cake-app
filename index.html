@@ -2767,6 +2767,33 @@ body {
             <input type="text" id="orderForWhom" placeholder="Имя именинника">
         </div>
     </div>
+
+      <div class="form-row">
+        <div class="form-group">
+            <span class="form-label">Телефон</span>
+            <input type="text" id="orderPhone" placeholder="+7 (___) ___-__-__" oninput="formatPhoneNumber(this)">
+        </div>
+        <div class="form-group">
+            <span class="form-label">Ник в соц.сетях</span>
+            <input type="text" id="orderSocial" placeholder="без @">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <span class="form-label">📍 Адрес доставки</span>
+            <input type="text" id="orderAddress" placeholder="Улица, дом, кв...">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <span class="form-label">💰 Предоплата</span>
+            <input type="number" id="orderPrepayment" placeholder="0">
+        </div>
+        <div class="form-group">
+            <span class="form-label">Остаток</span>
+            <input type="number" id="orderBalance" placeholder="0">
+        </div>
+    </div>
 <div class="form-row">
         <div class="form-group" style="flex:1;">
             <span class="form-label">🎨 Основной цвет торта</span>
@@ -6013,6 +6040,11 @@ function addToQueue() {
     document.getElementById('orderClientId').value = '';     // Скрытый ID (Важно!)
     document.getElementById('orderReason').value = '';
     document.getElementById('orderForWhom').value = '';
+    document.getElementById('orderPhone').value = '';
+    document.getElementById('orderSocial').value = '';
+    document.getElementById('orderAddress').value = '';
+    document.getElementById('orderPrepayment').value = '';
+    document.getElementById('orderBalance').value = '';
     document.getElementById('orderColor').value = '';
     document.getElementById('orderPayment').selectedIndex = 0; // Сброс на первый пункт
     document.getElementById('orderDelivery').selectedIndex = 0;
@@ -6079,24 +6111,34 @@ async function confirmAddToQueueWithClient() {
     if (!clientName) { alert("Укажите имя клиента!"); return; }
 
     // 2. Авто-создание клиента, если новый
+    let clientPhone = document.getElementById('orderPhone').value.trim();
+    let clientSocial = document.getElementById('orderSocial').value.trim();
+
     if (!clientId) {
         clientId = 'c' + Date.now();
         isNewClient = true;
-        await db.ref('clients/' + clientId).set({
+        const newClientObj = {
             name: clientName,
+            phone: clientPhone,
+            social: clientSocial,
             created: new Date().toISOString(),
             totalSpend: 0
-        });
-        // Обновляем локальный кэш
-        clientsDataLocal[clientId] = { name: clientName, totalSpend: 0 }; 
+        };
+        await db.ref('clients/' + clientId).set(newClientObj);
+        clientsDataLocal[clientId] = newClientObj; 
     }
 
-    // 3. Сбор данных о заказе
     // 3. Сбор данных о заказе
     const orderPrice = res.costs.finalPrice;
     const orderData = {
         id: 'ord_' + Date.now(),
         clientId: clientId,
+        name: clientName,
+        phone: clientPhone,
+        social: clientSocial,
+        address: document.getElementById('orderAddress').value.trim(),
+        prepayment: document.getElementById('orderPrepayment').value,
+        balance: document.getElementById('orderBalance').value,
         name: clientName,
         date: document.getElementById('orderDeadline').value,
         reason: document.getElementById('orderReason').value,
@@ -8686,9 +8728,17 @@ function createCalendarLinks(item) {
         details = `Статус: Ожидает согласования\nПредоплата: ${item.price} ${currency}\nКомментарий: ${item.comment || 'Нет'}\n\nСоздано в КондитерPRO`;
         location = 'Не определено';
     } 
+   
     // 2. ЕСЛИ ЭТО ЗАКАЗ
     else {
-        title = `🎂 ${item.reason || 'Торт'}: ${item.name} (${item.weight}кг)`;
+        // Достаем названия всех начинок (убираем дубли)
+        let fillingNames = [];
+        if (item.data && item.data.tiers) {
+            fillingNames = [...new Set(item.data.tiers.map(t => t.recipeName))];
+        }
+        const fillingStr = fillingNames.length > 0 ? fillingNames.join(' + ') : 'Без начинки';
+        
+        title = `🎂 ${item.name}, ${fillingStr}, ${item.weight}кг`;
         
         // --- А. СОСТАВ ТОРТА (Геометрия) ---
         let cakeDesc = "";
@@ -8743,10 +8793,25 @@ function createCalendarLinks(item) {
         }
 
         // --- Г. СБОРКА ИТОГОВОГО ТЕКСТА ---
-        let headerInfo = item.forWhom ? `Кому: ${item.forWhom}\n` : "";
+      
+        let headerInfo = "";
+        if (item.reason) headerInfo += `Повод: ${item.reason}\n`;
+        if (item.forWhom) headerInfo += `Кому: ${item.forWhom}\n`;
+
         let paymentInfo = item.payment || 'Не указано';
+        if (item.prepayment) paymentInfo += ` | Аванс: ${item.prepayment} ${currency}`;
+        if (item.balance) paymentInfo += ` | Остаток: ${item.balance} ${currency}`;
+
         let delivInfo = item.delivery || 'Не указано';
+        if (item.address) delivInfo += `\n📍 Адрес: ${item.address}`;
+
         let commentInfo = item.comment ? `\n📝 Пожелание: ${item.comment}` : "";
+        
+        let waLink = "";
+        if (item.phone) {
+            const cleanPhone = item.phone.replace(/\D/g, ''); // Оставляем только цифры
+            if (cleanPhone) waLink = `\n\n💬 Написать клиенту в WhatsApp:\nhttps://wa.me/${cleanPhone}`;
+        }
 
         // Блок финансов
         const financeBlock = `
@@ -8757,11 +8822,11 @@ function createCalendarLinks(item) {
 🔥 ИТОГО ЦЕНА: ${Math.round(item.price)} ${currency}
 `;
 
-        details = `${headerInfo}\n--- ТОРТ ---\n${cakeDesc}\n${suppliesList}${workList}${financeBlock}\n--- ИНФО ---\n💳 Оплата: ${paymentInfo}\n🚚 Доставка: ${delivInfo}${commentInfo}`;
+        details = `${headerInfo}\n--- ТОРТ ---\n${cakeDesc}\n${suppliesList}${workList}${financeBlock}\n--- ИНФО ---\n💳 Оплата: ${paymentInfo}\n🚚 Доставка: ${delivInfo}${commentInfo}${waLink}`;
         
-        location = (item.delivery === 'Самовывоз') ? 'Цех (Дома)' : 'Доставка курьером';
+        // Устанавливаем адрес в гео-метку календаря (если он есть)
+        location = item.address ? item.address : ((item.delivery === 'Самовывоз') ? 'Цех (Дома)' : 'Доставка курьером');
     }
-    
     // Формирование дат
     let d = item.date;
     if (!d) { const tm = new Date(); tm.setDate(tm.getDate()+1); d = tm.toISOString().split('T')[0]; }
@@ -11664,6 +11729,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
