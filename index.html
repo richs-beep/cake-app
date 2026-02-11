@@ -3270,6 +3270,15 @@ body {
             <div id="colorCursor" style="display:none; position:absolute; width:100px; height:100px; border:4px solid #fff; border-radius:50%; box-shadow:0 0 15px rgba(0,0,0,0.5); overflow:hidden; pointer-events:none; z-index: 100; background:#000;">
     <canvas id="loupeCanvas" width="100" height="100" style="width:100%; height:100%; display:block; image-rendering: pixelated; /* <- Важно для четкости пикселей */"></canvas>
 </div>
+          <div style="margin-top: 20px; padding: 15px; background: #fff; border: 2px dashed #B0BEC5; border-radius: 8px;">
+            <h3 style="margin-top:0; color: #455A64; font-size: 16px;">🎨 Моя палитра красителей</h3>
+            <div style="font-size: 12px; color: #666; margin-bottom: 10px;">Сфотографируйте крышечки ваших тюбиков, нажмите кнопку ниже и снимите с них реальный цвет. Программа запомнит их навсегда.</div>
+            <button class="main-btn" onclick="activatePicker('palette')" style="background:#4CAF50; width: auto; padding: 8px 15px; font-size: 14px; margin-bottom: 15px;">
+                ➕ Снять цвет для палитры
+            </button>
+            <div id="myPaletteList" style="display: flex; flex-wrap: wrap; gap: 10px;">
+                </div>
+        </div>
         </div>
 
       
@@ -9363,6 +9372,35 @@ let colorState = {
     }
 };
 
+     // Память ваших красителей
+let myColorsPalette = JSON.parse(localStorage.getItem('myColorsPalette')) || [];
+
+function renderPaletteUI() {
+    const list = document.getElementById('myPaletteList');
+    if (!list) return;
+    list.innerHTML = '';
+    myColorsPalette.forEach((c, index) => {
+        list.innerHTML += `
+            <div style="display:flex; align-items:center; background:#f5f5f5; padding:5px 10px; border-radius:20px; font-size:12px; border:1px solid #ddd; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+                <div style="width:16px; height:16px; border-radius:50%; background:rgb(${c.rgb.r},${c.rgb.g},${c.rgb.b}); margin-right:8px; border:1px solid #aaa;"></div>
+                ${c.name}
+                <span style="margin-left:10px; color:#E53935; cursor:pointer; font-size:16px; line-height:1;" onclick="deletePaletteColor(${index})">×</span>
+            </div>
+        `;
+    });
+}
+
+function deletePaletteColor(index) {
+    if(confirm('Удалить этот краситель из ваших запасов?')) {
+        myColorsPalette.splice(index, 1);
+        localStorage.setItem('myColorsPalette', JSON.stringify(myColorsPalette));
+        renderPaletteUI();
+    }
+}
+
+// Запускаем отрисовку сохраненных красителей при загрузке
+document.addEventListener('DOMContentLoaded', renderPaletteUI);
+
 // Загрузка фото на холст
 function handleColorImage(event) {
     const file = event.target.files[0];
@@ -9560,8 +9598,30 @@ document.addEventListener('DOMContentLoaded', () => {
         colorState.colors[colorState.mode] = rgb;
 
         // Красим плашку
+        // --- ЛОГИКА СОХРАНЕНИЯ В ПАЛИТРУ ---
+        if (colorState.mode === 'palette') {
+            cursorDiv.style.display = 'none';
+            mainCanvas.releasePointerCapture(e.pointerId);
+            
+            // Запрашиваем название (с небольшой задержкой, чтобы интерфейс успел отвиснуть)
+            setTimeout(() => {
+                let name = prompt("Введите название красителя (например, 'Kreda Пыльная роза'):");
+                if (name && name.trim() !== '') {
+                    myColorsPalette.push({ id: Date.now(), name: name.trim(), rgb: rgb });
+                    localStorage.setItem('myColorsPalette', JSON.stringify(myColorsPalette));
+                    renderPaletteUI();
+                }
+                colorState.mode = null;
+            }, 50);
+            return; // Выходим отсюда, плашки красить не надо!
+        }
+
+        // --- ОБЫЧНАЯ ЛОГИКА (Если выбрали Свет, Базу или Цель) ---
         let patchId = colorState.mode === 'white' ? 'patchWhite' : (colorState.mode === 'base' ? 'patchBase' : (colorState.mode === 'targetWhite' ? 'patchTargetWhite' : 'patchTarget'));
-        document.getElementById(patchId).style.background = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+        
+        // Защита от ошибок, если вдруг id не совпал
+        let patchEl = document.getElementById(patchId);
+        if (patchEl) patchEl.style.background = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
         
         cursorDiv.style.display = 'none';
         colorState.mode = null;
@@ -9681,7 +9741,35 @@ function calculateMix() {
     } else if (warnings.length === 0) {
         html += `<div style="color:#2E7D32; font-weight:bold; text-align:center; padding:10px;">Цвета практически совпадают! Краситель не нужен.</div>`;
     }
+// --- ПОИСК ПО МОЕЙ ПАЛИТРЕ (УМНЫЙ СКАНЕР) ---
+    if (myColorsPalette.length > 0) {
+        let bestMatch = null;
+        let minDistance = Infinity;
+        
+        myColorsPalette.forEach(c => {
+            // Математическая дистанция между цветами в 3D-пространстве RGB
+            // Ищем совпадение с fixedTarget (цветом клиента, очищенным от искажений света)
+            let dist = Math.sqrt(Math.pow(c.rgb.r - fixedTarget.r, 2) + Math.pow(c.rgb.g - fixedTarget.g, 2) + Math.pow(c.rgb.b - fixedTarget.b, 2));
+            if (dist < minDistance) {
+                minDistance = dist;
+                bestMatch = c;
+            }
+        });
 
+        // Максимальная дистанция в RGB = 441.67. Переводим в проценты сходства
+        let matchPercent = Math.max(0, 100 - (minDistance / 441.67 * 100)).toFixed(1);
+
+        html += `
+            <div style="margin-top:15px; padding:15px; background:#E3F2FD; border-radius:6px; border:1px solid #BBDEFB; box-shadow:0 2px 5px rgba(0,0,0,0.05);">
+                <h4 style="margin:0 0 10px 0; color:#1565C0;">📦 В ваших запасах:</h4>
+                <div style="display:flex; align-items:center; font-size:15px;">
+                    <div style="width:30px; height:30px; border-radius:50%; background:rgb(${bestMatch.rgb.r},${bestMatch.rgb.g},${bestMatch.rgb.b}); margin-right:12px; border:2px solid #fff; box-shadow:0 0 3px rgba(0,0,0,0.3);"></div>
+                    <div style="line-height:1.4;">Ближайший цвет: <b>${bestMatch.name}</b><br>
+                    <span style="font-size:13px; color:#555;">Точность совпадения: <b>${matchPercent}%</b></span></div>
+                </div>
+            </div>
+        `;
+    }
     document.getElementById('colorResultText').innerHTML = html;
     document.getElementById('colorResultBlock').style.display = 'block';
     
@@ -11576,6 +11664,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
