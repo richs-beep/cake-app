@@ -3018,7 +3018,18 @@ body {
            <div id="laborStockBlock" style="display:none;">
                <table class="stock-table">
                 <tbody id="laborTableBody"></tbody>
-                <tfoot><tr style="background:#e0f2f1;"><td><input id="newLaborName" placeholder="Название (напр. Лепка, Сборка)"></td><td><input type="number" id="newLaborCoeff" placeholder="1.0" step="0.1" style="font-weight:bold;"></td><td><button class="add-btn-small" onclick="addNewLabor()" style="background:#00695c;">+</button></td></tr></tfoot>
+                  <tfoot>
+                    <tr style="background:#e0f2f1;">
+                        <td><input id="newLaborName" placeholder="Название (напр. Лепка, Сборка)"></td>
+                        <td><input type="number" id="newLaborCoeff" placeholder="1.0" step="0.1" style="text-align:center; font-weight:bold;"></td>
+                        <td><input type="number" id="newLaborTime" placeholder="0.5" step="0.1" style="text-align:center;"></td>
+                        <td style="text-align:center;"><input type="checkbox" id="newLaborHelper" title="Назначается помощнику"></td>
+                        <td style="text-align:center;"><input type="checkbox" id="newLaborAuto" title="Автоматически добавлять в новые торты"></td>
+                        <td style="text-align:center;"><button class="add-btn-small" onclick="addNewLabor()" style="background:#00695c;">+</button></td>
+                    </tr>
+                </tfoot>
+
+                 
                </table>
                <div style="margin-top:10px; font-size:12px; color:#555;">* <b>Коэффициент 1.0</b> = Обычная работа. <b>1.5</b> = Сложная (+50% к стоимости часа).</div>
            </div>
@@ -4733,31 +4744,45 @@ function addNewIngredient() {
     useWeightInput.checked = false;
 }
 // --- ИСПРАВЛЕННОЕ ДОБАВЛЕНИЕ РАБОТ ---
+// --- ИСПРАВЛЕННОЕ ДОБАВЛЕНИЕ РАБОТ ---
 function addNewLabor() {
     const nameInput = document.getElementById('newLaborName');
     const coeffInput = document.getElementById('newLaborCoeff');
+    const timeInput = document.getElementById('newLaborTime');
+    const helperInput = document.getElementById('newLaborHelper');
+    const autoInput = document.getElementById('newLaborAuto');
     
     const n = nameInput.value.trim();
     const cStr = coeffInput.value.replace(',', '.');
+    const tStr = timeInput.value.replace(',', '.');
+    
     let c = parseFloat(cStr);
+    let t = parseFloat(tStr);
 
     if (!n) {
         alert("⚠️ Введите название работы (например 'Лепка')!");
         return;
     }
     
-    // Если коэффициент не введен или кривой, ставим 1.0 по умолчанию
+    // Если значения не введены или введены криво, ставим дефолтные
     if (isNaN(c) || c <= 0) c = 1.0;
+    if (isNaN(t) || t < 0) t = 0;
 
     myLaborServices.push({ 
         id: 'l' + Date.now(), 
         name: n, 
-        coeff: c 
+        coeff: c,
+        defaultTime: t,
+        isHelper: helperInput.checked,
+        isAuto: autoInput.checked
     });
     
-    // Очистка
+    // Очистка полей
     nameInput.value = '';
-    coeffInput.value = '1.0'; // Возвращаем дефолт
+    coeffInput.value = ''; 
+    timeInput.value = '';
+    helperInput.checked = false;
+    autoInput.checked = false;
     
     saveLabor();
     renderLaborTable(); // Принудительно перерисовываем таблицу работ
@@ -11126,6 +11151,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
