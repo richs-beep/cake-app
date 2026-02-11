@@ -3250,6 +3250,12 @@ body {
             </div>
         </div>
 
+        <div style="margin-bottom: 20px;">
+            <button class="main-btn" onclick="calculateMix()" style="background:#E91E63; width: 100%; padding: 12px; font-size: 16px; box-shadow: 0 4px 15px rgba(233, 30, 99, 0.3);">🧪 Рассчитать формулу</button>
+        </div>
+
+        <div style="position: relative; width: 100%; max-width: 600px; margin: 0 auto; border: 2px dashed #ddd; border-radius: 8px; overflow: hidden; background: #fafafa;">
+
         <div style="position: relative; width: 100%; max-width: 600px; margin: 0 auto; border: 2px dashed #ddd; border-radius: 8px; overflow: hidden; background: #fafafa;">
             <canvas id="colorCanvas" style="width: 100%; height: auto; display: block; cursor: crosshair;"></canvas>
             <div id="canvasPlaceholder" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:#999; text-align:center; pointer-events:none;">
@@ -3260,9 +3266,7 @@ body {
 </div>
         </div>
 
-        <div style="margin-top: 20px; text-align: center;">
-            <button class="main-btn" onclick="calculateMix()" style="background:#E91E63; width: auto; padding: 10px 40px; font-size: 16px;">🧪 Рассчитать формулу</button>
-        </div>
+      
 
         <div id="colorResultBlock" style="display:none; margin-top: 20px; padding: 15px; background: #FCE4EC; border-radius: 8px; border: 1px solid #F8BBD0;">
             <h3 style="margin-top:0; color:#C2185B; text-align:center;">Рецепт смешивания</h3>
@@ -9473,14 +9477,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- 2. КЛИК (Снятие цвета - Старый код) ---
+    // --- 2. КЛИК (Снятие цвета и Авто-блокировка) ---
     mainCanvas.addEventListener('pointerdown', function(e) {
+        // Если фото еще нет - открываем загрузку
         if (!colorState.ctx) {
             document.getElementById('colorImageInput').click();
             return;
         }
+        
+        // 🛑 УБРАЛИ ALERT: Если ни одна плашка не активна, просто позволяем скроллить картинку
         if (!colorState.mode) {
-            alert("👆 Укажите, что именно вы сейчас ищете: нажмите кнопку '1. Свет', '2. База' или '3. Цель' над фото.");
-            return;
+            return; 
         }
 
         const rect = mainCanvas.getBoundingClientRect();
@@ -9493,13 +9500,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const pixel = colorState.ctx.getImageData(x, y, 1, 1).data;
         const rgb = { r: pixel[0], g: pixel[1], b: pixel[2] };
 
+        // Сохраняем цвет
         colorState.colors[colorState.mode] = rgb;
 
+        // Красим плашку
         let patchId = colorState.mode === 'white' ? 'patchWhite' : (colorState.mode === 'base' ? 'patchBase' : 'patchTarget');
         document.getElementById(patchId).style.background = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
         
-        // После клика можно спрятать лупу на мгновение для визуального подтверждения
+        // Прячем лупу
         cursorDiv.style.display = 'none';
+
+        // 🔒 АВТО-БЛОКИРОВКА: Сбрасываем активный режим после успешного выбора
+        colorState.mode = null;
+        document.querySelectorAll('.color-step-box').forEach(b => b.classList.remove('active-picker'));
     });
 });
 
@@ -9576,10 +9589,10 @@ function calculateMix() {
     }
 
     // Составляем пропорции красителей (игнорируем отрицательные значения)
-    if (diff.c > 0.02) recipe.push(`🔵 <b>Синий (Голубой):</b> ~${Math.ceil(diff.c * intensity)} кап.`);
-    if (diff.m > 0.02) recipe.push(`🔴 <b>Красный (Малиновый):</b> ~${Math.ceil(diff.m * intensity)} кап.`);
-    if (diff.y > 0.02) recipe.push(`🟡 <b>Желтый:</b> ~${Math.ceil(diff.y * intensity)} кап.`);
-    if (diff.k > 0.02) recipe.push(`⚫ <b>Черный:</b> ~${Math.ceil(diff.k * intensity)} кап.`);
+    if (diff.c > 0.02) recipe.push(`🔵 <b>Синий (Голубой):</b> ~${Math.ceil(diff.c * intensity)} ч.`);
+    if (diff.m > 0.02) recipe.push(`🔴 <b>Красный (Малиновый):</b> ~${Math.ceil(diff.m * intensity)} ч.`);
+    if (diff.y > 0.02) recipe.push(`🟡 <b>Желтый:</b> ~${Math.ceil(diff.y * intensity)} ч.`);
+    if (diff.k > 0.02) recipe.push(`⚫ <b>Черный:</b> ~${Math.ceil(diff.k * intensity)} ч.`);
 
     // 5. ВЫВОД НА ЭКРАН
     let html = '';
@@ -9592,7 +9605,7 @@ function calculateMix() {
                     <b>🎨 На 100г крема:</b><br><br>
                     ${recipe.join('<br>')}
                  </div>`;
-        html += `<div style="font-size:11px; color:#888; margin-top:10px; text-align:center;">* Добавляйте по одной капле и вымешивайте. Сила пигмента зависит от бренда.</div>`;
+        html += `<div style="font-size:11px; color:#888; margin-top:10px; text-align:center;">* Добавляйте по одной маленькой капельке и вымешивайте. Сила пигмента зависит от бренда красителя.</div>`;
     } else if (warnings.length === 0) {
         html += `<div style="color:#2E7D32; font-weight:bold; text-align:center; padding:10px;">Цвета практически совпадают! Краситель не нужен.</div>`;
     }
@@ -11491,6 +11504,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
