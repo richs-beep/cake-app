@@ -877,8 +877,11 @@ class CakeVisualizer {
       const pxTotalH = totalStackH * SCALE;
       let currentBaseCenterY = H - (H - pxTotalH) / 2;
 
+      // Генерируем уникальный ID для градиента
+      const gradId = 'gradSphere_' + Math.round(Math.random() * 100000);
+
       let svgContent = `<defs>
-        <radialGradient id="gradSphere" cx="35%" cy="35%" r="65%">
+        <radialGradient id="${gradId}" cx="35%" cy="35%" r="65%">
             <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
             <stop offset="50%" style="stop-color:#e0e0e0;stop-opacity:1" />
             <stop offset="100%" style="stop-color:#9e9e9e;stop-opacity:1" />
@@ -901,7 +904,7 @@ class CakeVisualizer {
               const r = pxD / 2;
               const cySphere = currentBaseCenterY - r; 
               if (idx === 0) svgContent += `<ellipse cx="${cX}" cy="${currentBaseCenterY}" rx="${r*0.8}" ry="${r*0.2}" fill="#000" opacity="0.15" />`;
-              svgContent += `<circle cx="${cX}" cy="${cySphere}" r="${r}" fill="url(#gradSphere)" stroke="${colStr}" stroke-width="1" />`;
+              svgContent += `<circle cx="${cX}" cy="${cySphere}" r="${r}" fill="url(#${gradId})" stroke="${colStr}" stroke-width="1" />`;
               svgContent += `<text x="${cX}" y="${cySphere}" text-anchor="middle" dominant-baseline="middle" fill="${colDim}" font-weight="bold" font-size="12">D${fmt(t.d)}</text>`;
           
           } else if (shape === 'polygon') {
@@ -11114,6 +11117,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
