@@ -8825,14 +8825,7 @@ function createCalendarLinks(item) {
             if (cleanPhone) waLink = `\n\n💬 Написать клиенту в WhatsApp:\nhttps://wa.me/${cleanPhone}`;
         }
 
-        // Блок финансов
-        const financeBlock = `
---- 💰 ФИНАНСЫ ---
-🍰 Себест. торта: ${Math.round(cakeOnlyCost)} ${currency}
-📦 Декор/Упак: ${Math.round(extrasCost)} ${currency}
-💪 Работа: ${Math.round(totalLaborCost)} ${currency}
-🔥 ИТОГО ЦЕНА: ${Math.round(item.price)} ${currency}
-`;
+       
 
         details = `${headerInfo}\n--- ТОРТ ---\n${cakeDesc}\n${suppliesList}${workList}${financeBlock}\n--- ИНФО ---\n💳 Оплата: ${paymentInfo}\n🚚 Доставка: ${delivInfo}${commentInfo}${waLink}`;
         
@@ -11700,6 +11693,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
