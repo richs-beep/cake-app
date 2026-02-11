@@ -8792,8 +8792,7 @@ function createCalendarLinks(item) {
 
        
 
-        details = `${headerInfo}\n--- ТОРТ ---\n${cakeDesc}\n${suppliesList}${workList}${financeBlock}\n--- ИНФО ---\n💳 Оплата: ${paymentInfo}\n🚚 Доставка: ${delivInfo}${commentInfo}${waLink}`;
-        
+details = `${headerInfo}\n--- ТОРТ ---\n${cakeDesc}\n\n--- ИНФО ---\n💳 Оплата: ${paymentInfo}\n🚚 Доставка: ${delivInfo}${commentInfo}${waLink}`;        
         // Устанавливаем адрес в гео-метку календаря (если он есть)
         location = item.address ? item.address : ((item.delivery === 'Самовывоз') ? 'Цех (Дома)' : 'Доставка курьером');
     }
@@ -11658,6 +11657,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
