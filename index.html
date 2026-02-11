@@ -7492,7 +7492,9 @@ function saveToHistory() {
             queue: JSON.parse(JSON.stringify(productionQueue)),
             tiers: JSON.parse(JSON.stringify(appState.tiers)),
             extras: JSON.parse(JSON.stringify(extrasList || [])),
-            laborList: JSON.parse(JSON.stringify(currentLaborList || []))
+            laborList: JSON.parse(JSON.stringify(currentLaborList || [])),
+            clients: JSON.parse(JSON.stringify(clientsDataLocal || {}))
+       
         };
         if (historyStack.length > 0 && JSON.stringify(currentState) === JSON.stringify(historyStack[historyStack.length - 1])) return;
         historyStack.push(currentState);
@@ -7524,11 +7526,14 @@ function applyState(state) {
     appState.tiers = JSON.parse(JSON.stringify(state.tiers));
     extrasList = JSON.parse(JSON.stringify(state.extras || []));
     currentLaborList = JSON.parse(JSON.stringify(state.laborList || []));
+    clientsDataLocal = JSON.parse(JSON.stringify(state.clients || {}));
     
     localStorage.setItem('myCakeIngredients', JSON.stringify(myIngredients));
     localStorage.setItem('myCakeRecipes', JSON.stringify(myRecipes));
     localStorage.setItem('myCakeLabor', JSON.stringify(myLaborServices));
     localStorage.setItem('cakeProductionQueue', JSON.stringify(productionQueue));
+    localStorage.setItem('cachedClients', JSON.stringify(clientsDataLocal));
+    renderClientsCloud(); // Обновляем список клиентов на экране
     
     updateUI(); 
     renderQueue();
@@ -7537,6 +7542,38 @@ function applyState(state) {
     if (typeof renderExtras === 'function') renderExtras();
     updateHistoryButtons();
     if (appState.results && appState.results.Right) calculateSide('Right');
+  // --- ВОССТАНОВЛЕНИЕ ЭКРАНА РЕДАКТОРА РЕЦЕПТА ---
+    if (activeRecId) {
+        const restoredRec = myRecipes.find(x => x.id === activeRecId);
+        if (restoredRec) {
+            // Обновляем шапку рецепта
+            document.getElementById('editRecName').value = restoredRec.name || ''; 
+            document.getElementById('editRecType').value = restoredRec.type || 'filling';
+            document.getElementById('editRecOutput').value = restoredRec.outputWeight || ''; 
+            document.getElementById('calibDiam').value = restoredRec.calibrationD || 16; 
+            document.getElementById('calibHeight').value = restoredRec.calibrationH || 10;
+            document.getElementById('calibShape').value = restoredRec.calibrationShape || 'cylinder';
+            document.getElementById('calibFill').value = restoredRec.fillPercent || 100;
+            document.getElementById('editTargetFinWeight').value = restoredRec.targetFinishedWeight || '';
+            
+            // Перерисовываем ингредиенты без блокировки экрана
+            renderBlocks(restoredRec);
+        } else {
+            // Если рецепт был создан только что, а мы нажали "Отмена" (Ctrl+Z)
+            document.getElementById('recipeEditor').style.display = 'none';
+            document.getElementById('recipePlaceholder').style.display = 'flex';
+            activeRecId = null;
+        }
+    }
+  // --- ВОССТАНОВЛЕНИЕ ЭКРАНА КЛИЕНТА ---
+    const clIdVal = document.getElementById('clId').value;
+    if (document.getElementById('clientModal').style.display === 'flex' && clIdVal) {
+        if (clientsDataLocal[clIdVal]) {
+            openClientModal(clIdVal); // Перезаполняем поля старыми данными
+        } else {
+            closeClientModal(); // Если откатились до момента, когда клиента еще не было
+        }
+    }
 }
 
 function updateHistoryButtons() {
@@ -8190,7 +8227,7 @@ function saveClientCloud() {
         created: clientsDataLocal[id] ? clientsDataLocal[id].created : new Date().toISOString(),
         updated: new Date().toISOString()
     };
-
+saveToHistory();
     // 1. МГНОВЕННОЕ ЛОКАЛЬНОЕ ОБНОВЛЕНИЕ (OPTIMISTIC UPDATE)
     // Мы сразу пишем в локальную базу и сохраняем в браузер
     clientsDataLocal[id] = clientData;
@@ -8400,6 +8437,7 @@ function renderClientsCloud() {
 
 function deleteClientCloud(id) {
    if(confirm('Удалить карточку клиента?')) {
+     saveToHistory();
        delete clientsDataLocal[id]; // Удаляем локально
        renderClientsCloud();        // Обновляем экран
        saveToCloud('clients', clientsDataLocal); // Сохраняем в таблицу
@@ -11657,6 +11695,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
