@@ -9442,8 +9442,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Б. Двигаем саму лупу за курсором
         // Центрируем div относительно курсора мыши
-        cursorDiv.style.left = `${e.clientX - rect.left - cursorDiv.offsetWidth / 2}px`;
-        cursorDiv.style.top = `${e.clientY - rect.top - cursorDiv.offsetHeight / 2}px`;
+       // Б. Двигаем саму лупу за курсором (с выносом из-под пальца)
+        const loupeWidth = cursorDiv.offsetWidth;
+        const loupeHeight = cursorDiv.offsetHeight;
+        
+        // Ставим лупу по центру по горизонтали, но на 40px ВЫШЕ пальца по вертикали
+        let posX = e.clientX - rect.left - (loupeWidth / 2);
+        let posY = e.clientY - rect.top - loupeHeight - 40; 
+
+        // --- УМНЫЕ ГРАНИЦЫ (чтобы лупа не улетала за экран) ---
+        // Если палец у самого верхнего края фото, показываем лупу ПОД пальцем
+        if (posY < 0) {
+            posY = e.clientY - rect.top + 40; 
+        }
+
+        // Если палец у самого левого/правого края, не даем лупе обрезаться
+        if (posX < 0) posX = 0;
+        if (posX > rect.width - loupeWidth) posX = rect.width - loupeWidth;
+
+        cursorDiv.style.left = `${posX}px`;
+        cursorDiv.style.top = `${posY}px`;
 
         // В. Рисуем увеличенное изображение внутри лупы
         const zoomLevel = 10; // Увеличение в 10 раз
@@ -11504,6 +11522,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
