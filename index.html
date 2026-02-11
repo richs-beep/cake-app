@@ -9411,8 +9411,7 @@ function activatePicker(mode) {
     document.getElementById(boxId).classList.add('active-picker');
 }
 
-// Снятие цвета с клика по холсту + ЛОГИКА ЛУПЫ
-// Снятие цвета с холста + ЛОГИКА ЛУПЫ (ИСПРАВЛЕННАЯ)
+// Снятие цвета с холста + ЛОГИКА ЛУПЫ (ОПТИМИЗИРОВАННАЯ 60FPS)
 document.addEventListener('DOMContentLoaded', () => {
     const mainCanvas = document.getElementById('colorCanvas');
     const cursorDiv = document.getElementById('colorCursor');
@@ -9420,38 +9419,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!mainCanvas || !cursorDiv || !loupeCanvas) return;
 
-    const loupeCtx = loupeCanvas.getContext('2d', { willReadFrequently: true });
+    // Убрали willReadFrequently, чтобы браузер использовал аппаратное ускорение
+    const loupeCtx = loupeCanvas.getContext('2d'); 
     loupeCtx.imageSmoothingEnabled = false; 
 
-    // Вспомогательная функция отрисовки лупы
-    function updateLoupe(e) {
-        if (!colorState.ctx || !colorState.mode) return null;
-        
-        cursorDiv.style.display = 'block';
+    let isDragging = false;
+    let lastEvent = null;
+    let rafId = null;
+    let cachedRect = null; // Кеш размеров картинки
 
-        const rect = mainCanvas.getBoundingClientRect();
-        const scaleX = mainCanvas.width / rect.width;
-        const scaleY = mainCanvas.height / rect.height;
+    // Вспомогательная функция плавной отрисовки лупы (60 кадров в секунду)
+    function renderLoupe() {
+        if (!isDragging || !lastEvent || !colorState.ctx || !colorState.mode) return;
+
+        const e = lastEvent;
+        const scaleX = mainCanvas.width / cachedRect.width;
+        const scaleY = mainCanvas.height / cachedRect.height;
         
-        const sourceX = (e.clientX - rect.left) * scaleX;
-        const sourceY = (e.clientY - rect.top) * scaleY;
+        const sourceX = (e.clientX - cachedRect.left) * scaleX;
+        const sourceY = (e.clientY - cachedRect.top) * scaleY;
 
         const loupeWidth = cursorDiv.offsetWidth;
         const loupeHeight = cursorDiv.offsetHeight;
         
-        let posX = e.clientX - rect.left - (loupeWidth / 2);
-        let posY = e.clientY - rect.top - loupeHeight - 40; 
+        let posX = e.clientX - cachedRect.left - (loupeWidth / 2);
+        let posY = e.clientY - cachedRect.top - loupeHeight - 40; 
 
-        if (posY < 0) posY = e.clientY - rect.top + 40; 
+        // Защита от вылета за края
+        if (posY < 0) posY = e.clientY - cachedRect.top + 40; 
         if (posX < 0) posX = 0;
-        if (posX > rect.width - loupeWidth) posX = rect.width - loupeWidth;
+        if (posX > cachedRect.width - loupeWidth) posX = cachedRect.width - loupeWidth;
 
-        cursorDiv.style.left = `${posX}px`;
-        cursorDiv.style.top = `${posY}px`;
+        // ОПТИМИЗАЦИЯ 1: Двигаем лупу через видеокарту (transform), а не процессор (left/top)
+        cursorDiv.style.transform = `translate3d(${posX}px, ${posY}px, 0)`;
 
         const zoomLevel = 10;
         const sourceSize = loupeCanvas.width / zoomLevel; 
 
+        // ОПТИМИЗАЦИЯ 2: Рисуем лупу
         loupeCtx.clearRect(0, 0, loupeCanvas.width, loupeCanvas.height);
         loupeCtx.drawImage(
             mainCanvas,                                     
@@ -9466,8 +9471,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const centerY = loupeCanvas.height / 2;
         loupeCtx.fillRect(centerX - 1, centerY - 4, 2, 8); 
         loupeCtx.fillRect(centerX - 4, centerY - 1, 8, 2); 
-        
-        return { x: sourceX, y: sourceY };
+
+        // Запрашиваем следующий кадр у браузера
+        rafId = requestAnimationFrame(renderLoupe);
     }
 
     // 1. КАСАНИЕ ЭКРАНА (Включаем лупу)
@@ -9476,29 +9482,45 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('colorImageInput').click();
             return;
         }
-        if (!colorState.mode) return; // Разрешаем скроллить, если не выбрали цвет
+        if (!colorState.mode) return;
         
-        updateLoupe(e);
-        // Захватываем палец, чтобы лупа не дергалась, если чуть выйти за край
+        // ОПТИМИЗАЦИЯ 3: Считаем размеры холста ОДИН раз при касании
+        cachedRect = mainCanvas.getBoundingClientRect();
+        
+        isDragging = true;
+        lastEvent = e;
+        cursorDiv.style.display = 'block';
+        
+        // Обнуляем старые координаты, чтобы transform работал корректно
+        cursorDiv.style.left = '0px';
+        cursorDiv.style.top = '0px';
+
+        renderLoupe(); // Запускаем моторчик отрисовки
         mainCanvas.setPointerCapture(e.pointerId);
     });
 
-    // 2. ВЕДЕНИЕ ПАЛЬЦЕМ (Двигаем лупу)
+    // 2. ВЕДЕНИЕ ПАЛЬЦЕМ (Просто запоминаем, где сейчас палец)
     mainCanvas.addEventListener('pointermove', function(e) {
-        if (!colorState.mode) return;
-        updateLoupe(e);
+        if (!isDragging) return;
+        lastEvent = e; // Движок renderLoupe сам подхватит эти координаты в следующем кадре
     });
 
-    // 3. ОТПУСКАНИЕ ПАЛЬЦА (Фиксируем цвет и выключаем пипетку)
+    // 3. ОТПУСКАНИЕ ПАЛЬЦА (Снимаем цвет)
     mainCanvas.addEventListener('pointerup', function(e) {
-        if (!colorState.ctx || !colorState.mode) return;
+        if (!isDragging) return;
+        
+        isDragging = false;
+        cancelAnimationFrame(rafId); // Глушим моторчик отрисовки
 
-        // Получаем последние координаты под прицелом
-        const coords = updateLoupe(e);
-        if (!coords) return;
+        if (!colorState.ctx || !colorState.mode || !cachedRect) return;
 
-        // Снимаем цвет
-        const pixel = colorState.ctx.getImageData(coords.x, coords.y, 1, 1).data;
+        const scaleX = mainCanvas.width / cachedRect.width;
+        const scaleY = mainCanvas.height / cachedRect.height;
+        const sourceX = (e.clientX - cachedRect.left) * scaleX;
+        const sourceY = (e.clientY - cachedRect.top) * scaleY;
+
+        // Берем цвет
+        const pixel = colorState.ctx.getImageData(sourceX, sourceY, 1, 1).data;
         const rgb = { r: pixel[0], g: pixel[1], b: pixel[2] };
 
         // Сохраняем
@@ -9508,19 +9530,20 @@ document.addEventListener('DOMContentLoaded', () => {
         let patchId = colorState.mode === 'white' ? 'patchWhite' : (colorState.mode === 'base' ? 'patchBase' : 'patchTarget');
         document.getElementById(patchId).style.background = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
         
-        // Прячем лупу
         cursorDiv.style.display = 'none';
-
-        // АВТО-СБРОС: отключаем режим пипетки
         colorState.mode = null;
         document.querySelectorAll('.color-step-box').forEach(b => b.classList.remove('active-picker'));
         
         mainCanvas.releasePointerCapture(e.pointerId);
     });
 
-    // Страховка: если мышка ушла с холста (для ПК)
+    // Если палец ушел за пределы экрана
     mainCanvas.addEventListener('pointerleave', function() {
-        if (!colorState.mode) cursorDiv.style.display = 'none';
+        if (isDragging) {
+            isDragging = false;
+            cancelAnimationFrame(rafId);
+            cursorDiv.style.display = 'none';
+        }
     });
 });
 
@@ -11512,6 +11535,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
