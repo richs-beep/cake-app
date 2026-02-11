@@ -7493,8 +7493,15 @@ function saveToHistory() {
             tiers: JSON.parse(JSON.stringify(appState.tiers)),
             extras: JSON.parse(JSON.stringify(extrasList || [])),
             laborList: JSON.parse(JSON.stringify(currentLaborList || [])),
-            clients: JSON.parse(JSON.stringify(clientsDataLocal || {}))
-       
+            clients: JSON.parse(JSON.stringify(clientsDataLocal || {})),
+            // --- ДОБАВЛЕНО ---
+            archive: JSON.parse(JSON.stringify(archiveOrders || [])),
+            stockHistory: JSON.parse(JSON.stringify(stockHistory || [])),
+            calcState: {
+                shape: document.getElementById('globalShape')?.value || 'cylinder',
+                coatingId: document.getElementById('coatingIdSelect')?.value || '',
+                extraCoatingId: document.getElementById('extraCoatingIdSelect')?.value || ''
+            }
         };
         if (historyStack.length > 0 && JSON.stringify(currentState) === JSON.stringify(historyStack[historyStack.length - 1])) return;
         historyStack.push(currentState);
@@ -7527,6 +7534,16 @@ function applyState(state) {
     extrasList = JSON.parse(JSON.stringify(state.extras || []));
     currentLaborList = JSON.parse(JSON.stringify(state.laborList || []));
     clientsDataLocal = JSON.parse(JSON.stringify(state.clients || {}));
+    archiveOrders = JSON.parse(JSON.stringify(state.archive || []));
+    stockHistory = JSON.parse(JSON.stringify(state.stockHistory || []));
+    
+    // Возвращаем шапку калькулятора
+    if (state.calcState) {
+        if (document.getElementById('globalShape')) document.getElementById('globalShape').value = state.calcState.shape;
+        if (document.getElementById('coatingIdSelect')) document.getElementById('coatingIdSelect').value = state.calcState.coatingId;
+        if (document.getElementById('extraCoatingIdSelect')) document.getElementById('extraCoatingIdSelect').value = state.calcState.extraCoatingId;
+        updateTierUI(); // Обновляем видимость полей под форму
+    }
     
     localStorage.setItem('myCakeIngredients', JSON.stringify(myIngredients));
     localStorage.setItem('myCakeRecipes', JSON.stringify(myRecipes));
@@ -7542,6 +7559,10 @@ function applyState(state) {
     if (typeof renderExtras === 'function') renderExtras();
     updateHistoryButtons();
     if (appState.results && appState.results.Right) calculateSide('Right');
+  // --- ВСТАВЛЯЕМ СЮДА ---
+    if (document.getElementById('historyModal')?.style.display === 'flex') {
+        openStockHistory(); // Перерисовываем журнал, если он открыт
+    }
   // --- ВОССТАНОВЛЕНИЕ ЭКРАНА РЕДАКТОРА РЕЦЕПТА ---
     if (activeRecId) {
         const restoredRec = myRecipes.find(x => x.id === activeRecId);
@@ -8932,6 +8953,7 @@ async function saveBooking() {
     let clientId = document.getElementById('bookingClientId').value;
     
     if (!clientName) { alert("Укажите клиента!"); return; }
+  saveToHistory();
 
     // Авто-создание клиента, если новый
     if (!clientId) {
@@ -8996,6 +9018,7 @@ function startConvertingBooking(id) {
 function updateBatchCount(id, val) {
     const item = productionQueue.find(x => x.id === id);
     if (item) {
+      saveToHistory();
         let count = parseInt(val);
         if (isNaN(count) || count < 1) count = 1; // Защита от дурака
         item.batchCount = count;
@@ -9012,6 +9035,7 @@ function finishOrder(id, clientName) {
     const order = productionQueue[orderIdx];
 
     if (!confirm(`🎉 Заказ для "${clientName}" готов?\n\n1. Списать продукты со склада.\n2. Записать заказ в историю клиента.`)) return;
+  saveToHistory();
 
     // --- 1. СПИСАНИЕ СО СКЛАДА ---
     let logBatch = {}; // Инициализируем переменную для журнала
@@ -10040,6 +10064,7 @@ function commitProcurement() {
     if (procurementDraft.length === 0) return;
 
     if (!confirm(`Провести приход по ${procurementDraft.length} позициям?`)) return;
+  saveToHistory();
 
     // 1. Пробегаем по черновику и обновляем реальные данные
     procurementDraft.forEach(item => {
@@ -11695,6 +11720,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
