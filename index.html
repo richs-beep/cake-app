@@ -3229,11 +3229,11 @@ body {
                     <input type="file" id="colorImageInput" accept="image/*" style="display:none;" onchange="handleColorImage(event)">
                 </label>
             </div>
-            <div class="form-group" style="flex: 2; display: flex; gap: 10px; justify-content: space-between;">
+            <div class="form-group" style="flex: 2; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="color-step-box" id="boxWhite" onclick="activatePicker('white')">
-                    <div class="step-num">1. Свет</div>
+                    <div class="step-num">1. Свет (Мой)</div>
                     <div class="color-patch" id="patchWhite" style="background:#fff; border: 1px dashed #ccc;"></div>
-                    <div class="step-desc">Эталон белого</div>
+                    <div class="step-desc">Свет в помещении</div>
                 </div>
                 
                 <div class="color-step-box" id="boxBase" onclick="activatePicker('base')">
@@ -3242,10 +3242,16 @@ body {
                     <div class="step-desc">Ваш крем</div>
                 </div>
 
+                <div class="color-step-box" id="boxTargetWhite" onclick="activatePicker('targetWhite')">
+                    <div class="step-num">3. Свет (Фото)</div>
+                    <div class="color-patch" id="patchTargetWhite" style="background:#fff; border: 1px dashed #ccc;"></div>
+                    <div class="step-desc">Белый с картинки</div>
+                </div>
+
                 <div class="color-step-box" id="boxTarget" onclick="activatePicker('target')">
-                    <div class="step-num">3. Цель</div>
+                    <div class="step-num">4. Цель</div>
                     <div class="color-patch" id="patchTarget" style="background:#ff4081;"></div>
-                    <div class="step-desc">Цвет с фото</div>
+                    <div class="step-desc">Нужный цвет</div>
                 </div>
             </div>
         </div>
@@ -9347,12 +9353,13 @@ function syncAllToCloud() {
 // ==========================================
 
 let colorState = {
-    mode: null, // 'white', 'base', 'target'
+    mode: null, 
     ctx: null,
     colors: {
-        white: { r: 255, g: 255, b: 255 }, // По умолчанию идеальный белый
-        base: { r: 255, g: 250, b: 205 },  // По умолчанию цвет масла
-        target: { r: 255, g: 64, b: 129 }  // По умолчанию розовый
+        white: { r: 255, g: 255, b: 255 },       // Мой свет
+        base: { r: 255, g: 250, b: 205 },        // Моя база
+        targetWhite: { r: 255, g: 255, b: 255 }, // Свет клиента (НОВОЕ)
+        target: { r: 255, g: 64, b: 129 }        // Цвет клиента
     }
 };
 
@@ -9407,7 +9414,7 @@ function activatePicker(mode) {
     colorState.mode = mode;
     
     // Подсвечиваем активный блок
-    let boxId = mode === 'white' ? 'boxWhite' : (mode === 'base' ? 'boxBase' : 'boxTarget');
+    let boxId = mode === 'white' ? 'boxWhite' : (mode === 'base' ? 'boxBase' : (mode === 'targetWhite' ? 'boxTargetWhite' : 'boxTarget'));
     document.getElementById(boxId).classList.add('active-picker');
 }
 
@@ -9527,7 +9534,7 @@ document.addEventListener('DOMContentLoaded', () => {
         colorState.colors[colorState.mode] = rgb;
 
         // Красим плашку
-        let patchId = colorState.mode === 'white' ? 'patchWhite' : (colorState.mode === 'base' ? 'patchBase' : 'patchTarget');
+        let patchId = colorState.mode === 'white' ? 'patchWhite' : (colorState.mode === 'base' ? 'patchBase' : (colorState.mode === 'targetWhite' ? 'patchTargetWhite' : 'patchTarget'));
         document.getElementById(patchId).style.background = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
         
         cursorDiv.style.display = 'none';
@@ -9557,26 +9564,34 @@ function calculateMix() {
         return;
     }
 
-    // Если белый не выбран, считаем, что фото идеальное
-    let wb = colorState.colors.white || {r: 255, g: 255, b: 255};
+    // Независимые балансы белого
+    let wbBase = colorState.colors.white || {r: 255, g: 255, b: 255};
+    let wbTarget = colorState.colors.targetWhite || {r: 255, g: 255, b: 255};
     let base = colorState.colors.base;
     let target = colorState.colors.target;
 
-    // 1. КОРРЕКЦИЯ БАЛАНСА БЕЛОГО
-    const wbFactor = {
+    // Функция расчета коэффициента света
+    const getWbFactor = (wb) => ({
         r: 255 / (wb.r || 255),
         g: 255 / (wb.g || 255),
         b: 255 / (wb.b || 255)
-    };
-
-    const fixRGB = (c) => ({
-        r: Math.min(255, Math.round(c.r * wbFactor.r)),
-        g: Math.min(255, Math.round(c.g * wbFactor.g)),
-        b: Math.min(255, Math.round(c.b * wbFactor.b))
     });
 
-    let fixedBase = fixRGB(base);
-    let fixedTarget = fixRGB(target);
+    const factorBase = getWbFactor(wbBase);
+    const factorTarget = getWbFactor(wbTarget);
+
+    // Функция применения коэффициента
+    const fixRGB = (c, factor) => ({
+        r: Math.min(255, Math.round(c.r * factor.r)),
+        g: Math.min(255, Math.round(c.g * factor.g)),
+        b: Math.min(255, Math.round(c.b * factor.b))
+    });
+
+    // 1. КОРРЕКЦИЯ (Каждый цвет правится по СВОЕМУ свету)
+    let fixedBase = fixRGB(base, factorBase);
+    let fixedTarget = fixRGB(target, factorTarget);
+
+   
 
     // 2. ПЕРЕВОД RGB В CMYK (Формат красок)
     const rgbToCmyk = (c) => {
@@ -11535,6 +11550,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
