@@ -6417,7 +6417,7 @@ ordersToProcess.forEach(ord => {
                     if (batchesCount > 1) {
                         const ingList = block.ingredients.map(ing => {
                             const val = ing.amount / batchesCount;
-                            const valStr = (ing.unit === 'шт' || val < 10) ? val.toFixed(1) : Math.round(val);
+                            const valStr = (val > 5) ? Math.round(val) : ((val % 1 === 0) ? val : val.toFixed(1));
                             return `<span style="white-space:nowrap;">${ing.name}: <b>${valStr}${ing.unit}</b></span>`;
                         }).join(', ');
                         recipeHTML = `<div style="margin-top:4px; padding:5px; background:rgba(0,0,0,0.03); border-radius:4px; font-size:11px; line-height:1.4; border-left:3px solid #FF9800; color:#444;">🥣 <b>В ДЕЖУ (на 1 часть):</b><br>${ingList}</div>`;
@@ -6455,7 +6455,7 @@ ordersToProcess.forEach(ord => {
                     if (batchesCount > 1) {
                         const ingList = block.ingredients.map(ing => {
                             const val = ing.amount / batchesCount;
-                            const valStr = (ing.unit === 'шт' || val < 10) ? val.toFixed(1) : Math.round(val);
+                            const valStr = (val > 5) ? Math.round(val) : ((val % 1 === 0) ? val : val.toFixed(1));
                             return `<span style="white-space:nowrap;">${ing.name}: <b>${valStr}${ing.unit}</b></span>`;
                         }).join(', ');
                         recipeHTML = `<div style="margin-top:4px; padding:5px; background:rgba(0,0,0,0.03); border-radius:4px; font-size:11px; line-height:1.4; border-left:3px solid #795548; color:#444;">🥣 <b>В МИКСЕР (на 1 часть):</b><br>${ingList}</div>`;
@@ -6619,11 +6619,16 @@ ordersToProcess.forEach(ord => {
         // Если число целое - показываем без дроби
         
         let displayVal;
-        if (data.unit === 'шт') {
-             displayVal = (val % 1 === 0) ? val : val.toFixed(1);
+        if (val > 5) {
+            // Если больше 5 — жестко округляем до целого
+            displayVal = Math.round(val);
         } else {
-             // Для веса используем сотые
-             displayVal = (val % 1 === 0) ? val : val.toFixed(2);
+            // Если 5 или меньше — оставляем точность (для агара, красителей и т.д.)
+            if (data.unit === 'шт') {
+                 displayVal = (val % 1 === 0) ? val : val.toFixed(1);
+            } else {
+                 displayVal = (val % 1 === 0) ? val : val.toFixed(2);
+            }
         }
 
         let displayAmount = `${displayVal} ${data.unit}`;
@@ -11297,48 +11302,7 @@ function handleSmartGesture(sX, sY, eX, eY) {
     }
 }
 
-// --- ЗАКРЫТИЕ МОДАЛОК СВАЙПОМ ВНИЗ ---
-let modalTouchStartY = 0;
-let modalTouchEndY = 0;
 
-document.addEventListener('touchstart', e => {
-    const modal = e.target.closest('.modal-box');
-    if (!modal) return;
-    
-    // Если палец на инпуте или текстовом поле — не перехватываем свайп
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
-        modalTouchStartY = 0;
-        return;
-    }
-    
-    // Если внутри модалки есть скролл и мы не на самом верху — не закрываем
-    if (modal.scrollTop > 0) {
-        modalTouchStartY = 0;
-        return;
-    }
-
-    modalTouchStartY = e.changedTouches[0].screenY;
-}, {passive: true});
-
-document.addEventListener('touchend', e => {
-    if (modalTouchStartY === 0) return;
-
-    modalTouchEndY = e.changedTouches[0].screenY;
-    const diffY = modalTouchEndY - modalTouchStartY;
-    const minSwipeDown = 100; // Расстояние свайпа для закрытия
-
-    if (diffY > minSwipeDown) {
-        const modalOverlay = e.target.closest('.modal-overlay');
-        if (modalOverlay) {
-            // Ищем кнопку закрытия или просто скрываем оверлей
-            modalOverlay.style.display = 'none';
-            // Если это было окно клиента — сбрасываем активные ID
-            activeBookingId = null; 
-            console.log("Окно закрыто жестом вниз");
-        }
-    }
-    modalTouchStartY = 0;
-}, {passive: true});
 
 
 let contextActiveId = null;
@@ -11729,6 +11693,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
