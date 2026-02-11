@@ -5060,7 +5060,7 @@ function renderBlocks(r){
             
             tot += weightInGrams;
             
-            const n = ing ? ing.name : '??? (Удален)';
+            const n = ing ? ing.name : (l.id === '' ? '' : '??? (Удален)');
             
             rows += `
             <div class="ing-row">
@@ -5248,7 +5248,7 @@ function addBlock() {
     r.blocks.push({ name: 'Новый слой', ingredients: [] });
     
     saveRecs();
-    loadRec(activeRecId); // Перерисовка
+    renderBlocks(r); // Перерисовка
 }
 
 // Удалить Блок
@@ -5260,7 +5260,7 @@ function delBlk(bIndex) {
         saveToHistory();
         r.blocks.splice(bIndex, 1);
         saveRecs();
-        loadRec(activeRecId);
+        renderBlocks(r);
     }
 }
 
@@ -5277,7 +5277,7 @@ function addBI(bIndex) {
     r.blocks[bIndex].ingredients.push({ id: '', weight: 0 });
     
     saveRecs();
-    loadRec(activeRecId);
+    renderBlocks(r);
 }
 
 // Удалить Ингредиент
@@ -5289,7 +5289,7 @@ function delBI(bIndex, iIndex) {
     r.blocks[bIndex].ingredients.splice(iIndex, 1);
     
     saveRecs();
-    loadRec(activeRecId);
+    renderBlocks(r);
 }
 
 
@@ -11657,6 +11657,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
