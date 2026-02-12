@@ -752,139 +752,67 @@ _calculateSingleTier(tierInput, isBottom) {
     return { netWeight: weight, geom: { d, h, volume: vol, shape: shape } };
   }
 
-_solveGeometry(p) {
-    let d = p.fixedDiameter || 20; // Высота цифры (Длина по подложке)
-    let h = p.fixedHeight || 10;   // Толщина торта (высота борта)
+  _solveGeometry(p) {
+    let d = p.fixedDiameter || 20;
+    let w = p.fixedWidth || (p.shape === 'rectangle' ? d * 0.75 : d); 
+    let h = p.fixedHeight || 10;
     
-    // ... (код анализа символа) ...
-    let symbolMeta = { fillFactor: 1, aspectRatio: 0.6 };
-    if (p.shape === 'symbol') {
-        symbolMeta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
-        
-        // !!! ИСПРАВЛЕНИЕ: ЗАЩИТА ОТ "ХУДЫХ" ЦИФР !!!
-        // Если цифра слишком узкая (например, 1), принудительно расширяем её.
-        // 0.55 означает, что ширина не может быть меньше 55% от длины.
-        if (symbolMeta.aspectRatio < 0.55) {
-             symbolMeta.aspectRatio = 0.55; 
-             // Немного увеличиваем fillFactor, т.к. мы искусственно "раздули" цифру
-             symbolMeta.fillFactor = Math.min(0.9, symbolMeta.fillFactor * 1.2); 
-        }
-    }
-
-    let w = 0;
-
-    // ... (код определения w) ...
-    
+    if (p.shape === 'sphere' && p.fixedDiameter) { h = d; }
+    else if (p.shape === 'rectangle' && p.fixedDiameter && p.fixedWidth && p.fixedHeight) {}
+    else if ((p.shape === 'cylinder' || p.shape === 'square' || p.shape === 'polygon') && p.fixedDiameter && p.fixedHeight) {}
     else {
-        if (p.shape === 'symbol') {
-            // !!! ИСПОЛЬЗУЕМ СКОРРЕКТИРОВАННЫЙ ASPECT RATIO
-            w = d * symbolMeta.aspectRatio; 
-        } else if (p.shape === 'rectangle') {
-            w = d * 0.6; 
-        } else {
-            w = d; 
-        }
-    }
-
-    // --- 3. РАСЧЕТ ПОД ВЕС ---
-    // Выполняется, если не все размеры зафиксированы жестко
-    if (!p.isGeometryMode && (!p.fixedDiameter || !p.fixedHeight || (!p.fixedWidth && (p.shape === 'rectangle' || p.shape === 'symbol')))) {
-        
-        const thick = 0.5;
+        const thick = 0.5; 
         const coatingDensity = p.coatingConsumption / thick;
 
-        for(let i=0; i<20; i++) { 
-             let vInner = 0;
-             let areaCoat = 0;
+        // ... начало функции (расчет thick и coatingDensity оставляем) ...
 
-             // Если ширина НЕ зафиксирована руками, она меняется пропорционально D
-             if (!p.fixedWidth) {
-                 w = d * symbolMeta.aspectRatio; 
-} else if (p.shape === 'rectangle') {
-    w = d * 0.6;
-} else {
-                     w = d;
-                 }
-             }
+      for(let i=0; i<20; i++) { // Увеличили число попыток до 20
+          const vInner = this._calcVolume(p.shape, d, h, w, p.polySides);
+          const areaCoat = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides); 
+          const vCoat = areaCoat * thick;
+          
+          const estWeight = (vInner * p.fillingDensity) + (vCoat * coatingDensity);
 
-             // СЧИТАЕМ ОБЪЕМ И ПЛОЩАДЬ
-             if (p.shape === 'symbol') {
-                 // Площадь основания = (Длина * Ширина) * Коэф.заполнения цифры
-                 const areaBase = (d * w) * symbolMeta.fillFactor; 
-                 vInner = areaBase * h;
-                 // Периметр ~ (2 * (L + W)) * 1.3 (у цифр периметр больше прямоугольника из-за изгибов)
-                 const perimeter = 2 * (d + w) * 1.3; 
-                 areaCoat = areaBase + (perimeter * h);
-             } 
-             else {
-                 vInner = this._calcVolume(p.shape, d, h, w, p.polySides);
-                 areaCoat = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides); 
-             }
-             
-             const vCoat = areaCoat * thick;
-             const estWeight = (vInner * p.fillingDensity) + (vCoat * coatingDensity);
+          // ВАЖНО: Снизили порог погрешности с 5г до 0.5г для точности
+          if (Math.abs(estWeight - p.targetWeight) < 0.5) break; 
+          
+          const ratio = p.targetWeight / estWeight;
 
-             if (Math.abs(estWeight - p.targetWeight) < 5) break; 
-             const ratio = p.targetWeight / estWeight;
-
-             // --- ЛОГИКА ПОДГОНА РАЗМЕРОВ ---
-             if (p.shape === 'sphere') { 
-                 d *= Math.pow(ratio, 1/3); h = d; 
-             }
-             // ПРЯМОУГОЛЬНИК И СИМВОЛ — ОДИНАКОВО
-             else if (p.shape === 'symbol' || p.shape === 'rectangle') { 
-                  
-                  // 1. Если зафиксированы D и W — меняем только H
-                  if (p.fixedDiameter && p.fixedWidth) {
-                      h *= ratio;
-                  }
-                  // 2. Если зафиксирована только Длина (D) — меняем H (W зафиксировано пользователем)
-                  else if (p.fixedDiameter) {
-                      h *= ratio; 
-                  }
-                  // 3. Если зафиксирована Толщина (H) — меняем D и W
-                  else if (p.fixedHeight) {
-                      const scale = Math.sqrt(ratio);
-                      d *= scale;
-                      if (!p.fixedWidth) w *= scale;
-                  }
-                  // 4. Если ничего не зафиксировано — меняем всё
-                  else { 
-                      const scale = Math.pow(ratio, 1/3); 
-                      d *= scale; 
-                      h *= scale; 
-                      if (!p.fixedWidth) w *= scale;
-                  }
-             } 
-             else { // Круг, Квадрат
-                  if (p.fixedDiameter) h *= ratio; 
-                  else if (p.fixedHeight) d *= Math.sqrt(ratio); 
-                  else { const f = Math.pow(ratio, 1/3); d *= f; h *= f; w *= f; }
-             }
-        }
+          if (p.shape === 'sphere') { 
+              d *= Math.pow(ratio, 1/3); h = d; 
+          } 
+          else if (p.shape === 'rectangle') {
+               if (p.fixedDiameter && p.fixedWidth) h *= ratio; 
+               else if (p.fixedHeight) { const f = Math.sqrt(ratio); d *= f; w *= f; }
+               else if (p.fixedDiameter) h *= ratio; 
+               else { const f = Math.pow(ratio, 1/3); d *= f; h *= f; w *= f; }
+          } 
+          else { 
+               if (p.fixedDiameter) h *= ratio; 
+               else if (p.fixedHeight) d *= Math.sqrt(ratio); 
+               else { const f = Math.pow(ratio, 1/3); d *= f; h *= f; w *= f; }
+          }
+      }
     }
     
-    // --- 4. ФИНАЛИЗАЦИЯ ---
-    d = Math.round(d); 
-    w = Math.round(w); // Округляем ту ширину, которая получилась (введенная или рассчитанная)
+    // ОКРУГЛЕНИЕ РАЗМЕРОВ
+    d = Math.round(d); // Диаметр обычно целое число (форма)
+    if (w) w = Math.round(w);
     
-    if (p.shape === 'sphere') { h = d; } else { h = Math.round(h * 10) / 10; }
-
-    let vFinal, areaFinal;
-    
-    if (p.shape === 'symbol') {
-        const areaBase = (d * w) * symbolMeta.fillFactor;
-        vFinal = areaBase * h;
-        const perimeter = 2 * (d + w) * 1.3;
-        areaFinal = areaBase + (perimeter * h);
+    // ВЫСОТА:
+    if (p.shape === 'sphere') {
+        h = d; 
     } else {
-        vFinal = this._calcVolume(p.shape, d, h, w, p.polySides);
-        areaFinal = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides);
+        // ВАЖНО: Округляем до СОТЫХ (2 знака), чтобы не терять миллиметры
+        h = Math.round(h * 100) / 100;
     }
 
+    
+    const vFinal = this._calcVolume(p.shape, d, h, w, p.polySides);
+    const areaFinal = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides);
     return { d, h, w, volInner: vFinal, area: areaFinal };
   }
-  
+
   _calcVolume(shape, d, h, w, n) {
       if (shape === 'square') return d * d * h;
       if (shape === 'rectangle') return d * (w || d) * h;
@@ -922,47 +850,8 @@ _solveGeometry(p) {
       }
       return side + top + (bottom ? top : 0);
   }
+}
 
-      // --- НОВЫЙ МЕТОД: АНАЛИЗ СИМВОЛА ---
- _analyzeSymbol(char, font) {
-      const cvs = document.createElement('canvas');
-      const ctx = cvs.getContext('2d');
-      const size = 100;
-      cvs.width = size;
-      cvs.height = size;
-
-      // Используем жирный шрифт, чтобы цифра не была "скелетом"
-      ctx.font = `900 ${size}px "Arial Black", "Arial", sans-serif`;
-      ctx.textBaseline = 'top';
-      ctx.textAlign = 'left';
-      
-      const metrics = ctx.measureText(char);
-      const textW = metrics.width;
-      
-      ctx.fillStyle = '#000';
-      ctx.fillText(char, 0, 0);
-
-      const imgData = ctx.getImageData(0, 0, textW, size).data;
-      let hitCount = 0;
-      for (let i = 3; i < imgData.length; i += 4) {
-          if (imgData[i] > 128) hitCount++;
-      }
-
-      // УБРАЛИ МНОЖИТЕЛЬ 1.25 — ЭТО БЫЛА ОШИБКА
-      
-      const boundingBoxArea = textW * size; 
-      
-      // Защита физики: цифра не может быть больше 90% от прямоугольника
-      // Обычно жирная "5" занимает около 70-80% площади.
-      let fillFactor = (boundingBoxArea > 0) ? (hitCount / boundingBoxArea) : 1; 
-      
-      if (fillFactor > 0.90) fillFactor = 0.90; // Хард-кап
-
-      const aspectRatio = textW / size;
-
-      return { fillFactor, aspectRatio };
-  }     
- 
 class CakeVisualizer {
   renderStack(tiers, shape, sides) {
       const W = 400, H = 500;
@@ -1079,47 +968,6 @@ class CakeVisualizer {
               const midHy = (bCy + tCy) / 2;
               svgContent += `<text x="${midHx}" y="${midHy}" dx="8" fill="${colDim}" font-weight="bold" font-size="12" dominant-baseline="middle">H${fmt(t.h)}</text>`;
 
-          } else if (shape === 'symbol') {
-              const char = t.symbolChar || '5';
-              
-              // --- ГЕОМЕТРИЯ ---
-              const pxD = t.d * SCALE; 
-              const pxH = t.h * SCALE; 
-
-              const flatScale = 0.55;
-              const textX = cX;
-              const textY = currentBaseCenterY - pxH; 
-              
-              const transform = `translate(${textX},${textY}) scale(1, ${flatScale}) translate(-${textX},-${textY})`;
-
-              // --- 1. РИСУЕМ БОКОВИНУ (СТЕНЫ) ---
-              const layersCount = Math.max(1, Math.ceil(pxH)); 
-              
-              for (let i = layersCount; i > 0; i--) {
-                  // ЗАМЕНИЛИ: font-family теперь жестко "Arial Black"
-                  svgContent += `<text x="${textX}" y="${textY + i}" transform="${transform}" text-anchor="middle" font-family="Arial Black, sans-serif" font-weight="900" font-size="${pxD}" fill="#8D6E63" stroke="#8D6E63" stroke-width="2" style="user-select:none; dominant-baseline: central;">${char}</text>`;
-              }
-
-              // --- 2. РИСУЕМ ЛИЦО (ВЕРХНИЙ СЛОЙ) ---
-              // ЗАМЕНИЛИ: font-family теперь жестко "Arial Black"
-              svgContent += `<text x="${textX}" y="${textY}" transform="${transform}" text-anchor="middle" font-family="Arial Black, sans-serif" font-weight="900" font-size="${pxD}" fill="url(#${gradId})" stroke="#757575" stroke-width="1" style="user-select:none; dominant-baseline: central;">${char}</text>`;
-              
-              // --- 3. ПОДПИСИ РАЗМЕРОВ ---
-              const halfH_Visual = (pxD * flatScale) / 2;
-              const visualBottom = textY + halfH_Visual;
-              const visualBase = visualBottom + pxH; 
-
-              svgContent += `<text x="${textX - pxD*0.45 - 20}" y="${textY}" text-anchor="end" fill="${colDim}" font-weight="bold" font-size="12" transform="rotate(-90 ${textX - pxD*0.45 - 20},${textY})" dominant-baseline="middle">L:${fmt(t.d)}</text>`;
-              
-              const calculatedW = t.d * (t.w / t.d || 0.6); 
-              const displayW = t.w ? fmt(t.w) : fmt(calculatedW);
-              svgContent += `<text x="${textX}" y="${visualBase + 25}" text-anchor="middle" fill="${colDim}" font-weight="bold" font-size="12">W:${displayW}</text>`;
-              
-              const hLabelX = textX + pxD*0.5 + 20; 
-              svgContent += `<line x1="${hLabelX}" y1="${textY}" x2="${hLabelX}" y2="${textY + pxH}" stroke="${colDim}" stroke-width="1" opacity="0.5"/>`;
-              svgContent += `<line x1="${hLabelX-3}" y1="${textY}" x2="${hLabelX+3}" y2="${textY}" stroke="${colDim}" stroke-width="1"/>`;
-              svgContent += `<line x1="${hLabelX-3}" y1="${textY + pxH}" x2="${hLabelX+3}" y2="${textY + pxH}" stroke="${colDim}" stroke-width="1"/>`;
-              svgContent += `<text x="${hLabelX + 5}" y="${textY + pxH / 2}" fill="#E65100" font-weight="bold" font-size="14" dominant-baseline="middle">H:${fmt(t.h)}</text>`;
           } else { 
               const ry = pxR * 0.3;
               const tierTopY = currentBaseCenterY - pxH;
@@ -1338,10 +1186,6 @@ class CakeVisualizer {
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#FF5722">
     <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/cake.png">
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Comic+Neue:wght@700&family=Courier+Prime:wght@700&family=Roboto:wght@900&family=Tinos:wght@700&display=swap" rel="stylesheet">
     
     <style>
 
@@ -2996,12 +2840,11 @@ body {
     <div class="form-group" style="flex:2; min-width: 200px;">
         <span class="form-label">Форма торта</span>
         <select id="globalShape" onchange="updateTierUI()" style="font-weight:bold;">
-            <option value="cylinder">⚪ Круг (Цилиндр)</option>
-            <option value="square">⬜ Квадрат</option>
-            <option value="rectangle">▭ Прямоугольник</option>
-            <option value="sphere">💣 Шар (Бомба)</option>
-            <option value="polygon">⬡ Многогранник</option>
-            <option value="symbol">🔠 Цифра / Символ</option>
+            <option value="cylinder">Круг (Цилиндр)</option>
+            <option value="square">Квадрат</option>
+            <option value="rectangle">Прямоугольник</option>
+            <option value="sphere">Шар (Бомба)</option>
+            <option value="polygon">Многогранник</option>
         </select>
     </div>
 
@@ -3009,12 +2852,6 @@ body {
         <span class="form-label">Углов</span>
         <input type="number" id="globalSides" value="6">
     </div>
-            
-<div class="form-group" id="grpSymbol" style="display:none; flex:1; border-left: 2px solid #ccc; padding-left: 10px; min-width: 100px;">
-    <span class="form-label">Знак</span>
-    <input type="text" id="cakeSymbol" value="5" maxlength="2" style="font-weight:bold; text-align:center; font-size:16px; text-transform:uppercase;" oninput="updateTierUI()">
-</div>
-   
     <div class="form-group" id="sphereFillBlock" style="display:none; flex:2;">
         <span class="form-label">Заполнение</span>
         <div style="font-size:11px;">
@@ -3951,15 +3788,10 @@ function renderTierRows() {
         dLabel = 'Сторона (см)';
     } else if (shape === 'sphere') {
         dLabel = 'Диаметр (см)';
-        hLabel = 'H = D'; 
-        showH = false;    
-    } else if (shape === 'symbol') {
-        // --- ВОТ ИСПРАВЛЕНИЕ ДЛЯ ЦИФР ---
-        dLabel = 'Высота знака (см)'; // Вертикальный размер цифры
-        wLabel = 'Ширина знака (см)'; // Горизонтальный размер
-        hLabel = 'Толщина торта (см)'; 
-        showW = true; // <--- ТЕПЕРЬ ПОЛЕ W БУДЕТ ВИДНО
+        hLabel = 'H = D'; // Для шара высота равна диаметру
+        showH = false;    // Скрываем поле высоты, чтобы не путать
     }
+
     appState.tiers.forEach((t, idx) => {
         const div = document.createElement('div');
         div.className = 'tier-card';
@@ -4150,35 +3982,21 @@ function moveTier(idx, direction) {
 }
 
 function updateTierUI() {
-    renderCoatingOptions(); 
+  renderCoatingOptions(); // <--- ДОБАВИТЬ СЮДА ПЕРВОЙ СТРОКОЙ
     const sh = document.getElementById('globalShape').value;
     
-    // Управление видимостью полей
+    // Показываем/скрываем специфичные поля
     const grpSides = document.getElementById('grpSides');
     const sphereFillBlock = document.getElementById('sphereFillBlock');
-    const grpSymbol = document.getElementById('grpSymbol');
     
     if (grpSides) grpSides.style.display = (sh === 'polygon') ? 'block' : 'none';
     if (sphereFillBlock) sphereFillBlock.style.display = (sh === 'sphere') ? 'block' : 'none';
-    if (grpSymbol) grpSymbol.style.display = (sh === 'symbol') ? 'flex' : 'none';
 
-   
-    // --- РАСЧЕТ ШИРИНЫ СИМВОЛА НА ЛЕТУ (БЕЗ ВЫВОДА В ПОЛЕ) ---
-    if (sh === 'symbol') {
-        try {
-            const sym = document.getElementById('cakeSymbol').value || '5';
-            const font = "900 100px Arial Black, sans-serif";
-            const calc = new CakeCalculator({});
-            const meta = calc._analyzeSymbol(sym, font);
-            
-            // Мы просто сохраняем aspectRatio в глобальную переменную или используем в расчете
-            // Вывод в input id="cakeSymbolWidth" удален.
-        } catch (e) { console.log('Символ пока не готов'); }
-    }
-
+    // Обновляем зависимые элементы интерфейса
     updateCoatingUI(); 
     renderTierRows();
     
+    // Сохраняем в историю только факт смены формы
     saveToHistory(); 
 }
 
@@ -4248,20 +4066,16 @@ function calculateInitial() {
         }
     });
 
-    // СТАЛО (Добавляем проверку формы):
-const tiersPayload = appState.tiers.map(t => ({
-        id: t.id,
-        recipeId: t.recipeId,
-        weight: t.weight * 1000,
-        isGeometryMode: t.isGeometryMode || false,
-        fixedDiameter: parseFloat(t.fixedDiameter) || null,
-        
-        // ВАЖНО: ДЛЯ СИМВОЛА ТЕПЕРЬ ВСЕГДА БЕРЕМ ШИРИНУ, ЕСЛИ ОНА ЕСТЬ
-        fixedWidth: parseFloat(t.fixedWidth) || null,
-        
-        fixedHeight: parseFloat(t.fixedHeight) || null,
-        symbolChar: document.getElementById('cakeSymbol').value || '5'
-    }));
+    const tiersPayload = appState.tiers.map(t => ({
+    id: t.id,
+    recipeId: t.recipeId,
+    weight: t.weight * 1000, 
+    // ДОБАВИЛИ ФЛАГ:
+    isGeometryMode: t.isGeometryMode || false, 
+    fixedDiameter: parseFloat(t.fixedDiameter) || null,
+    fixedWidth: parseFloat(t.fixedWidth) || null,
+    fixedHeight: parseFloat(t.fixedHeight) || null
+}));
 
     const payload = {
         tiers: tiersPayload,
@@ -4468,51 +4282,53 @@ function modifyTier(side, idx, axis, delta) {
     // === 1. ИЗМЕНЕНИЕ ДИАМЕТРА (D) или ШИРИНЫ (W) ===
     if (axis === 'd' || axis === 'w') {
         const field = (axis === 'd') ? 'fixedDiameter' : 'fixedWidth';
-        
-        // Берем текущее значение. Если его нет - берем то, что насчитал калькулятор
+        // Берем текущее значение или дефолтное, если вдруг null
         const currentVal = tierObj[field] || ((axis === 'd') ? currentRes.d : currentRes.w);
         
         // Меняем
         tierObj[field] = Math.round(currentVal + delta);
-        if (tierObj[field] < 5) tierObj[field] = 5; 
+        if (tierObj[field] < 5) tierObj[field] = 5; // Защита от отрицательных
 
-        // Спец. логика для Прямоугольника И ЦИФРЫ
-        if (globalShape === 'rectangle' || globalShape === 'symbol') {
+        // Спец. логика для Прямоугольника (фиксируем вторую сторону)
+        if (globalShape === 'rectangle') {
              if (axis === 'd' && !tierObj.fixedWidth) tierObj.fixedWidth = Math.round(currentRes.w);
              if (axis === 'w' && !tierObj.fixedDiameter) tierObj.fixedDiameter = Math.round(currentRes.d);
         }
 
         if (isGeo) {
-            // Если режим "По размеру" - фиксируем высоту, сбрасываем вес
+            // Режим "По размеру":
+            // Диаметр изменился -> Высоту надо зафиксировать (чтобы не уплыла), Вес пересчитать.
             if (!tierObj.fixedHeight) tierObj.fixedHeight = currentRes.h;
             tierObj.weight = 0; 
         } 
         else {
-            // Если режим "По весу" - высоту отпускаем
+            // Режим "По весу":
+            // Диаметр изменился -> Высоту сбрасываем (она подстроится под вес).
             tierObj.fixedHeight = null; 
             delete tierObj.forceHeight;
         }
-    } // <--- ВОТ ЗДЕСЬ ЗАКРЫВАЕТСЯ ПЕРВЫЙ IF
+    }
 
-    // === 2. ИЗМЕНЕНИЕ ВЫСОТЫ ТОРТА (H) ===
-    else if (axis === 'h' && isGeo) { // <--- ТЕПЕРЬ ELSE СТОИТ СРАЗУ ПОСЛЕ IF
+    // === 2. ИЗМЕНЕНИЕ ВЫСОТЫ (H) - Только для режима "По размеру" ===
+    else if (axis === 'h' && isGeo) {
         let currentH = tierObj.fixedHeight || currentRes.h;
         let newH = parseFloat((currentH + delta).toFixed(1));
         if (newH < 1) newH = 1;
 
         tierObj.fixedHeight = newH;
         
-        // Фиксируем D, если не был
+        // Фиксируем диаметр, если не был, чтобы не поплыл
         if (!tierObj.fixedDiameter) tierObj.fixedDiameter = Math.round(currentRes.d);
-        
-        // Для цифры W фиксировать НЕ НАДО (если не прямоугольник), но если прямоугольник - надо
         if (globalShape === 'rectangle' && !tierObj.fixedWidth) tierObj.fixedWidth = Math.round(currentRes.w);
         
+        // Вес под сброс
         tierObj.weight = 0;
     }
 
     calculateSide(side);
 }
+
+
 
 function calculateSide(side) {
     // 1. Берем данные конкретной стороны
@@ -4522,7 +4338,6 @@ function calculateSide(side) {
     const payload = {
         tiers: sourceTiers,
         shape: document.getElementById('globalShape').value,
-        symbolChar: document.getElementById('cakeSymbol').value || '5',
         polySides: parseInt(document.getElementById('globalSides').value) || 6,
         sphereFillMode: document.querySelector('input[name="sphereFillMode"]:checked') ? document.querySelector('input[name="sphereFillMode"]:checked').value : 'recipe',
         coatingId: document.getElementById('coatingIdSelect').value,
@@ -4730,8 +4545,7 @@ function renderSideControls(side) {
         </div>`;
 
         // 2. ШИРИНА (Только для прямоугольника, кнопки есть ВСЕГДА)
-       // 2. ШИРИНА (Включаем для Прямоугольника И для СИМВОЛА)
-        if (globalShape === 'rectangle' || globalShape === 'symbol') {
+        if (globalShape === 'rectangle') {
             html += `
             <div class="ctrl-row">
                <button class="ctrl-btn" onclick="event.stopPropagation(); modifyTier('${side}', ${idx}, 'w', -1)">-</button>
@@ -11956,86 +11770,3 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
