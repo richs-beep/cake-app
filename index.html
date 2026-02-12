@@ -761,9 +761,18 @@ _calculateSingleTier(tierInput, isBottom) {
     else if (p.shape === 'rectangle' && p.fixedDiameter && p.fixedWidth && p.fixedHeight) {}
     else if ((p.shape === 'cylinder' || p.shape === 'square' || p.shape === 'polygon') && p.fixedDiameter && p.fixedHeight) {}
     
-    else if (p.shape === 'symbol' && p.fixedDiameter && p.fixedHeight) {
+    else if (p.shape === 'symbol') {
+         // Получаем метаданные (пропорции буквы)
          const meta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
-         w = d * meta.aspectRatio; 
+         
+         // Если задан Размер (D), считаем Ширину (W)
+         if (p.fixedDiameter) {
+             w = d * meta.aspectRatio;
+         }
+         
+         // Если высота не задана жестко, ставим разумный дефолт для цифр (чтобы не было 26 см)
+         // Если задана - используем её как толщину
+         if (!p.fixedHeight && !h) h = 7; // Стандартная высота цифры-торта
     }
     
     else {
@@ -3907,10 +3916,15 @@ function renderTierRows() {
         dLabel = 'Сторона (см)';
     } else if (shape === 'sphere') {
         dLabel = 'Диаметр (см)';
-        hLabel = 'H = D'; // Для шара высота равна диаметру
-        showH = false;    // Скрываем поле высоты, чтобы не путать
+        hLabel = 'H = D'; 
+        showH = false;    
+    } else if (shape === 'symbol') {
+        // --- ВОТ ИСПРАВЛЕНИЕ ДЛЯ ЦИФР ---
+        dLabel = 'Высота цифры (см)'; // Длина самой цифры (напр. 25 см)
+        hLabel = 'Высота торта (см)'; // Высота торта (напр. 6-8 см)
+        wLabel = 'Ширина (Авто)'; // Ширина цифры
+        // Мы не показываем поле W для ввода, оно авто, но показываем H для толщины
     }
-
     appState.tiers.forEach((t, idx) => {
         const div = document.createElement('div');
         div.className = 'tier-card';
@@ -11904,6 +11918,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
