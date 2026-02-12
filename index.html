@@ -757,39 +757,33 @@ _calculateSingleTier(tierInput, isBottom) {
     let w = p.fixedWidth || (p.shape === 'rectangle' ? d * 0.75 : d); 
     let h = p.fixedHeight || 10;
     
-    if (p.shape === 'sphere' && p.fixedDiameter) { h = d; }
-    else if (p.shape === 'rectangle' && p.fixedDiameter && p.fixedWidth && p.fixedHeight) {}
-    else if ((p.shape === 'cylinder' || p.shape === 'square' || p.shape === 'polygon') && p.fixedDiameter && p.fixedHeight) {}
-    
-    else if (p.shape === 'symbol') {
-         // Получаем метаданные (пропорции буквы)
-         const meta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
-         
-         // Если задан Размер (D), считаем Ширину (W)
-         if (p.fixedDiameter) {
-             w = d * meta.aspectRatio;
-         }
-         
-         // Если высота не задана жестко, ставим разумный дефолт для цифр (чтобы не было 26 см)
-         // Если задана - используем её как толщину
-         if (!p.fixedHeight && !h) h = 7; // Стандартная высота цифры-торта
+    // Метаданные для символа (вычисляем один раз перед циклом)
+    let symbolMeta = null;
+    if (p.shape === 'symbol') {
+        symbolMeta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
+        // Если задан размер (D), ширина (W) подчиняется пропорциям шрифта
+        if (p.fixedDiameter) {
+             w = d * symbolMeta.aspectRatio;
+        }
+        // Если высота не зафиксирована пользователем, ставим адекватный старт для цифр (7 см)
+        if (!p.fixedHeight) h = 7;
     }
+
+    if (p.shape === 'sphere' && p.fixedDiameter) { h = d; }
     
+    // --- ЦИКЛ ПОДБОРА РАЗМЕРОВ ПОД ВЕС ---
     else {
         const thick = 0.5; 
         const coatingDensity = p.coatingConsumption / thick;
-
-        let symbolMeta = null;
-        if (p.shape === 'symbol') {
-            symbolMeta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
-        }
 
       for(let i=0; i<20; i++) { 
           let vInner = 0;
           let areaCoat = 0;
 
           if (p.shape === 'symbol') {
+               // ВАЖНО: При изменении D в цикле, W тоже должна меняться!
                w = d * symbolMeta.aspectRatio;
+               
                const areaBase = (d * w) * symbolMeta.fillFactor; 
                vInner = areaBase * h;
                const perimeter = 2 * (d + w) * 1.3; 
@@ -803,7 +797,7 @@ _calculateSingleTier(tierInput, isBottom) {
           const vCoat = areaCoat * thick;
           const estWeight = (vInner * p.fillingDensity) + (vCoat * coatingDensity);
 
-          if (Math.abs(estWeight - p.targetWeight) < 0.5) break; 
+          if (Math.abs(estWeight - p.targetWeight) < 5) break; // Погрешность 5г допустима
           
           const ratio = p.targetWeight / estWeight;
 
@@ -811,9 +805,18 @@ _calculateSingleTier(tierInput, isBottom) {
               d *= Math.pow(ratio, 1/3); h = d; 
           } 
           else if (p.shape === 'rectangle' || p.shape === 'symbol') { 
-               if (p.fixedDiameter) h *= ratio; 
-               else if (p.fixedHeight) d *= Math.sqrt(ratio); 
+               // ЛОГИКА БАЛАНСА:
+               if (p.fixedDiameter) {
+                   // Если размер (D) зафиксирован -> меняем Толщину (H)
+                   h *= ratio; 
+               }
+               else if (p.fixedHeight) {
+                   // Если толщина (H) зафиксирована -> меняем Размер (D)
+                   // Area ~ d^2, поэтому sqrt
+                   d *= Math.sqrt(ratio); 
+               }
                else { 
+                   // Если ничего не зафиксировано, меняем всё пропорционально
                    const f = Math.pow(ratio, 1/3); 
                    d *= f; h *= f; w *= f; 
                }
@@ -829,12 +832,13 @@ _calculateSingleTier(tierInput, isBottom) {
     d = Math.round(d); 
     if (w) w = Math.round(w);
     
-    if (p.shape === 'sphere') { h = d; } else { h = Math.round(h * 100) / 100; }
+    // Округляем высоту до десятых
+    if (p.shape === 'sphere') { h = d; } else { h = Math.round(h * 10) / 10; }
 
     let vFinal, areaFinal;
     
     if (p.shape === 'symbol') {
-        const meta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
+        const meta = symbolMeta || this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
         const areaBase = (d * w) * meta.fillFactor;
         vFinal = areaBase * h;
         const perimeter = 2 * (d + w) * 1.3;
@@ -11918,6 +11922,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
