@@ -752,77 +752,59 @@ _calculateSingleTier(tierInput, isBottom) {
     return { netWeight: weight, geom: { d, h, volume: vol, shape: shape } };
   }
 
-  _solveGeometry(p) {
+ _solveGeometry(p) {
     let d = p.fixedDiameter || 20;
-    // Для прямоугольника и символа считаем ширину, иначе она равна диаметру
     let w = p.fixedWidth || (p.shape === 'rectangle' ? d * 0.75 : d); 
     let h = p.fixedHeight || 10;
     
-    // Блок простых проверок (если размеры жестко заданы)
     if (p.shape === 'sphere' && p.fixedDiameter) { h = d; }
     else if (p.shape === 'rectangle' && p.fixedDiameter && p.fixedWidth && p.fixedHeight) {}
     else if ((p.shape === 'cylinder' || p.shape === 'square' || p.shape === 'polygon') && p.fixedDiameter && p.fixedHeight) {}
     
-    // --- НОВОЕ: Если размеры символа заданы жестко, просто обновляем ширину по пропорции
     else if (p.shape === 'symbol' && p.fixedDiameter && p.fixedHeight) {
          const meta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
-         w = d * meta.aspectRatio; // Подгоняем ширину под высоту (d)
+         w = d * meta.aspectRatio; 
     }
     
     else {
-        // --- РЕЖИМ ПОДБОРА (ЕСЛИ ВЕС ЗАДАН, А РАЗМЕРЫ НЕТ) ---
         const thick = 0.5; 
         const coatingDensity = p.coatingConsumption / thick;
 
-        // --- НОВОЕ: Анализируем символ ОДИН РАЗ перед циклом (чтобы не тормозило) ---
         let symbolMeta = null;
         if (p.shape === 'symbol') {
             symbolMeta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
         }
 
       for(let i=0; i<20; i++) { 
-          // Переменные для объема и площади
           let vInner = 0;
           let areaCoat = 0;
 
-          // --- НОВОЕ: ВЕТВЛЕНИЕ ВНУТРИ ЦИКЛА ---
           if (p.shape === 'symbol') {
-               // 1. В итерации d - это высота буквы. Пересчитываем ширину (w)
                w = d * symbolMeta.aspectRatio;
-               
-               // 2. Считаем реальную площадь бисквита (S = W * H * FillFactor)
                const areaBase = (d * w) * symbolMeta.fillFactor; 
                vInner = areaBase * h;
-
-               // 3. Считаем площадь покрытия (Верх + Бока)
-               // Периметр буквы сложный, берем эвристику: Периметр рамки * 1.3 (из-за изгибов)
                const perimeter = 2 * (d + w) * 1.3; 
                areaCoat = areaBase + (perimeter * h);
           } 
           else {
-               // СТАНДАРТНЫЙ РАСЧЕТ (Круг, Квадрат, Прямоугольник)
                vInner = this._calcVolume(p.shape, d, h, w, p.polySides);
                areaCoat = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides); 
           }
-          // -------------------------------------
 
           const vCoat = areaCoat * thick;
           const estWeight = (vInner * p.fillingDensity) + (vCoat * coatingDensity);
 
-          // Проверка точности (0.5г)
           if (Math.abs(estWeight - p.targetWeight) < 0.5) break; 
           
           const ratio = p.targetWeight / estWeight;
 
-          // КОРРЕКТИРОВКА РАЗМЕРОВ ДЛЯ СЛЕДУЮЩЕГО ШАГА
           if (p.shape === 'sphere') { 
               d *= Math.pow(ratio, 1/3); h = d; 
           } 
-          else if (p.shape === 'rectangle' || p.shape === 'symbol') { // <-- Добавили symbol сюда
-               if (p.fixedDiameter) h *= ratio; // Если высота буквы фиксирована, меняем толщину торта
-               else if (p.fixedHeight) d *= Math.sqrt(ratio); // Если толщина торта фиксирована, меняем размер буквы
+          else if (p.shape === 'rectangle' || p.shape === 'symbol') { 
+               if (p.fixedDiameter) h *= ratio; 
+               else if (p.fixedHeight) d *= Math.sqrt(ratio); 
                else { 
-                   // Если ничего не фиксировано, меняем все пропорционально
                    const f = Math.pow(ratio, 1/3); 
                    d *= f; h *= f; w *= f; 
                }
@@ -835,26 +817,15 @@ _calculateSingleTier(tierInput, isBottom) {
       }
     }
     
-    // ОКРУГЛЕНИЕ РАЗМЕРОВ
     d = Math.round(d); 
     if (w) w = Math.round(w);
     
-    // ВЫСОТА:
-    if (p.shape === 'sphere') {
-        h = d; 
-    } else {
-        h = Math.round(h * 100) / 100;
-    }
+    if (p.shape === 'sphere') { h = d; } else { h = Math.round(h * 100) / 100; }
 
-    // ФИНАЛЬНЫЙ РАСЧЕТ ДЛЯ ВОЗВРАТА (Тут тоже нужна ветка для символа)
     let vFinal, areaFinal;
     
     if (p.shape === 'symbol') {
-        // Повторяем расчет, т.к. _calcVolume не умеет в символы без meta
-        // Но мы можем схитрить и посчитать тут снова, или передать. 
-        // Проще посчитать, это быстро.
         const meta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
-        // w и d уже округлены выше
         const areaBase = (d * w) * meta.fillFactor;
         vFinal = areaBase * h;
         const perimeter = 2 * (d + w) * 1.3;
@@ -866,7 +837,6 @@ _calculateSingleTier(tierInput, isBottom) {
 
     return { d, h, w, volInner: vFinal, area: areaFinal };
   }
-
   _calcVolume(shape, d, h, w, n) {
       if (shape === 'square') return d * d * h;
       if (shape === 'rectangle') return d * (w || d) * h;
@@ -1065,7 +1035,7 @@ class CakeVisualizer {
               const midHy = (bCy + tCy) / 2;
               svgContent += `<text x="${midHx}" y="${midHy}" dx="8" fill="${colDim}" font-weight="bold" font-size="12" dominant-baseline="middle">H${fmt(t.h)}</text>`;
 
-          } } else if (shape === 'symbol') {
+          } else if (shape === 'symbol') {
               const char = t.symbolChar || '5';
               // Убираем кавычки и лишние пробелы
               const font = (t.symbolFont || 'Arial').replace(/"/g, "'");
@@ -4159,29 +4129,30 @@ function updateTierUI() {
     
     if (grpSides) grpSides.style.display = (sh === 'polygon') ? 'block' : 'none';
     if (sphereFillBlock) sphereFillBlock.style.display = (sh === 'sphere') ? 'block' : 'none';
-    if (grpSymbol) grpSymbol.style.display = (sh === 'symbol') ? 'block' : 'none';
-// --- РАСЧЕТ ШИРИНЫ СИМВОЛА НА ЛЕТУ ---
+    if (grpSymbol) grpSymbol.style.display = (sh === 'symbol') ? 'flex' : 'none';
+
+    // --- РАСЧЕТ ШИРИНЫ СИМВОЛА НА ЛЕТУ (БЕЗОПАСНЫЙ) ---
     if (sh === 'symbol') {
-        const sym = document.getElementById('cakeSymbol').value || '5';
-        const font = document.getElementById('cakeFont').value;
-        
-        // Быстрый анализ (создаем временный калькулятор, чтобы не дублировать код)
-        const calc = new CakeCalculator({}); 
-        const meta = calc._analyzeSymbol(sym, font);
-        
-        // Ищем введенный размер в первом ярусе (или берем дефолт 25)
-        const firstTierInput = document.querySelector('input[placeholder="D (Диаметр)"]'); 
-        // Или если мы еще не нарисовали ярусы, берем из appState
-        const tierSize = (appState.tiers[0] && appState.tiers[0].fixedDiameter) ? appState.tiers[0].fixedDiameter : 25;
-        
-        const calculatedWidth = Math.round(tierSize * meta.aspectRatio);
-        document.getElementById('cakeSymbolWidth').value = `~${calculatedWidth} см`;
+        try {
+            const sym = document.getElementById('cakeSymbol').value || '5';
+            const font = document.getElementById('cakeFont').value;
+            
+            const calc = new CakeCalculator({}); 
+            const meta = calc._analyzeSymbol(sym, font);
+            
+            const tierSize = (appState.tiers[0] && appState.tiers[0].fixedDiameter) ? appState.tiers[0].fixedDiameter : 25;
+            
+            const calculatedWidth = Math.round(tierSize * meta.aspectRatio);
+            const wInput = document.getElementById('cakeSymbolWidth');
+            if(wInput) wInput.value = `~${calculatedWidth} см`;
+        } catch (e) {
+            console.log('Пока рано считать ширину');
+        }
     }
-    // Обновляем зависимые элементы
+
     updateCoatingUI(); 
     renderTierRows();
     
-    // Сохраняем (чтобы при обновлении страницы не слетело)
     saveToHistory(); 
 }
 
@@ -11959,6 +11930,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
