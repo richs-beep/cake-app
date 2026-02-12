@@ -1039,7 +1039,7 @@ class CakeVisualizer {
               const char = t.symbolChar || '5';
               // Безопасная обработка шрифта
               const fontStr = t.symbolFont || 'Arial';
-              const font = fontStr.replace(/['"]/g, ''); 
+              const font = fontStr;
               
               // --- ГЕОМЕТРИЯ ---
               const pxD = t.d * SCALE; // "Глубина" буквы (вертикаль на листе)
@@ -3003,13 +3003,27 @@ body {
             </div>
             <div style="flex:2;">
                 <span class="form-label">Шрифт</span>
-                <select id="cakeFont" onchange="updateTierUI()" style="font-size:12px;">
-    <option value="'Roboto', 'Arial Black', 'Arial Bold', sans-serif">Жирный (Standard)</option>    
-    <option value="'Tinos', 'Times New Roman', 'Georgia', serif">С засечками (Classic)</option>    
-    <option value="'Anton', 'Impact', 'Haettenschweiler', 'Arial Narrow Bold', sans-serif">Мощный (Impact Style)</option>    
-    <option value="'Courier Prime', 'Courier New', 'Courier', monospace">Печатная машинка</option>    
-    <option value="'Comic Neue', 'Comic Sans MS', 'Chalkboard SE', sans-serif">Рукописный</option>
-                </select>
+                <select id="cakeFont" onchange="updateTierUI()" style="font-size:14px; padding: 5px;">
+    <option value="'Roboto', 'Arial Black', sans-serif" style="font-family: 'Roboto', 'Arial Black', sans-serif; font-weight: 900;">
+        Жирный (Roboto) - АБВ 123
+    </option>
+    
+    <option value="'Tinos', 'Times New Roman', serif" style="font-family: 'Tinos', 'Times New Roman', serif; font-weight: bold;">
+        С засечками (Tinos) - АБВ 123
+    </option>
+    
+    <option value="'Anton', 'Impact', sans-serif" style="font-family: 'Anton', 'Impact', sans-serif; letter-spacing: 1px;">
+        Мощный (Anton) - АБВ 123
+    </option>
+    
+    <option value="'Courier Prime', 'Courier New', monospace" style="font-family: 'Courier Prime', 'Courier New', monospace; font-weight: bold;">
+        Машинка (Courier) - АБВ 123
+    </option>
+    
+    <option value="'Comic Neue', 'Comic Sans MS', cursive" style="font-family: 'Comic Neue', 'Comic Sans MS', cursive; font-weight: bold;">
+        Рукописный (Comic) - АБВ 123
+    </option>
+</select>
             </div>
             <div style="flex:1;">
                 <span class="form-label">Ширина</span>
@@ -11958,6 +11972,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
