@@ -4456,20 +4456,17 @@ function modifyTier(side, idx, axis, delta) {
     const isGeo = tierObj.isGeometryMode;
 
     // === 1. ИЗМЕНЕНИЕ ДИАМЕТРА (D) или ШИРИНЫ (W) ===
-    // === 1. ИЗМЕНЕНИЕ ДИАМЕТРА (D) или ШИРИНЫ (W) ===
     if (axis === 'd' || axis === 'w') {
         const field = (axis === 'd') ? 'fixedDiameter' : 'fixedWidth';
         
-        // Берем текущее значение. Если его нет - берем то, что насчитал калькулятор (currentRes)
+        // Берем текущее значение. Если его нет - берем то, что насчитал калькулятор
         const currentVal = tierObj[field] || ((axis === 'd') ? currentRes.d : currentRes.w);
         
         // Меняем
         tierObj[field] = Math.round(currentVal + delta);
         if (tierObj[field] < 5) tierObj[field] = 5; 
 
-        // Спец. логика для Прямоугольника И ЦИФРЫ (они теперь ведут себя одинаково)
-        // Если меняем одну сторону, ВТОРАЯ ДОЛЖНА ЗАФИКСИРОВАТЬСЯ на текущем значении,
-        // чтобы не пересчитываться "автоматически" при следующем расчете.
+        // Спец. логика для Прямоугольника И ЦИФРЫ
         if (globalShape === 'rectangle' || globalShape === 'symbol') {
              if (axis === 'd' && !tierObj.fixedWidth) tierObj.fixedWidth = Math.round(currentRes.w);
              if (axis === 'w' && !tierObj.fixedDiameter) tierObj.fixedDiameter = Math.round(currentRes.d);
@@ -4481,32 +4478,14 @@ function modifyTier(side, idx, axis, delta) {
             tierObj.weight = 0; 
         } 
         else {
-            // Если режим "По весу" - высоту отпускаем (она подстроится под вес)
+            // Если режим "По весу" - высоту отпускаем
             tierObj.fixedHeight = null; 
             delete tierObj.forceHeight;
         }
-    }
-
-        // Спец. логика для Прямоугольника (там они связаны жестче)
-        if (globalShape === 'rectangle') {
-             if (axis === 'd' && !tierObj.fixedWidth) tierObj.fixedWidth = Math.round(currentRes.w);
-             if (axis === 'w' && !tierObj.fixedDiameter) tierObj.fixedDiameter = Math.round(currentRes.d);
-        }
-
-        if (isGeo) {
-            // Если по размеру - вес сбрасываем, высоту фиксируем
-            if (!tierObj.fixedHeight) tierObj.fixedHeight = currentRes.h;
-            tierObj.weight = 0; 
-        } 
-        else {
-            // Если по весу - высоту сбрасываем
-            tierObj.fixedHeight = null; 
-            delete tierObj.forceHeight;
-        }
-    
+    } // <--- ВОТ ЗДЕСЬ ЗАКРЫВАЕТСЯ ПЕРВЫЙ IF
 
     // === 2. ИЗМЕНЕНИЕ ВЫСОТЫ ТОРТА (H) ===
-    else if (axis === 'h' && isGeo) {
+    else if (axis === 'h' && isGeo) { // <--- ТЕПЕРЬ ELSE СТОИТ СРАЗУ ПОСЛЕ IF
         let currentH = tierObj.fixedHeight || currentRes.h;
         let newH = parseFloat((currentH + delta).toFixed(1));
         if (newH < 1) newH = 1;
@@ -4516,7 +4495,7 @@ function modifyTier(side, idx, axis, delta) {
         // Фиксируем D, если не был
         if (!tierObj.fixedDiameter) tierObj.fixedDiameter = Math.round(currentRes.d);
         
-        // Для цифры W фиксировать НЕ НАДО, пусть считается от D
+        // Для цифры W фиксировать НЕ НАДО (если не прямоугольник), но если прямоугольник - надо
         if (globalShape === 'rectangle' && !tierObj.fixedWidth) tierObj.fixedWidth = Math.round(currentRes.w);
         
         tierObj.weight = 0;
@@ -4524,7 +4503,6 @@ function modifyTier(side, idx, axis, delta) {
 
     calculateSide(side);
 }
-
 
 function calculateSide(side) {
     // 1. Берем данные конкретной стороны
@@ -11968,6 +11946,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
