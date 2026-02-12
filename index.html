@@ -948,6 +948,10 @@ class CakeVisualizer {
       const gradId = 'gradSphere_' + Math.round(Math.random() * 100000);
 
       let svgContent = `<defs>
+        <style type="text/css">
+            @import url('https://fonts.googleapis.com/css2?family=Anton&family=Comic+Neue:wght@700&family=Courier+Prime:wght@700&family=Roboto:wght@900&family=Tinos:wght@700&display=swap');
+            text { font-family: ${t.symbolFont || 'Arial'}; }
+        </style>
         <radialGradient id="${gradId}" cx="35%" cy="35%" r="65%">
             <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
             <stop offset="50%" style="stop-color:#e0e0e0;stop-opacity:1" />
@@ -1056,21 +1060,15 @@ class CakeVisualizer {
               const transform = `translate(${textX},${textY}) scale(1, ${flatScale}) translate(-${textX},-${textY})`;
 
               // --- 1. РИСУЕМ БОКОВИНУ (СТЕНЫ) ---
-              // ВАЖНО: Рисуем СНИЗУ ВВЕРХ (от дна к крышке), чтобы нижние слои перекрывались верхними.
-              // Плотность: 1 слой на 1 пиксель (для монолитности)
-              const layers = Math.ceil(pxH); 
+              // Рисуем снизу вверх. Math.max(1, ...) гарантирует, что даже при H=0 будет слой.
+              const layersCount = Math.max(1, Math.ceil(pxH)); 
               
-              for (let i = layers; i > 0; i--) {
-                  // Смещение текущего слоя вниз
-                  const shiftY = i; 
-                  
-                  // Цвет боковины: делаем чуть темнее для объема
-                  // stroke нужен толстый, чтобы закрыть микро-щели при повороте
-                  svgContent += `<text x="${textX}" y="${textY + shiftY}" transform="${transform}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${pxD}" fill="#8D6E63" stroke="#8D6E63" stroke-width="2" style="user-select:none; dominant-baseline: central;">${char}</text>`;
+              for (let i = layersCount; i > 0; i--) {
+                  svgContent += `<text x="${textX}" y="${textY + i}" transform="${transform}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${pxD}" fill="#8D6E63" stroke="#8D6E63" stroke-width="2" style="user-select:none; dominant-baseline: central;">${char}</text>`;
               }
 
               // --- 2. РИСУЕМ ЛИЦО (ВЕРХНИЙ СЛОЙ) ---
-              // Рисуем поверх всего
+              // Добавляем проверку z-index через явную отрисовку в конце
               svgContent += `<text x="${textX}" y="${textY}" transform="${transform}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${pxD}" fill="url(#${gradId})" stroke="#757575" stroke-width="1" style="user-select:none; dominant-baseline: central;">${char}</text>`;
               
               // --- 3. ПОДПИСИ РАЗМЕРОВ (КОРРЕКТИРОВКА) ---
@@ -11972,6 +11970,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
