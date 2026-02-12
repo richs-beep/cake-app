@@ -2966,17 +2966,9 @@ body {
         <input type="number" id="globalSides" value="6">
     </div>
             
-<div class="form-group" id="grpSymbol" style="display:none; flex:3; border-left: 2px solid #ccc; padding-left: 10px;">
-    <div style="display:flex; gap:5px;">
-        <div style="flex:1;">
-            <span class="form-label">Знак</span>
-            <input type="text" id="cakeSymbol" value="5" maxlength="2" style="font-weight:bold; text-align:center; font-size:16px; text-transform:uppercase;" oninput="updateTierUI()">
-        </div>
-        <div style="flex:1;">
-            <span class="form-label">Ширина</span>
-            <input type="text" id="cakeSymbolWidth" disabled style="background:#f5f5f5; color:#555; text-align:center; font-size:12px;" placeholder="Авто">
-        </div>
-    </div>
+<div class="form-group" id="grpSymbol" style="display:none; flex:1; border-left: 2px solid #ccc; padding-left: 10px; min-width: 100px;">
+    <span class="form-label">Знак</span>
+    <input type="text" id="cakeSymbol" value="5" maxlength="2" style="font-weight:bold; text-align:center; font-size:16px; text-transform:uppercase;" oninput="updateTierUI()">
 </div>
    
     <div class="form-group" id="sphereFillBlock" style="display:none; flex:2;">
@@ -4121,19 +4113,18 @@ function updateTierUI() {
     if (sphereFillBlock) sphereFillBlock.style.display = (sh === 'sphere') ? 'block' : 'none';
     if (grpSymbol) grpSymbol.style.display = (sh === 'symbol') ? 'flex' : 'none';
 
-    // --- РАСЧЕТ ШИРИНЫ СИМВОЛА НА ЛЕТУ (БЕЗОПАСНЫЙ) ---
+   
+    // --- РАСЧЕТ ШИРИНЫ СИМВОЛА НА ЛЕТУ (БЕЗ ВЫВОДА В ПОЛЕ) ---
     if (sh === 'symbol') {
         try {
             const sym = document.getElementById('cakeSymbol').value || '5';
-            const font = "black 100px Arial Black, sans-serif"; // Жестко заданный шрифт
-            
-            const calc = new CakeCalculator({}); 
+            const font = "900 100px Arial Black, sans-serif";
+            const calc = new CakeCalculator({});
             const meta = calc._analyzeSymbol(sym, font);
             
-            const tierSize = (appState.tiers[0] && appState.tiers[0].fixedDiameter) ? appState.tiers[0].fixedDiameter : 25;
-            const calculatedWidth = Math.round(tierSize * meta.aspectRatio);
-            document.getElementById('cakeSymbolWidth').value = `~${calculatedWidth} см`;
-        } catch (e) { console.log('Ошибка превью ширины'); }
+            // Мы просто сохраняем aspectRatio в глобальную переменную или используем в расчете
+            // Вывод в input id="cakeSymbolWidth" удален.
+        } catch (e) { console.log('Символ пока не готов'); }
     }
 
     updateCoatingUI(); 
@@ -4209,17 +4200,15 @@ function calculateInitial() {
     });
 
     const tiersPayload = appState.tiers.map(t => ({
-    id: t.id,
-    recipeId: t.recipeId,
-    weight: t.weight * 1000, 
-    // ДОБАВИЛИ ФЛАГ:
-    isGeometryMode: t.isGeometryMode || false, 
-    fixedDiameter: parseFloat(t.fixedDiameter) || null,
-    fixedWidth: parseFloat(t.fixedWidth) || null,
-    fixedHeight: parseFloat(t.fixedHeight) || null,
-    symbolChar: document.getElementById('cakeSymbol').value || '5',
-    symbolFont: document.getElementById('cakeFont').value
-}));
+        id: t.id,
+        recipeId: t.recipeId,
+        weight: t.weight * 1000,
+        isGeometryMode: t.isGeometryMode || false,
+        fixedDiameter: parseFloat(t.fixedDiameter) || null,
+        fixedWidth: parseFloat(t.fixedWidth) || null,
+        fixedHeight: parseFloat(t.fixedHeight) || null,
+        symbolChar: document.getElementById('cakeSymbol').value || '5' // Оставили только символ
+    }));
 
     const payload = {
         tiers: tiersPayload,
@@ -11916,6 +11905,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
