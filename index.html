@@ -948,10 +948,6 @@ class CakeVisualizer {
       const gradId = 'gradSphere_' + Math.round(Math.random() * 100000);
 
       let svgContent = `<defs>
-        <style type="text/css">
-            @import url('https://fonts.googleapis.com/css2?family=Anton&family=Comic+Neue:wght@700&family=Courier+Prime:wght@700&family=Roboto:wght@900&family=Tinos:wght@700&display=swap');
-            text { font-family: ${t.symbolFont || 'Arial'}; }
-        </style>
         <radialGradient id="${gradId}" cx="35%" cy="35%" r="65%">
             <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
             <stop offset="50%" style="stop-color:#e0e0e0;stop-opacity:1" />
@@ -1041,68 +1037,45 @@ class CakeVisualizer {
 
           } else if (shape === 'symbol') {
               const char = t.symbolChar || '5';
-              // Безопасная обработка шрифта
-              const fontStr = t.symbolFont || 'Arial';
-              const font = fontStr;
               
               // --- ГЕОМЕТРИЯ ---
-              const pxD = t.d * SCALE; // "Глубина" буквы (вертикаль на листе)
-              const pxH = t.h * SCALE; // Реальная высота торта (толщина)
+              const pxD = t.d * SCALE; 
+              const pxH = t.h * SCALE; 
 
-              // Сплющивание для перспективы (0.55 = вид под углом ~45 градусов)
               const flatScale = 0.55;
-              
-              // Координаты ВЕРХНЕЙ грани торта
               const textX = cX;
               const textY = currentBaseCenterY - pxH; 
               
-              // Трансформация: сплющиваем букву относительно ее центра
               const transform = `translate(${textX},${textY}) scale(1, ${flatScale}) translate(-${textX},-${textY})`;
 
               // --- 1. РИСУЕМ БОКОВИНУ (СТЕНЫ) ---
-              // Рисуем снизу вверх. Math.max(1, ...) гарантирует, что даже при H=0 будет слой.
               const layersCount = Math.max(1, Math.ceil(pxH)); 
               
               for (let i = layersCount; i > 0; i--) {
-                  svgContent += `<text x="${textX}" y="${textY + i}" transform="${transform}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${pxD}" fill="#8D6E63" stroke="#8D6E63" stroke-width="2" style="user-select:none; dominant-baseline: central;">${char}</text>`;
+                  // ЗАМЕНИЛИ: font-family теперь жестко "Arial Black"
+                  svgContent += `<text x="${textX}" y="${textY + i}" transform="${transform}" text-anchor="middle" font-family="Arial Black, sans-serif" font-weight="900" font-size="${pxD}" fill="#8D6E63" stroke="#8D6E63" stroke-width="2" style="user-select:none; dominant-baseline: central;">${char}</text>`;
               }
 
               // --- 2. РИСУЕМ ЛИЦО (ВЕРХНИЙ СЛОЙ) ---
-              // Добавляем проверку z-index через явную отрисовку в конце
-              svgContent += `<text x="${textX}" y="${textY}" transform="${transform}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${pxD}" fill="url(#${gradId})" stroke="#757575" stroke-width="1" style="user-select:none; dominant-baseline: central;">${char}</text>`;
+              // ЗАМЕНИЛИ: font-family теперь жестко "Arial Black"
+              svgContent += `<text x="${textX}" y="${textY}" transform="${transform}" text-anchor="middle" font-family="Arial Black, sans-serif" font-weight="900" font-size="${pxD}" fill="url(#${gradId})" stroke="#757575" stroke-width="1" style="user-select:none; dominant-baseline: central;">${char}</text>`;
               
-              // --- 3. ПОДПИСИ РАЗМЕРОВ (КОРРЕКТИРОВКА) ---
-
-              // Визуальные границы (с учетом сплющивания)
+              // --- 3. ПОДПИСИ РАЗМЕРОВ ---
               const halfH_Visual = (pxD * flatScale) / 2;
-              const visualTop = textY - halfH_Visual;
               const visualBottom = textY + halfH_Visual;
-              const visualBase = visualBottom + pxH; // Самая нижняя точка картинки
+              const visualBase = visualBottom + pxH; 
 
-              // L (Длина/Высота буквы) - Слева
-              // Отодвигаем чуть дальше (-20px)
               svgContent += `<text x="${textX - pxD*0.45 - 20}" y="${textY}" text-anchor="end" fill="${colDim}" font-weight="bold" font-size="12" transform="rotate(-90 ${textX - pxD*0.45 - 20},${textY})" dominant-baseline="middle">L:${fmt(t.d)}</text>`;
               
-              // W (Ширина буквы) - Снизу
-              // Считаем ширину (если не задана, берем примерную пропорцию)
               const calculatedW = t.d * (t.w / t.d || 0.6); 
               const displayW = t.w ? fmt(t.w) : fmt(calculatedW);
-              // Опускаем ниже основания торта (+25px)
               svgContent += `<text x="${textX}" y="${visualBase + 25}" text-anchor="middle" fill="${colDim}" font-weight="bold" font-size="12">W:${displayW}</text>`;
               
-              // H (Высота/Толщина торта) - Справа
-              // Рисуем линию высоты от верхней грани до нижней
-              const hLabelX = textX + pxD*0.5 + 20; // Отодвигаем вправо
-              
-              // Вертикальная линия размера
+              const hLabelX = textX + pxD*0.5 + 20; 
               svgContent += `<line x1="${hLabelX}" y1="${textY}" x2="${hLabelX}" y2="${textY + pxH}" stroke="${colDim}" stroke-width="1" opacity="0.5"/>`;
-              // Засечки
               svgContent += `<line x1="${hLabelX-3}" y1="${textY}" x2="${hLabelX+3}" y2="${textY}" stroke="${colDim}" stroke-width="1"/>`;
               svgContent += `<line x1="${hLabelX-3}" y1="${textY + pxH}" x2="${hLabelX+3}" y2="${textY + pxH}" stroke="${colDim}" stroke-width="1"/>`;
-              
-              // Текст высоты (по центру линии)
               svgContent += `<text x="${hLabelX + 5}" y="${textY + pxH / 2}" fill="#E65100" font-weight="bold" font-size="14" dominant-baseline="middle">H:${fmt(t.h)}</text>`;
-
           } else { 
               const ry = pxR * 0.3;
               const tierTopY = currentBaseCenterY - pxH;
@@ -2992,43 +2965,20 @@ body {
         <span class="form-label">Углов</span>
         <input type="number" id="globalSides" value="6">
     </div>
-
-    <div class="form-group" id="grpSymbol" style="display:none; flex:3; border-left: 2px solid #ccc; padding-left: 10px;">
-        <div style="display:flex; gap:5px;">
-            <div style="flex:1;">
-                <span class="form-label">Знак</span>
-                <input type="text" id="cakeSymbol" value="5" maxlength="2" placeholder="A" style="font-weight:bold; text-align:center; font-size:16px; text-transform:uppercase;" oninput="updateTierUI()">
-            </div>
-            <div style="flex:2;">
-                <span class="form-label">Шрифт</span>
-                <select id="cakeFont" onchange="updateTierUI()" style="font-size:14px; padding: 5px;">
-    <option value="'Roboto', 'Arial Black', sans-serif" style="font-family: 'Roboto', 'Arial Black', sans-serif; font-weight: 900;">
-        Жирный (Roboto) - АБВ 123
-    </option>
-    
-    <option value="'Tinos', 'Times New Roman', serif" style="font-family: 'Tinos', 'Times New Roman', serif; font-weight: bold;">
-        С засечками (Tinos) - АБВ 123
-    </option>
-    
-    <option value="'Anton', 'Impact', sans-serif" style="font-family: 'Anton', 'Impact', sans-serif; letter-spacing: 1px;">
-        Мощный (Anton) - АБВ 123
-    </option>
-    
-    <option value="'Courier Prime', 'Courier New', monospace" style="font-family: 'Courier Prime', 'Courier New', monospace; font-weight: bold;">
-        Машинка (Courier) - АБВ 123
-    </option>
-    
-    <option value="'Comic Neue', 'Comic Sans MS', cursive" style="font-family: 'Comic Neue', 'Comic Sans MS', cursive; font-weight: bold;">
-        Рукописный (Comic) - АБВ 123
-    </option>
-</select>
-            </div>
-            <div style="flex:1;">
-                <span class="form-label">Ширина</span>
-                <input type="text" id="cakeSymbolWidth" disabled style="background:#f5f5f5; color:#555; text-align:center; font-size:12px;" placeholder="Авто">
-            </div>
+            
+<div class="form-group" id="grpSymbol" style="display:none; flex:3; border-left: 2px solid #ccc; padding-left: 10px;">
+    <div style="display:flex; gap:5px;">
+        <div style="flex:1;">
+            <span class="form-label">Знак</span>
+            <input type="text" id="cakeSymbol" value="5" maxlength="2" style="font-weight:bold; text-align:center; font-size:16px; text-transform:uppercase;" oninput="updateTierUI()">
+        </div>
+        <div style="flex:1;">
+            <span class="form-label">Ширина</span>
+            <input type="text" id="cakeSymbolWidth" disabled style="background:#f5f5f5; color:#555; text-align:center; font-size:12px;" placeholder="Авто">
         </div>
     </div>
+</div>
+   
     <div class="form-group" id="sphereFillBlock" style="display:none; flex:2;">
         <span class="form-label">Заполнение</span>
         <div style="font-size:11px;">
@@ -4175,19 +4125,15 @@ function updateTierUI() {
     if (sh === 'symbol') {
         try {
             const sym = document.getElementById('cakeSymbol').value || '5';
-            const font = document.getElementById('cakeFont').value;
+            const font = "black 100px Arial Black, sans-serif"; // Жестко заданный шрифт
             
             const calc = new CakeCalculator({}); 
             const meta = calc._analyzeSymbol(sym, font);
             
             const tierSize = (appState.tiers[0] && appState.tiers[0].fixedDiameter) ? appState.tiers[0].fixedDiameter : 25;
-            
             const calculatedWidth = Math.round(tierSize * meta.aspectRatio);
-            const wInput = document.getElementById('cakeSymbolWidth');
-            if(wInput) wInput.value = `~${calculatedWidth} см`;
-        } catch (e) {
-            console.log('Пока рано считать ширину');
-        }
+            document.getElementById('cakeSymbolWidth').value = `~${calculatedWidth} см`;
+        } catch (e) { console.log('Ошибка превью ширины'); }
     }
 
     updateCoatingUI(); 
@@ -4271,7 +4217,7 @@ function calculateInitial() {
     fixedDiameter: parseFloat(t.fixedDiameter) || null,
     fixedWidth: parseFloat(t.fixedWidth) || null,
     fixedHeight: parseFloat(t.fixedHeight) || null,
-    symbolChar: document.getElementById('cakeSymbol').value, // <-- Добавить
+    symbolChar: document.getElementById('cakeSymbol').value || '5',
     symbolFont: document.getElementById('cakeFont').value
 }));
 
@@ -11970,6 +11916,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
