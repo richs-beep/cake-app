@@ -4228,16 +4228,20 @@ function calculateInitial() {
         }
     });
 
-    const tiersPayload = appState.tiers.map(t => ({
-        id: t.id,
-        recipeId: t.recipeId,
-        weight: t.weight * 1000,
-        isGeometryMode: t.isGeometryMode || false,
-        fixedDiameter: parseFloat(t.fixedDiameter) || null,
-        fixedWidth: parseFloat(t.fixedWidth) || null,
-        fixedHeight: parseFloat(t.fixedHeight) || null,
-        symbolChar: document.getElementById('cakeSymbol').value || '5' // Оставили только символ
-    }));
+    // СТАЛО (Добавляем проверку формы):
+const tiersPayload = appState.tiers.map(t => ({
+    id: t.id,
+    recipeId: t.recipeId,
+    weight: t.weight * 1000,
+    isGeometryMode: t.isGeometryMode || false,
+    fixedDiameter: parseFloat(t.fixedDiameter) || null,
+    
+    // ВОТ ЗДЕСЬ ПРАВКА: Если форма "symbol", принудительно шлем null, чтобы сработал авто-расчет пропорций
+    fixedWidth: (document.getElementById('globalShape').value === 'symbol') ? null : (parseFloat(t.fixedWidth) || null),
+    
+    fixedHeight: parseFloat(t.fixedHeight) || null,
+    symbolChar: document.getElementById('cakeSymbol').value || '5'
+}));
 
     const payload = {
         tiers: tiersPayload,
@@ -11933,6 +11937,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
