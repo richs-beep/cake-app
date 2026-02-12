@@ -753,39 +753,35 @@ _calculateSingleTier(tierInput, isBottom) {
   }
 
 _solveGeometry(p) {
-    let d = p.fixedDiameter || 20; // Высота знака (или Длина/Диаметр)
+    let d = p.fixedDiameter || 20; // Высота знака (Длина)
     let h = p.fixedHeight || 10;   // Толщина торта
     
-    // 1. АНАЛИЗ СИМВОЛА (Нужен только для коэффициента заполнения)
-    let symbolMeta = null;
+    // 1. АНАЛИЗ СИМВОЛА (Только для того, чтобы понять, сколько "дырок" в цифре)
+    let symbolMeta = { fillFactor: 1, aspectRatio: 0.6 }; // Дефолт
     if (p.shape === 'symbol') {
         symbolMeta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
     }
 
-    // 2. ЖЕЛЕЗНАЯ ЛОГИКА ШИРИНЫ (W) - КАК У ПРЯМОУГОЛЬНИКА
+    // 2. ОПРЕДЕЛЕНИЕ ШИРИНЫ (W)
     let w = 0;
 
+    // ЕСЛИ ПОЛЬЗОВАТЕЛЬ ЗАДАЛ ШИРИНУ — ЭТО ЗАКОН
     if (p.fixedWidth && p.fixedWidth > 0) {
-        // Если ширина задана (руками или кнопками) — БЕРЕМ ЕЁ. Точка.
         w = p.fixedWidth;
     } 
+    // ЕСЛИ НЕ ЗАДАЛ — ПРЕДЛАГАЕМ ДЕФОЛТ (НО НЕ ПРИРАВНИВАЕМ К D!)
     else {
-        // Если поле пустое — считаем стартовое значение
-        if (p.shape === 'rectangle') {
-            w = d * 0.75;
-        } 
-        else if (p.shape === 'symbol') {
-            // Считаем по шрифту, но только как стартовое значение!
-            // Дальше оно живет своей жизнью и не привязывается к D.
-            w = d * symbolMeta.aspectRatio; 
-        } 
-        else {
+        if (p.shape === 'rectangle' || p.shape === 'symbol') {
+            w = d * 0.6; // По умолчанию ширина = 60% от длины
+        } else {
             w = d; // Круг, Квадрат
         }
     }
 
-    // --- 3. РАСЧЕТ ПОД ВЕС (Если это не ручной режим Геометрии) ---
-    if (!p.isGeometryMode && (!p.fixedDiameter || !p.fixedHeight || !p.fixedWidth)) {
+    // --- 3. РАСЧЕТ ПОД ВЕС ---
+    // Выполняется, если не все размеры зафиксированы жестко
+    if (!p.isGeometryMode && (!p.fixedDiameter || !p.fixedHeight || (!p.fixedWidth && (p.shape === 'rectangle' || p.shape === 'symbol')))) {
+        
         const thick = 0.5;
         const coatingDensity = p.coatingConsumption / thick;
 
@@ -793,12 +789,21 @@ _solveGeometry(p) {
              let vInner = 0;
              let areaCoat = 0;
 
+             // Если ширина НЕ зафиксирована руками, она меняется пропорционально D
+             if (!p.fixedWidth) {
+                 if (p.shape === 'symbol' || p.shape === 'rectangle') {
+                     w = d * 0.6; 
+                 } else {
+                     w = d;
+                 }
+             }
+
+             // СЧИТАЕМ ОБЪЕМ И ПЛОЩАДЬ
              if (p.shape === 'symbol') {
-                 // ТУТ ГЛАВНОЕ: Мы считаем площадь искаженного прямоугольника (d * w)
-                 // и умножаем на fillFactor (насколько цифра "дырявая").
-                 // Это позволяет растягивать цифру как угодно, не ломая математику.
+                 // Площадь основания = (Длина * Ширина) * Коэф.заполнения цифры
                  const areaBase = (d * w) * symbolMeta.fillFactor; 
                  vInner = areaBase * h;
+                 // Периметр ~ (2 * (L + W)) * 1.3 (у цифр периметр больше прямоугольника из-за изгибов)
                  const perimeter = 2 * (d + w) * 1.3; 
                  areaCoat = areaBase + (perimeter * h);
              } 
@@ -811,36 +816,35 @@ _solveGeometry(p) {
              const estWeight = (vInner * p.fillingDensity) + (vCoat * coatingDensity);
 
              if (Math.abs(estWeight - p.targetWeight) < 5) break; 
-             
              const ratio = p.targetWeight / estWeight;
 
-             // ЛОГИКА ИЗМЕНЕНИЯ РАЗМЕРОВ
+             // --- ЛОГИКА ПОДГОНА РАЗМЕРОВ ---
              if (p.shape === 'sphere') { 
                  d *= Math.pow(ratio, 1/3); h = d; 
              }
-             // ПРЯМОУГОЛЬНИК И СИМВОЛ — ТЕПЕРЬ ОДНА ЛОГИКА
+             // ПРЯМОУГОЛЬНИК И СИМВОЛ — ОДИНАКОВО
              else if (p.shape === 'symbol' || p.shape === 'rectangle') { 
+                  
+                  // 1. Если зафиксированы D и W — меняем только H
                   if (p.fixedDiameter && p.fixedWidth) {
-                      // Если зафиксированы ОБА размера (D и W) -> меняем только Высоту (H)
                       h *= ratio;
                   }
+                  // 2. Если зафиксирована только Длина (D) — меняем H (W зафиксировано пользователем)
                   else if (p.fixedDiameter) {
-                      // Если зафиксирована только Высота Знака (D) -> меняем Высоту Торта (H)
-                      // Ширина (W) остается такой, какой была инициализирована выше.
                       h *= ratio; 
                   }
+                  // 3. Если зафиксирована Толщина (H) — меняем D и W
                   else if (p.fixedHeight) {
-                      // Если зафиксирована Толщина Торта (H) -> меняем размер Знака пропорционально
                       const scale = Math.sqrt(ratio);
                       d *= scale;
-                      w *= scale;
+                      if (!p.fixedWidth) w *= scale;
                   }
+                  // 4. Если ничего не зафиксировано — меняем всё
                   else { 
-                      // Ничего не зафиксировано -> меняем всё пропорционально (3D)
                       const scale = Math.pow(ratio, 1/3); 
                       d *= scale; 
                       h *= scale; 
-                      w *= scale;
+                      if (!p.fixedWidth) w *= scale;
                   }
              } 
              else { // Круг, Квадрат
@@ -853,7 +857,8 @@ _solveGeometry(p) {
     
     // --- 4. ФИНАЛИЗАЦИЯ ---
     d = Math.round(d); 
-    if (w) w = Math.round(w);
+    w = Math.round(w); // Округляем ту ширину, которая получилась (введенная или рассчитанная)
+    
     if (p.shape === 'sphere') { h = d; } else { h = Math.round(h * 10) / 10; }
 
     let vFinal, areaFinal;
@@ -4240,18 +4245,18 @@ function calculateInitial() {
 
     // СТАЛО (Добавляем проверку формы):
 const tiersPayload = appState.tiers.map(t => ({
-    id: t.id,
-    recipeId: t.recipeId,
-    weight: t.weight * 1000,
-    isGeometryMode: t.isGeometryMode || false,
-    fixedDiameter: parseFloat(t.fixedDiameter) || null,
-    
-    // ВОТ ЗДЕСЬ ПРАВКА: Если форма "symbol", принудительно шлем null, чтобы сработал авто-расчет пропорций
-    fixedWidth: (document.getElementById('globalShape').value === 'symbol') ? null : (parseFloat(t.fixedWidth) || null),
-    
-    fixedHeight: parseFloat(t.fixedHeight) || null,
-    symbolChar: document.getElementById('cakeSymbol').value || '5'
-}));
+        id: t.id,
+        recipeId: t.recipeId,
+        weight: t.weight * 1000,
+        isGeometryMode: t.isGeometryMode || false,
+        fixedDiameter: parseFloat(t.fixedDiameter) || null,
+        
+        // ВАЖНО: ДЛЯ СИМВОЛА ТЕПЕРЬ ВСЕГДА БЕРЕМ ШИРИНУ, ЕСЛИ ОНА ЕСТЬ
+        fixedWidth: parseFloat(t.fixedWidth) || null,
+        
+        fixedHeight: parseFloat(t.fixedHeight) || null,
+        symbolChar: document.getElementById('cakeSymbol').value || '5'
+    }));
 
     const payload = {
         tiers: tiersPayload,
@@ -11946,6 +11951,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
