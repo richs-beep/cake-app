@@ -915,47 +915,45 @@ _solveGeometry(p) {
   }
 
       // --- НОВЫЙ МЕТОД: АНАЛИЗ СИМВОЛА ---
-  _analyzeSymbol(char, font) {
-      // 1. Создаем виртуальный холст
+    _analyzeSymbol(char, font) {
       const cvs = document.createElement('canvas');
       const ctx = cvs.getContext('2d');
       const size = 100; // Разрешение сканирования
       cvs.width = size;
       cvs.height = size;
 
-      // 2. Рисуем символ
-      ctx.font = `bold ${size}px ${font}`;
+      // ИСПРАВЛЕНИЕ 1: Ставим шрифт "Arial Black" (самый жирный) и вес 900
+      ctx.font = `900 ${size}px "Arial Black", "Arial", sans-serif`;
       ctx.textBaseline = 'top';
       ctx.textAlign = 'left';
       
-      // Измеряем ширину текста
       const metrics = ctx.measureText(char);
       const textW = metrics.width;
-      // Эвристика высоты (примерно 75% от размера шрифта для заглавных)
-      const textH = size * 0.75; 
-
-      // Очищаем и рисуем
+      
       ctx.fillStyle = '#000';
       ctx.fillText(char, 0, 0);
 
-      // 3. Сканируем пиксели (Считаем площадь)
       const imgData = ctx.getImageData(0, 0, textW, size).data;
       let hitCount = 0;
       for (let i = 3; i < imgData.length; i += 4) {
           if (imgData[i] > 128) hitCount++; // Считаем непрозрачные пиксели
       }
 
-      // 4. Вычисляем коэффициенты
-      const boundingBoxArea = textW * size; // Площадь прямоугольника
-      // Fill Factor: какую часть прямоугольника реально занимает буква
-      // (защита от деления на 0, если символ пустой)
-      const fillFactor = (boundingBoxArea > 0) ? (hitCount / boundingBoxArea) : 1; 
+      // ИСПРАВЛЕНИЕ 2: "Эффект кондитера"
+      // Реальный торт-цифра (как на фото) занимает почти всю площадь.
+      // Умножаем пиксели на 1.25, чтобы имитировать широкую нарезку.
+      hitCount = hitCount * 1.25; 
+
+      const boundingBoxArea = textW * size; 
       
-      // Пропорция (Ширина / Высота)
+      // Защита: коэффициент не может быть больше 1 (не больше полного прямоугольника)
+      const fillFactor = (boundingBoxArea > 0) ? Math.min(1, hitCount / boundingBoxArea) : 1; 
+      
       const aspectRatio = textW / size;
 
       return { fillFactor, aspectRatio };
   }
+ 
 }
 
 class CakeVisualizer {
@@ -11951,6 +11949,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
