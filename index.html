@@ -752,129 +752,114 @@ _calculateSingleTier(tierInput, isBottom) {
     return { netWeight: weight, geom: { d, h, volume: vol, shape: shape } };
   }
 
- _solveGeometry(p) {
-    let d = p.fixedDiameter || 20; // Это "Высота знака" (вертикаль)
+_solveGeometry(p) {
+    let d = p.fixedDiameter || 20; // Высота знака (или Длина/Диаметр)
+    let h = p.fixedHeight || 10;   // Толщина торта
     
-    // --- ЛОГИКА ОПРЕДЕЛЕНИЯ ШИРИНЫ (W) ---
-    let w = 0;
-
-    if (p.fixedWidth) {
-        // 1. Если пользователь задал ширину руками — слушаемся безоговорочно
-        w = p.fixedWidth;
-    } 
-    else {
-        // 2. Если поле пустое — считаем авто-значение
-        if (p.shape === 'rectangle') {
-            w = d * 0.75; // Для прямоугольника - 75%
-        } 
-        else if (p.shape === 'symbol') {
-            // Для символа - считаем по шрифту!
-            // ВАЖНО: Не приравниваем к d!
-            const meta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
-            w = d * meta.aspectRatio; 
-        } 
-        else {
-            // Для круга, квадрата, многогранника W = D
-            w = d; 
-        }
-    }
-
-    let h = p.fixedHeight || 10;
-    // ...
-    
-    // --- 1. ПРИНУДИТЕЛЬНЫЙ РАСЧЕТ ПРОПОРЦИЙ ---
+    // 1. АНАЛИЗ СИМВОЛА (Нужен только для коэффициента заполнения)
     let symbolMeta = null;
     if (p.shape === 'symbol') {
         symbolMeta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
-        
-        // ВАЖНО: Если есть Размер (D), мы ВСЕГДА пересчитываем Ширину (W) по пропорции буквы.
-        // Неважно, задана высота или нет. 5-ка не может быть квадратной.
-        if (d) {
-             w = d * symbolMeta.aspectRatio;
-        }
-        
-        // Дефолтная толщина, если не задана
-        if (!p.fixedHeight) h = 7;
     }
 
-    // --- 2. БЫСТРЫЕ ПРОВЕРКИ (Если считать не надо) ---
-    
-    if (p.shape === 'sphere' && p.fixedDiameter) { h = d; }
-    
-    // Если пользователь задал все жестко -> мы просто используем эти размеры (W уже исправлен выше!)
-    else if ((p.shape === 'cylinder' || p.shape === 'square' || p.shape === 'polygon' || p.shape === 'symbol') && p.fixedDiameter && p.fixedHeight) {
-        // Тут ничего не делаем, переменные d, w, h уже готовы
-    }
-    
-    // --- 3. ЦИКЛ ПОДБОРА (ЕСЛИ НУЖНО ПОДОГНАТЬ ПОД ВЕС) ---
+    // 2. ЖЕЛЕЗНАЯ ЛОГИКА ШИРИНЫ (W) - КАК У ПРЯМОУГОЛЬНИКА
+    let w = 0;
+
+    if (p.fixedWidth && p.fixedWidth > 0) {
+        // Если ширина задана (руками или кнопками) — БЕРЕМ ЕЁ. Точка.
+        w = p.fixedWidth;
+    } 
     else {
+        // Если поле пустое — считаем стартовое значение
+        if (p.shape === 'rectangle') {
+            w = d * 0.75;
+        } 
+        else if (p.shape === 'symbol') {
+            // Считаем по шрифту, но только как стартовое значение!
+            // Дальше оно живет своей жизнью и не привязывается к D.
+            w = d * symbolMeta.aspectRatio; 
+        } 
+        else {
+            w = d; // Круг, Квадрат
+        }
+    }
+
+    // --- 3. РАСЧЕТ ПОД ВЕС (Если это не ручной режим Геометрии) ---
+    if (!p.isGeometryMode && (!p.fixedDiameter || !p.fixedHeight || !p.fixedWidth)) {
         const thick = 0.5;
         const coatingDensity = p.coatingConsumption / thick;
 
-      for(let i=0; i<20; i++) { 
-          let vInner = 0;
-          let areaCoat = 0;
+        for(let i=0; i<20; i++) { 
+             let vInner = 0;
+             let areaCoat = 0;
 
-          if (p.shape === 'symbol') {
-               // Внутри цикла D меняется, значит W тоже должна меняться следом!
-               w = d * symbolMeta.aspectRatio;
-               
-               const areaBase = (d * w) * symbolMeta.fillFactor; 
-               vInner = areaBase * h;
-               const perimeter = 2 * (d + w) * 1.3; 
-               areaCoat = areaBase + (perimeter * h);
-          } 
-          else {
-               vInner = this._calcVolume(p.shape, d, h, w, p.polySides);
-               areaCoat = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides); 
-          }
+             if (p.shape === 'symbol') {
+                 // ТУТ ГЛАВНОЕ: Мы считаем площадь искаженного прямоугольника (d * w)
+                 // и умножаем на fillFactor (насколько цифра "дырявая").
+                 // Это позволяет растягивать цифру как угодно, не ломая математику.
+                 const areaBase = (d * w) * symbolMeta.fillFactor; 
+                 vInner = areaBase * h;
+                 const perimeter = 2 * (d + w) * 1.3; 
+                 areaCoat = areaBase + (perimeter * h);
+             } 
+             else {
+                 vInner = this._calcVolume(p.shape, d, h, w, p.polySides);
+                 areaCoat = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides); 
+             }
+             
+             const vCoat = areaCoat * thick;
+             const estWeight = (vInner * p.fillingDensity) + (vCoat * coatingDensity);
 
-          const vCoat = areaCoat * thick;
-          const estWeight = (vInner * p.fillingDensity) + (vCoat * coatingDensity);
+             if (Math.abs(estWeight - p.targetWeight) < 5) break; 
+             
+             const ratio = p.targetWeight / estWeight;
 
-          if (Math.abs(estWeight - p.targetWeight) < 5) break; 
-          
-          const ratio = p.targetWeight / estWeight;
-
-          if (p.shape === 'sphere') { 
-              d *= Math.pow(ratio, 1/3); h = d; 
-          } 
-          else if (p.shape === 'rectangle' || p.shape === 'symbol') { 
-               if (p.fixedDiameter) {
-                   // D фиксирован -> меняем H
-                   h *= ratio; 
-               }
-               else if (p.fixedHeight) {
-                   // H фиксирована -> меняем D (и W подтянется в начале след. итерации)
-                   d *= Math.sqrt(ratio); 
-               }
-               else { 
-                   const f = Math.pow(ratio, 1/3); 
-                   d *= f; h *= f; w *= f; 
-               }
-          } 
-          else { 
-               if (p.fixedDiameter) h *= ratio; 
-               else if (p.fixedHeight) d *= Math.sqrt(ratio); 
-               else { const f = Math.pow(ratio, 1/3); d *= f; h *= f; w *= f; }
-          }
-      }
+             // ЛОГИКА ИЗМЕНЕНИЯ РАЗМЕРОВ
+             if (p.shape === 'sphere') { 
+                 d *= Math.pow(ratio, 1/3); h = d; 
+             }
+             // ПРЯМОУГОЛЬНИК И СИМВОЛ — ТЕПЕРЬ ОДНА ЛОГИКА
+             else if (p.shape === 'symbol' || p.shape === 'rectangle') { 
+                  if (p.fixedDiameter && p.fixedWidth) {
+                      // Если зафиксированы ОБА размера (D и W) -> меняем только Высоту (H)
+                      h *= ratio;
+                  }
+                  else if (p.fixedDiameter) {
+                      // Если зафиксирована только Высота Знака (D) -> меняем Высоту Торта (H)
+                      // Ширина (W) остается такой, какой была инициализирована выше.
+                      h *= ratio; 
+                  }
+                  else if (p.fixedHeight) {
+                      // Если зафиксирована Толщина Торта (H) -> меняем размер Знака пропорционально
+                      const scale = Math.sqrt(ratio);
+                      d *= scale;
+                      w *= scale;
+                  }
+                  else { 
+                      // Ничего не зафиксировано -> меняем всё пропорционально (3D)
+                      const scale = Math.pow(ratio, 1/3); 
+                      d *= scale; 
+                      h *= scale; 
+                      w *= scale;
+                  }
+             } 
+             else { // Круг, Квадрат
+                  if (p.fixedDiameter) h *= ratio; 
+                  else if (p.fixedHeight) d *= Math.sqrt(ratio); 
+                  else { const f = Math.pow(ratio, 1/3); d *= f; h *= f; w *= f; }
+             }
+        }
     }
     
     // --- 4. ФИНАЛИЗАЦИЯ ---
     d = Math.round(d); 
     if (w) w = Math.round(w);
-    
     if (p.shape === 'sphere') { h = d; } else { h = Math.round(h * 10) / 10; }
 
     let vFinal, areaFinal;
     
     if (p.shape === 'symbol') {
-        const meta = symbolMeta || this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
-        // Финальный пересчет W на всякий случай
-        w = Math.round(d * meta.aspectRatio); 
-        
-        const areaBase = (d * w) * meta.fillFactor;
+        const areaBase = (d * w) * symbolMeta.fillFactor;
         vFinal = areaBase * h;
         const perimeter = 2 * (d + w) * 1.3;
         areaFinal = areaBase + (perimeter * h);
@@ -885,6 +870,7 @@ _calculateSingleTier(tierInput, isBottom) {
 
     return { d, h, w, volInner: vFinal, area: areaFinal };
   }
+  
   _calcVolume(shape, d, h, w, n) {
       if (shape === 'square') return d * d * h;
       if (shape === 'rectangle') return d * (w || d) * h;
@@ -4470,40 +4456,56 @@ function modifyTier(side, idx, axis, delta) {
     const isGeo = tierObj.isGeometryMode;
 
     // === 1. ИЗМЕНЕНИЕ ДИАМЕТРА (D) или ШИРИНЫ (W) ===
+    // === 1. ИЗМЕНЕНИЕ ДИАМЕТРА (D) или ШИРИНЫ (W) ===
     if (axis === 'd' || axis === 'w') {
         const field = (axis === 'd') ? 'fixedDiameter' : 'fixedWidth';
-        // Берем текущее значение или дефолтное, если вдруг null
+        
+        // Берем текущее значение. Если его нет - берем то, что насчитал калькулятор (currentRes)
         const currentVal = tierObj[field] || ((axis === 'd') ? currentRes.d : currentRes.w);
         
         // Меняем
         tierObj[field] = Math.round(currentVal + delta);
-        if (tierObj[field] < 5) tierObj[field] = 5; // Защита от отрицательных
-      
-      if (globalShape === 'symbol' && axis === 'd') {
-        tierObj.fixedWidth = null; 
+        if (tierObj[field] < 5) tierObj[field] = 5; 
+
+        // Спец. логика для Прямоугольника И ЦИФРЫ (они теперь ведут себя одинаково)
+        // Если меняем одну сторону, ВТОРАЯ ДОЛЖНА ЗАФИКСИРОВАТЬСЯ на текущем значении,
+        // чтобы не пересчитываться "автоматически" при следующем расчете.
+        if (globalShape === 'rectangle' || globalShape === 'symbol') {
+             if (axis === 'd' && !tierObj.fixedWidth) tierObj.fixedWidth = Math.round(currentRes.w);
+             if (axis === 'w' && !tierObj.fixedDiameter) tierObj.fixedDiameter = Math.round(currentRes.d);
+        }
+
+        if (isGeo) {
+            // Если режим "По размеру" - фиксируем высоту, сбрасываем вес
+            if (!tierObj.fixedHeight) tierObj.fixedHeight = currentRes.h;
+            tierObj.weight = 0; 
+        } 
+        else {
+            // Если режим "По весу" - высоту отпускаем (она подстроится под вес)
+            tierObj.fixedHeight = null; 
+            delete tierObj.forceHeight;
+        }
     }
 
-        // Спец. логика для Прямоугольника (фиксируем вторую сторону)
+        // Спец. логика для Прямоугольника (там они связаны жестче)
         if (globalShape === 'rectangle') {
              if (axis === 'd' && !tierObj.fixedWidth) tierObj.fixedWidth = Math.round(currentRes.w);
              if (axis === 'w' && !tierObj.fixedDiameter) tierObj.fixedDiameter = Math.round(currentRes.d);
         }
 
         if (isGeo) {
-            // Режим "По размеру":
-            // Диаметр изменился -> Высоту надо зафиксировать (чтобы не уплыла), Вес пересчитать.
+            // Если по размеру - вес сбрасываем, высоту фиксируем
             if (!tierObj.fixedHeight) tierObj.fixedHeight = currentRes.h;
             tierObj.weight = 0; 
         } 
         else {
-            // Режим "По весу":
-            // Диаметр изменился -> Высоту сбрасываем (она подстроится под вес).
+            // Если по весу - высоту сбрасываем
             tierObj.fixedHeight = null; 
             delete tierObj.forceHeight;
         }
     }
 
-    // === 2. ИЗМЕНЕНИЕ ВЫСОТЫ (H) - Только для режима "По размеру" ===
+    // === 2. ИЗМЕНЕНИЕ ВЫСОТЫ ТОРТА (H) ===
     else if (axis === 'h' && isGeo) {
         let currentH = tierObj.fixedHeight || currentRes.h;
         let newH = parseFloat((currentH + delta).toFixed(1));
@@ -4511,17 +4513,17 @@ function modifyTier(side, idx, axis, delta) {
 
         tierObj.fixedHeight = newH;
         
-        // Фиксируем диаметр, если не был, чтобы не поплыл
+        // Фиксируем D, если не был
         if (!tierObj.fixedDiameter) tierObj.fixedDiameter = Math.round(currentRes.d);
+        
+        // Для цифры W фиксировать НЕ НАДО, пусть считается от D
         if (globalShape === 'rectangle' && !tierObj.fixedWidth) tierObj.fixedWidth = Math.round(currentRes.w);
         
-        // Вес под сброс
         tierObj.weight = 0;
     }
 
     calculateSide(side);
 }
-
 
 
 function calculateSide(side) {
@@ -11966,6 +11968,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
