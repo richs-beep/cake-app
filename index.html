@@ -915,44 +915,7 @@ _solveGeometry(p) {
   }
 
       // --- НОВЫЙ МЕТОД: АНАЛИЗ СИМВОЛА ---
-    _analyzeSymbol(char, font) {
-      const cvs = document.createElement('canvas');
-      const ctx = cvs.getContext('2d');
-      const size = 100; // Разрешение сканирования
-      cvs.width = size;
-      cvs.height = size;
-
-      // ИСПРАВЛЕНИЕ 1: Ставим шрифт "Arial Black" (самый жирный) и вес 900
-      ctx.font = `900 ${size}px "Arial Black", "Arial", sans-serif`;
-      ctx.textBaseline = 'top';
-      ctx.textAlign = 'left';
-      
-      const metrics = ctx.measureText(char);
-      const textW = metrics.width;
-      
-      ctx.fillStyle = '#000';
-      ctx.fillText(char, 0, 0);
-
-      const imgData = ctx.getImageData(0, 0, textW, size).data;
-      let hitCount = 0;
-      for (let i = 3; i < imgData.length; i += 4) {
-          if (imgData[i] > 128) hitCount++; // Считаем непрозрачные пиксели
-      }
-
-      // ИСПРАВЛЕНИЕ 2: "Эффект кондитера"
-      // Реальный торт-цифра (как на фото) занимает почти всю площадь.
-      // Умножаем пиксели на 1.25, чтобы имитировать широкую нарезку.
-      hitCount = hitCount * 1.25; 
-
-      const boundingBoxArea = textW * size; 
-      
-      // Защита: коэффициент не может быть больше 1 (не больше полного прямоугольника)
-      const fillFactor = (boundingBoxArea > 0) ? Math.min(1, hitCount / boundingBoxArea) : 1; 
-      
-      const aspectRatio = textW / size;
-
-      return { fillFactor, aspectRatio };
-  }
+    
  
 }
 
@@ -11949,6 +11912,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
