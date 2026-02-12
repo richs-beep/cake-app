@@ -2787,11 +2787,11 @@ body {
     <div class="form-row">
         <div class="form-group">
             <span class="form-label">💰 Предоплата</span>
-            <input type="number" id="orderPrepayment" placeholder="0">
+            <input type="text" id="orderPrepayment" class="money-input" placeholder="0" oninput="formatMoneyInput(this)">
         </div>
         <div class="form-group">
             <span class="form-label">Остаток</span>
-            <input type="number" id="orderBalance" placeholder="0">
+            <input type="text" id="orderBalance" class="money-input" placeholder="0" oninput="formatMoneyInput(this)">
         </div>
     </div>
 <div class="form-row">
@@ -6113,27 +6113,37 @@ async function confirmAddToQueueWithClient() {
 
     let clientName = document.getElementById('orderClientSearch').value.trim();
     let clientId = document.getElementById('orderClientId').value;
+    
+    // Получаем данные из новых полей
+    let clientPhone = document.getElementById('orderPhone').value.trim();
+    let clientSocial = document.getElementById('orderSocial').value.trim();
+    
     let isNewClient = false; 
 
     if (!clientName) { alert("Укажите имя клиента!"); return; }
 
     // 2. Авто-создание клиента, если новый
-    let clientPhone = document.getElementById('orderPhone').value.trim();
-    let clientSocial = document.getElementById('orderSocial').value.trim();
-
     if (!clientId) {
         clientId = 'c' + Date.now();
         isNewClient = true;
         const newClientObj = {
             name: clientName,
-            phone: clientPhone,
-            social: clientSocial,
+            phone: clientPhone,   // Сразу сохраняем телефон
+            social: clientSocial, // И соцсеть
             created: new Date().toISOString(),
             totalSpend: 0
         };
         await db.ref('clients/' + clientId).set(newClientObj);
+        // Обновляем локальный кэш
         clientsDataLocal[clientId] = newClientObj; 
     }
+
+    // --- ОЧИСТКА СУММ ОТ ПРОБЕЛОВ ---
+    const prepStr = document.getElementById('orderPrepayment').value.replace(/\D/g, ''); // "10 000" -> "10000"
+    const balStr = document.getElementById('orderBalance').value.replace(/\D/g, '');
+    
+    const prepaymentVal = parseFloat(prepStr) || 0;
+    const balanceVal = parseFloat(balStr) || 0;
 
     // 3. Сбор данных о заказе
     const orderPrice = res.costs.finalPrice;
@@ -6144,67 +6154,60 @@ async function confirmAddToQueueWithClient() {
         phone: clientPhone,
         social: clientSocial,
         address: document.getElementById('orderAddress').value.trim(),
-        prepayment: document.getElementById('orderPrepayment').value,
-        balance: document.getElementById('orderBalance').value,
-        name: clientName,
+        
+        // Пишем уже чистые числа
+        prepayment: prepaymentVal,
+        balance: balanceVal,
+
         date: document.getElementById('orderDeadline').value,
         reason: document.getElementById('orderReason').value,
         forWhom: document.getElementById('orderForWhom').value,
-        
-        // ВАЖНО: Сохраняем цвет!
         color: document.getElementById('orderColor').value, 
-        
         payment: document.getElementById('orderPayment').value,
         delivery: document.getElementById('orderDelivery').value,
         comment: document.getElementById('orderComment').value,
         price: orderPrice,
         weight: (res.weights.total / 1000).toFixed(2),
         data: res,
-
-        // --- НОВОЕ: СОХРАНЯЕМ СПИСКИ РАБОТ И ДЕКОРА ---
-        // Берем их из глобальных переменных, которые сейчас на экране
         labor: JSON.parse(JSON.stringify(currentLaborList || [])),
         extras: JSON.parse(JSON.stringify(extrasList || []))
-        // ----------------------------------------------
     };
 
     // 4. Логика Плана (Замена Брони или Новый заказ)
     if (activeBookingId) {
-        // Если мы пришли из кнопки "Собрать торт" (превращаем бронь)
         const idx = productionQueue.findIndex(b => b.id === activeBookingId);
         if (idx !== -1) {
-            productionQueue[idx] = orderData; // Заменяем в массиве
-            
-            // Удаляем старую "бронь" из истории клиента (чтобы не дублировалось)
+            productionQueue[idx] = orderData; 
             db.ref(`clients/${clientId}/history/${activeBookingId}`).remove();
         } else {
             productionQueue.push(orderData); 
         }
-        activeBookingId = null; // Сбрасываем флаг
+        activeBookingId = null; 
     } else {
-        productionQueue.push(orderData); // Просто новый заказ
+        productionQueue.push(orderData); 
     }
     saveQueue();
 
-    // 5. Сохранение в Firebase и Уведомление
-    // 1. Сохраняем заказ ТОЛЬКО в план (очередь)
-    saveQueue(); 
-
-    // 2. Закрываем окно оформления
+    // 5. Финал
     document.getElementById('orderFinalizeModal').style.display = 'none';
 
-    // 3. Предлагаем календарь (теперь это не зависит от записи в историю клиента)
+    // Предлагаем календарь
     const links = createCalendarLinks(orderData);
     if(confirm("✅ Заказ добавлен в План!\n\nОткрыть Google Календарь для напоминания?")) {
         window.open(links.googleUrl, '_blank');
     }
 
-    // 4. Если клиент новый — открываем его карточку для заполнения контактов
+    // --- ИСПРАВЛЕННАЯ ЛОГИКА ОТКРЫТИЯ КАРТОЧКИ ---
+    // Открываем окно "Заполните данные", ТОЛЬКО если клиент новый И мы НЕ заполнили контакты
     if (isNewClient) {
-        setTimeout(() => {
-            openClientModal(clientId);
-            alert(`Это новый клиент "${clientName}".\nЗаполните телефон или соцсети для связи.`); 
-        }, 500);
+        // Если нет ни телефона, ни инстаграма - тогда просим заполнить
+        if (!clientPhone && !clientSocial) {
+            setTimeout(() => {
+                openClientModal(clientId);
+                alert(`Это новый клиент "${clientName}".\nЗаполните телефон или соцсети для связи.`); 
+            }, 500);
+        }
+        // Иначе (если хоть что-то заполнили) - молча радуемся жизни
     }
 }
 
@@ -11767,6 +11770,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
