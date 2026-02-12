@@ -1065,43 +1065,48 @@ class CakeVisualizer {
               const midHy = (bCy + tCy) / 2;
               svgContent += `<text x="${midHx}" y="${midHy}" dx="8" fill="${colDim}" font-weight="bold" font-size="12" dominant-baseline="middle">H${fmt(t.h)}</text>`;
 
-          } else if (shape === 'symbol') {
+          } } else if (shape === 'symbol') {
               const char = t.symbolChar || '5';
-              const font = (t.symbolFont || 'Arial').split(',')[0]; // Берем первое имя шрифта
+              // Убираем кавычки и лишние пробелы
+              const font = (t.symbolFont || 'Arial').replace(/"/g, "'");
               
-              const fontSize = pxD; // Высота буквы в пикселях
+              const fontSize = pxD; 
               const textX = cX;
-              const textY = currentBaseCenterY; // Низ буквы
+              const textY = currentBaseCenterY; 
               
-              // Генерируем уникальный ID для маски/пути (если нужно)
-              // Рисуем "3D" слоями (Стек)
-              const depth = 20; // Глубина 3D эффекта (в пикселях)
-              const layers = 15; // Сколько слоев рисовать для плавности
+              const depth = 20; 
+              const layers = 15; 
               
-              // 1. Рисуем "Тень" (Боковину) - много слоев со сдвигом
+              // 1. Рисуем "Тень" (Боковину)
               for (let i = 0; i < layers; i++) {
                   const shift = (i / layers) * depth;
-                  // Смещаем вверх и вправо (изометрия)
                   const lx = textX + shift * 0.5; 
                   const ly = textY - shift * 0.5; 
                   
-                  // Цвет боковины (темнее)
                   svgContent += `<text x="${lx}" y="${ly}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${fontSize}" fill="#8D6E63" stroke="#5D4037" stroke-width="1" style="user-select:none;">${char}</text>`;
               }
 
               // 2. Рисуем "Лицо" (Верхний слой)
-              // Смещаем на полную глубину
               const tx = textX + depth * 0.5;
               const ty = textY - depth * 0.5;
               
               // Сама буква
               svgContent += `<text x="${tx}" y="${ty}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${fontSize}" fill="url(#${gradId})" stroke="#757575" stroke-width="1" style="user-select:none;">${char}</text>`;
               
-              // Размеры
-              svgContent += `<text x="${tx}" y="${ty - fontSize*0.8}" text-anchor="middle" fill="${colDim}" font-weight="bold" font-size="12">H${fmt(t.d)} см</text>`;
+              // --- 👇 НОВЫЕ ПОДПИСИ (ВСТАВЛЕНО СЮДА) 👇 ---
               
-              // Высоту торта покажем сбоку
-              svgContent += `<text x="${tx + fontSize*0.4}" y="${ty}" fill="${colDim}" font-size="12">Т:${fmt(t.h)}</text>`;
+              // 1. Длина буквы (L) - Вертикаль
+              svgContent += `<text x="${tx - 10}" y="${ty}" text-anchor="end" fill="${colDim}" font-weight="bold" font-size="12" transform="rotate(-90 ${tx-10},${ty})">L:${fmt(t.d)}см</text>`;
+              
+              // 2. Ширина буквы (W) - Горизонталь (Вычисляем пропорцию)
+              // Если ширина (t.w) не задана, считаем примерно как 60% от высоты
+              const calculatedW = t.d * (t.w / t.d || 0.6); 
+              const displayW = t.w ? fmt(t.w) : fmt(calculatedW);
+              
+              svgContent += `<text x="${tx}" y="${ty + 15}" text-anchor="middle" fill="${colDim}" font-weight="bold" font-size="12">W:${displayW}см</text>`;
+              
+              // 3. Толщина торта (H) - Сбоку (Оранжевым)
+              svgContent += `<text x="${tx + fontSize*0.4}" y="${ty - fontSize*0.2}" fill="#E65100" font-weight="bold" font-size="14">H:${fmt(t.h)}</text>`;
           } else { 
               const ry = pxR * 0.3;
               const tierTopY = currentBaseCenterY - pxH;
@@ -1320,6 +1325,10 @@ class CakeVisualizer {
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#FF5722">
     <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/cake.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Comic+Neue:wght@700&family=Courier+Prime:wght@700&family=Roboto:wght@900&family=Tinos:wght@700&display=swap" rel="stylesheet">
     
     <style>
 
@@ -2988,7 +2997,7 @@ body {
         <input type="number" id="globalSides" value="6">
     </div>
 
-    <div class="form-group" id="grpSymbol" style="display:none; flex:2; border-left: 2px solid #ccc; padding-left: 10px;">
+    <div class="form-group" id="grpSymbol" style="display:none; flex:3; border-left: 2px solid #ccc; padding-left: 10px;">
         <div style="display:flex; gap:5px;">
             <div style="flex:1;">
                 <span class="form-label">Знак</span>
@@ -2997,12 +3006,16 @@ body {
             <div style="flex:2;">
                 <span class="form-label">Шрифт</span>
                 <select id="cakeFont" onchange="updateTierUI()" style="font-size:12px;">
-                    <option value="Arial Black, Arial, sans-serif">Жирный (Arial)</option>
-                    <option value="Times New Roman, serif">С засечками (Times)</option>
-                    <option value="Impact, sans-serif">Мощный (Impact)</option>
-                    <option value="Courier New, monospace">Печатная машинка</option>
-                    <option value="Comic Sans MS, cursive">Рукописный</option>
+    <option value="'Roboto', 'Arial Black', 'Arial Bold', sans-serif">Жирный (Standard)</option>    
+    <option value="'Tinos', 'Times New Roman', 'Georgia', serif">С засечками (Classic)</option>    
+    <option value="'Anton', 'Impact', 'Haettenschweiler', 'Arial Narrow Bold', sans-serif">Мощный (Impact Style)</option>    
+    <option value="'Courier Prime', 'Courier New', 'Courier', monospace">Печатная машинка</option>    
+    <option value="'Comic Neue', 'Comic Sans MS', 'Chalkboard SE', sans-serif">Рукописный</option>
                 </select>
+            </div>
+            <div style="flex:1;">
+                <span class="form-label">Ширина</span>
+                <input type="text" id="cakeSymbolWidth" disabled style="background:#f5f5f5; color:#555; text-align:center; font-size:12px;" placeholder="Авто">
             </div>
         </div>
     </div>
@@ -4147,7 +4160,23 @@ function updateTierUI() {
     if (grpSides) grpSides.style.display = (sh === 'polygon') ? 'block' : 'none';
     if (sphereFillBlock) sphereFillBlock.style.display = (sh === 'sphere') ? 'block' : 'none';
     if (grpSymbol) grpSymbol.style.display = (sh === 'symbol') ? 'block' : 'none';
-
+// --- РАСЧЕТ ШИРИНЫ СИМВОЛА НА ЛЕТУ ---
+    if (sh === 'symbol') {
+        const sym = document.getElementById('cakeSymbol').value || '5';
+        const font = document.getElementById('cakeFont').value;
+        
+        // Быстрый анализ (создаем временный калькулятор, чтобы не дублировать код)
+        const calc = new CakeCalculator({}); 
+        const meta = calc._analyzeSymbol(sym, font);
+        
+        // Ищем введенный размер в первом ярусе (или берем дефолт 25)
+        const firstTierInput = document.querySelector('input[placeholder="D (Диаметр)"]'); 
+        // Или если мы еще не нарисовали ярусы, берем из appState
+        const tierSize = (appState.tiers[0] && appState.tiers[0].fixedDiameter) ? appState.tiers[0].fixedDiameter : 25;
+        
+        const calculatedWidth = Math.round(tierSize * meta.aspectRatio);
+        document.getElementById('cakeSymbolWidth').value = `~${calculatedWidth} см`;
+    }
     // Обновляем зависимые элементы
     updateCoatingUI(); 
     renderTierRows();
@@ -11930,6 +11959,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
