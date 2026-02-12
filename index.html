@@ -754,9 +754,15 @@ _calculateSingleTier(tierInput, isBottom) {
 
  _solveGeometry(p) {
     let d = p.fixedDiameter || 20;
-    // По умолчанию W = D, но это изменится ниже для символов
-    let w = p.fixedWidth || (p.shape === 'rectangle' ? d * 0.75 : d); 
+    
+    // ИСПРАВЛЕНИЕ: Если это Символ, не ставим ширину равной диаметру!
+    let defaultW = d;
+    if (p.shape === 'rectangle') defaultW = d * 0.75;
+    if (p.shape === 'symbol') defaultW = null; // Пусть пересчитается ниже через aspect ratio
+
+    let w = p.fixedWidth || defaultW; 
     let h = p.fixedHeight || 10;
+    // ...
     
     // --- 1. ПРИНУДИТЕЛЬНЫЙ РАСЧЕТ ПРОПОРЦИЙ ---
     let symbolMeta = null;
@@ -4454,6 +4460,10 @@ function modifyTier(side, idx, axis, delta) {
         // Меняем
         tierObj[field] = Math.round(currentVal + delta);
         if (tierObj[field] < 5) tierObj[field] = 5; // Защита от отрицательных
+      
+      if (globalShape === 'symbol' && axis === 'd') {
+        tierObj.fixedWidth = null; 
+    }
 
         // Спец. логика для Прямоугольника (фиксируем вторую сторону)
         if (globalShape === 'rectangle') {
@@ -11937,6 +11947,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
