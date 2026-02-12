@@ -1037,46 +1037,72 @@ class CakeVisualizer {
 
           } else if (shape === 'symbol') {
               const char = t.symbolChar || '5';
-              // Убираем кавычки и лишние пробелы
-              const font = (t.symbolFont || 'Arial').replace(/"/g, "'");
+              // Безопасная обработка шрифта
+              const fontStr = t.symbolFont || 'Arial';
+              const font = fontStr.replace(/['"]/g, ''); 
               
-              const fontSize = pxD; 
+              // Размеры в пикселях для текущего масштаба
+              // pxD - это визуальная "глубина" буквы (от верха до низа символа, если смотреть сверху)
+              const pxD = t.d * SCALE; 
+              // pxH - это реальная толщина торта (высота бисквита)
+              const pxH = t.h * SCALE;
+
+              // Коэффициент сплющивания для эффекта "вида сверху" (чем меньше, тем более плоский вид)
+              const flatScale = 0.6;
+              
+              // Центр основания (верхняя точка торта)
               const textX = cX;
-              const textY = currentBaseCenterY; 
+              const textY = currentBaseCenterY - pxH; // Смещаем верхнюю плоскость на высоту торта
               
-              const depth = 20; 
-              const layers = 15; 
-              
-              // 1. Рисуем "Тень" (Боковину)
-              for (let i = 0; i < layers; i++) {
-                  const shift = (i / layers) * depth;
-                  const lx = textX + shift * 0.5; 
-                  const ly = textY - shift * 0.5; 
-                  
-                  svgContent += `<text x="${lx}" y="${ly}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${fontSize}" fill="#8D6E63" stroke="#5D4037" stroke-width="1" style="user-select:none;">${char}</text>`;
+              // Трюк с трансформацией: чтобы сплющить текст относительно его центра,
+              // нужно сдвинуть центр в 0,0, масштабировать, и вернуть обратно.
+              // Применяем scale(1, flatScale) - сжимаем только по вертикали.
+              const transform = `translate(${textX},${textY}) scale(1, ${flatScale}) translate(-${textX},-${textY})`;
+
+              // Количество слоев для симуляции толщины боковины. 
+              // Зависит от реальной высоты pxH, но не меньше 5 для плавности.
+              const layers = Math.max(5, Math.round(pxH / 2)); 
+
+              // 1. Рисуем "Боковину" (Слои вниз, создающие толщину)
+              for (let i = 1; i <= layers; i++) {
+                  // Смещение вниз на долю реальной высоты
+                  const shiftY = (i / layers) * pxH;
+                  // Рисуем слой со смещением, но с той же трансформацией сплющивания
+                  svgContent += `<text x="${textX}" y="${textY + shiftY}" transform="${transform}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${pxD}" fill="#8D6E63" stroke="#5D4037" stroke-width="1" style="user-select:none; dominant-baseline: central;">${char}</text>`;
               }
 
-              // 2. Рисуем "Лицо" (Верхний слой)
-              const tx = textX + depth * 0.5;
-              const ty = textY - depth * 0.5;
+              // 2. Рисуем "Лицо" (Верхний слой торта)
+              // Рисуем точно в координатах textX, textY с той же трансформацией
+              svgContent += `<text x="${textX}" y="${textY}" transform="${transform}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${pxD}" fill="url(#${gradId})" stroke="#757575" stroke-width="1" style="user-select:none; dominant-baseline: central;">${char}</text>`;
               
-              // Сама буква
-              svgContent += `<text x="${tx}" y="${ty}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${fontSize}" fill="url(#${gradId})" stroke="#757575" stroke-width="1" style="user-select:none;">${char}</text>`;
+              // --- ПОДПИСИ РАЗМЕРОВ ---
+
+              // Визуальные границы сплющенной фигуры (примерные)
+              const visualTop = textY - (pxD/2 * flatScale);
+              const visualBottom = textY + (pxD/2 * flatScale);
+              // Визуальный низ всего торта (нижний слой)
+              const visualBase = visualBottom + pxH;
+
+              // 1. L (Длина/Глубина цифры) - Слева, вдоль "бока" цифры
+              // Располагаем посередине между визуальным верхом и низом цифры
+              svgContent += `<text x="${textX - pxD*0.4}" y="${textY}" text-anchor="end" fill="${colDim}" font-weight="bold" font-size="12" transform="rotate(-90 ${textX - pxD*0.4},${textY})" dominant-baseline="middle">L:${fmt(t.d)}</text>`;
               
-              // --- 👇 НОВЫЕ ПОДПИСИ (ВСТАВЛЕНО СЮДА) 👇 ---
-              
-              // 1. Длина буквы (L) - Вертикаль
-              svgContent += `<text x="${tx - 10}" y="${ty}" text-anchor="end" fill="${colDim}" font-weight="bold" font-size="12" transform="rotate(-90 ${tx-10},${ty})">L:${fmt(t.d)}см</text>`;
-              
-              // 2. Ширина буквы (W) - Горизонталь (Вычисляем пропорцию)
-              // Если ширина (t.w) не задана, считаем примерно как 60% от высоты
+              // 2. W (Ширина цифры) - Снизу, под цифрой
+              // Вычисляем ширину
               const calculatedW = t.d * (t.w / t.d || 0.6); 
               const displayW = t.w ? fmt(t.w) : fmt(calculatedW);
+              // Располагаем под визуальным основанием торта
+              svgContent += `<text x="${textX}" y="${visualBase + 15}" text-anchor="middle" fill="${colDim}" font-weight="bold" font-size="12">W:${displayW}</text>`;
               
-              svgContent += `<text x="${tx}" y="${ty + 15}" text-anchor="middle" fill="${colDim}" font-weight="bold" font-size="12">W:${displayW}см</text>`;
-              
-              // 3. Толщина торта (H) - Сбоку (Оранжевым)
-              svgContent += `<text x="${tx + fontSize*0.4}" y="${ty - fontSize*0.2}" fill="#E65100" font-weight="bold" font-size="14">H:${fmt(t.h)}</text>`;
+              // 3. H (Толщина/Высота торта) - Справа, показывает вертикальный срез
+              const hLabelX = textX + pxD*0.45; // Сдвигаем вправо
+              const hLabelCenterY = textY + pxH / 2; // Центр по высоте торта
+
+              // Рисуем линию-указатель толщины
+              svgContent += `<line x1="${hLabelX-5}" y1="${textY}" x2="${hLabelX-5}" y2="${textY + pxH}" stroke="${colDim}" stroke-width="2" opacity="0.6"/>`;
+              // Сама подпись
+              svgContent += `<text x="${hLabelX}" y="${hLabelCenterY}" fill="#E65100" font-weight="bold" font-size="14" dominant-baseline="middle">H:${fmt(t.h)}</text>`;
+
           } else { 
               const ry = pxR * 0.3;
               const tierTopY = currentBaseCenterY - pxH;
@@ -11930,6 +11956,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
