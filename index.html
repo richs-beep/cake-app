@@ -753,28 +753,36 @@ _calculateSingleTier(tierInput, isBottom) {
   }
 
 _solveGeometry(p) {
-    let d = p.fixedDiameter || 20; // Высота знака (Длина)
-    let h = p.fixedHeight || 10;   // Толщина торта
+    let d = p.fixedDiameter || 20; // Высота цифры (Длина по подложке)
+    let h = p.fixedHeight || 10;   // Толщина торта (высота борта)
     
-    // 1. АНАЛИЗ СИМВОЛА (Только для того, чтобы понять, сколько "дырок" в цифре)
-    let symbolMeta = { fillFactor: 1, aspectRatio: 0.6 }; // Дефолт
+    // ... (код анализа символа) ...
+    let symbolMeta = { fillFactor: 1, aspectRatio: 0.6 };
     if (p.shape === 'symbol') {
         symbolMeta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
+        
+        // !!! ИСПРАВЛЕНИЕ: ЗАЩИТА ОТ "ХУДЫХ" ЦИФР !!!
+        // Если цифра слишком узкая (например, 1), принудительно расширяем её.
+        // 0.55 означает, что ширина не может быть меньше 55% от длины.
+        if (symbolMeta.aspectRatio < 0.55) {
+             symbolMeta.aspectRatio = 0.55; 
+             // Немного увеличиваем fillFactor, т.к. мы искусственно "раздули" цифру
+             symbolMeta.fillFactor = Math.min(0.9, symbolMeta.fillFactor * 1.2); 
+        }
     }
 
-    // 2. ОПРЕДЕЛЕНИЕ ШИРИНЫ (W)
     let w = 0;
 
-    // ЕСЛИ ПОЛЬЗОВАТЕЛЬ ЗАДАЛ ШИРИНУ — ЭТО ЗАКОН
-    if (p.fixedWidth && p.fixedWidth > 0) {
-        w = p.fixedWidth;
-    } 
-    // ЕСЛИ НЕ ЗАДАЛ — ПРЕДЛАГАЕМ ДЕФОЛТ (НО НЕ ПРИРАВНИВАЕМ К D!)
+    // ... (код определения w) ...
+    
     else {
-        if (p.shape === 'rectangle' || p.shape === 'symbol') {
-            w = d * 0.6; // По умолчанию ширина = 60% от длины
+        if (p.shape === 'symbol') {
+            // !!! ИСПОЛЬЗУЕМ СКОРРЕКТИРОВАННЫЙ ASPECT RATIO
+            w = d * symbolMeta.aspectRatio; 
+        } else if (p.shape === 'rectangle') {
+            w = d * 0.6; 
         } else {
-            w = d; // Круг, Квадрат
+            w = d; 
         }
     }
 
@@ -791,9 +799,10 @@ _solveGeometry(p) {
 
              // Если ширина НЕ зафиксирована руками, она меняется пропорционально D
              if (!p.fixedWidth) {
-                 if (p.shape === 'symbol' || p.shape === 'rectangle') {
-                     w = d * 0.6; 
-                 } else {
+                 w = d * symbolMeta.aspectRatio; 
+} else if (p.shape === 'rectangle') {
+    w = d * 0.6;
+} else {
                      w = d;
                  }
              }
@@ -11947,6 +11956,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
