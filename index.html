@@ -915,8 +915,7 @@ _solveGeometry(p) {
   }
 
       // --- НОВЫЙ МЕТОД: АНАЛИЗ СИМВОЛА ---
-      
-  _analyzeSymbol(char, font) {
+ _analyzeSymbol(char, font) {
       const cvs = document.createElement('canvas');
       const ctx = cvs.getContext('2d');
       const size = 100;
@@ -953,8 +952,8 @@ _solveGeometry(p) {
       const aspectRatio = textW / size;
 
       return { fillFactor, aspectRatio };
-  }
-
+  }     
+ 
 class CakeVisualizer {
   renderStack(tiers, shape, sides) {
       const W = 400, H = 500;
@@ -11948,6 +11947,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
