@@ -7501,7 +7501,9 @@ function saveToHistory() {
                 shape: document.getElementById('globalShape')?.value || 'cylinder',
                 coatingId: document.getElementById('coatingIdSelect')?.value || '',
                 extraCoatingId: document.getElementById('extraCoatingIdSelect')?.value || ''
-            }
+            },
+          colorsPalette: JSON.parse(JSON.stringify(myColorsPalette || [])),
+            colorSelected: JSON.parse(JSON.stringify(colorState.colors || {}))
         };
         if (historyStack.length > 0 && JSON.stringify(currentState) === JSON.stringify(historyStack[historyStack.length - 1])) return;
         historyStack.push(currentState);
@@ -7551,7 +7553,31 @@ function applyState(state) {
     localStorage.setItem('cakeProductionQueue', JSON.stringify(productionQueue));
     localStorage.setItem('cachedClients', JSON.stringify(clientsDataLocal));
     renderClientsCloud(); // Обновляем список клиентов на экране
+
+     // --- ВОССТАНОВЛЕНИЕ ЛАБОРАТОРИИ ЦВЕТА ---
+    if (state.colorsPalette) {
+        myColorsPalette = JSON.parse(JSON.stringify(state.colorsPalette));
+        localStorage.setItem('myColorsPalette', JSON.stringify(myColorsPalette));
+        if (typeof renderPaletteUI === 'function') renderPaletteUI();
+    }
     
+    if (state.colorSelected) {
+        colorState.colors = JSON.parse(JSON.stringify(state.colorSelected));
+        // Перекрашиваем плашки
+        const updatePatch = (id, rgb) => {
+            const el = document.getElementById(id);
+            if (el && rgb) el.style.background = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+        };
+        updatePatch('patchWhite', colorState.colors.white);
+        updatePatch('patchBase', colorState.colors.base);
+        updatePatch('patchTargetWhite', colorState.colors.targetWhite);
+        updatePatch('patchTarget', colorState.colors.target);
+        
+        // Скрываем результат старого расчета, так как цвета откатились
+        const resBlock = document.getElementById('colorResultBlock');
+        if (resBlock) resBlock.style.display = 'none';
+    }
+  
     updateUI(); 
     renderQueue();
     updateQueueBadge();
@@ -9488,6 +9514,7 @@ function renderPaletteUI() {
 
 function deletePaletteColor(index) {
     if(confirm('Удалить этот краситель из ваших запасов?')) {
+      saveToHistory();
         myColorsPalette.splice(index, 1);
         localStorage.setItem('myColorsPalette', JSON.stringify(myColorsPalette));
         renderPaletteUI();
@@ -9695,23 +9722,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Красим плашку
         // --- ЛОГИКА СОХРАНЕНИЯ В ПАЛИТРУ ---
+       // --- ЛОГИКА СОХРАНЕНИЯ В ПАЛИТРУ (С БАЛАНСОМ БЕЛОГО) ---
         if (colorState.mode === 'palette') {
             cursorDiv.style.display = 'none';
             mainCanvas.releasePointerCapture(e.pointerId);
             
-            // Запрашиваем название (с небольшой задержкой, чтобы интерфейс успел отвиснуть)
+            // 1. Берем текущий эталон белого (который задан в Шаге 1)
+            const wb = colorState.colors.white || {r: 255, g: 255, b: 255};
+            
+            // 2. Считаем, как очистить цвет (Коэффициенты коррекции)
+            const factor = {
+                r: 255 / (wb.r || 255),
+                g: 255 / (wb.g || 255),
+                b: 255 / (wb.b || 255)
+            };
+
+            // 3. Получаем "Чистый" цвет (True Color)
+            const cleanRgb = {
+                r: Math.min(255, Math.round(rgb.r * factor.r)),
+                g: Math.min(255, Math.round(rgb.g * factor.g)),
+                b: Math.min(255, Math.round(rgb.b * factor.b))
+            };
+
+            // Запрашиваем название
             setTimeout(() => {
                 let name = prompt("Введите название красителя (например, 'Kreda Пыльная роза'):");
                 if (name && name.trim() !== '') {
-                    myColorsPalette.push({ id: Date.now(), name: name.trim(), rgb: rgb });
+                    saveToHistory(); 
+                    // СОХРАНЯЕМ ИМЕННО cleanRgb, А НЕ ПРОСТО rgb
+                    myColorsPalette.push({ id: Date.now(), name: name.trim(), rgb: cleanRgb });
                     localStorage.setItem('myColorsPalette', JSON.stringify(myColorsPalette));
                     renderPaletteUI();
                 }
                 colorState.mode = null;
             }, 50);
-            return; // Выходим отсюда, плашки красить не надо!
+            return; 
         }
-
+saveToHistory();
         // --- ОБЫЧНАЯ ЛОГИКА (Если выбрали Свет, Базу или Цель) ---
         let patchId = colorState.mode === 'white' ? 'patchWhite' : (colorState.mode === 'base' ? 'patchBase' : (colorState.mode === 'targetWhite' ? 'patchTargetWhite' : 'patchTarget'));
         
@@ -11720,6 +11767,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
