@@ -753,14 +753,32 @@ _calculateSingleTier(tierInput, isBottom) {
   }
 
  _solveGeometry(p) {
-    let d = p.fixedDiameter || 20;
+    let d = p.fixedDiameter || 20; // Это "Высота знака" (вертикаль)
     
-    // ИСПРАВЛЕНИЕ: Если это Символ, не ставим ширину равной диаметру!
-    let defaultW = d;
-    if (p.shape === 'rectangle') defaultW = d * 0.75;
-    if (p.shape === 'symbol') defaultW = null; // Пусть пересчитается ниже через aspect ratio
+    // --- ЛОГИКА ОПРЕДЕЛЕНИЯ ШИРИНЫ (W) ---
+    let w = 0;
 
-    let w = p.fixedWidth || defaultW; 
+    if (p.fixedWidth) {
+        // 1. Если пользователь задал ширину руками — слушаемся безоговорочно
+        w = p.fixedWidth;
+    } 
+    else {
+        // 2. Если поле пустое — считаем авто-значение
+        if (p.shape === 'rectangle') {
+            w = d * 0.75; // Для прямоугольника - 75%
+        } 
+        else if (p.shape === 'symbol') {
+            // Для символа - считаем по шрифту!
+            // ВАЖНО: Не приравниваем к d!
+            const meta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
+            w = d * meta.aspectRatio; 
+        } 
+        else {
+            // Для круга, квадрата, многогранника W = D
+            w = d; 
+        }
+    }
+
     let h = p.fixedHeight || 10;
     // ...
     
@@ -3941,10 +3959,10 @@ function renderTierRows() {
         showH = false;    
     } else if (shape === 'symbol') {
         // --- ВОТ ИСПРАВЛЕНИЕ ДЛЯ ЦИФР ---
-        dLabel = 'Высота цифры (см)'; // Длина самой цифры (напр. 25 см)
-        hLabel = 'Высота торта (см)'; // Высота торта (напр. 6-8 см)
-        wLabel = 'Ширина (Авто)'; // Ширина цифры
-        // Мы не показываем поле W для ввода, оно авто, но показываем H для толщины
+        dLabel = 'Высота знака (см)'; // Вертикальный размер цифры
+        wLabel = 'Ширина знака (см)'; // Горизонтальный размер
+        hLabel = 'Толщина торта (см)'; 
+        showW = true; // <--- ТЕПЕРЬ ПОЛЕ W БУДЕТ ВИДНО
     }
     appState.tiers.forEach((t, idx) => {
         const div = document.createElement('div');
@@ -4722,7 +4740,8 @@ function renderSideControls(side) {
         </div>`;
 
         // 2. ШИРИНА (Только для прямоугольника, кнопки есть ВСЕГДА)
-        if (globalShape === 'rectangle') {
+       // 2. ШИРИНА (Включаем для Прямоугольника И для СИМВОЛА)
+        if (globalShape === 'rectangle' || globalShape === 'symbol') {
             html += `
             <div class="ctrl-row">
                <button class="ctrl-btn" onclick="event.stopPropagation(); modifyTier('${side}', ${idx}, 'w', -1)">-</button>
@@ -11947,6 +11966,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
