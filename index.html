@@ -754,38 +754,78 @@ _calculateSingleTier(tierInput, isBottom) {
 
   _solveGeometry(p) {
     let d = p.fixedDiameter || 20;
+    // Для прямоугольника и символа считаем ширину, иначе она равна диаметру
     let w = p.fixedWidth || (p.shape === 'rectangle' ? d * 0.75 : d); 
     let h = p.fixedHeight || 10;
     
+    // Блок простых проверок (если размеры жестко заданы)
     if (p.shape === 'sphere' && p.fixedDiameter) { h = d; }
     else if (p.shape === 'rectangle' && p.fixedDiameter && p.fixedWidth && p.fixedHeight) {}
     else if ((p.shape === 'cylinder' || p.shape === 'square' || p.shape === 'polygon') && p.fixedDiameter && p.fixedHeight) {}
+    
+    // --- НОВОЕ: Если размеры символа заданы жестко, просто обновляем ширину по пропорции
+    else if (p.shape === 'symbol' && p.fixedDiameter && p.fixedHeight) {
+         const meta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
+         w = d * meta.aspectRatio; // Подгоняем ширину под высоту (d)
+    }
+    
     else {
+        // --- РЕЖИМ ПОДБОРА (ЕСЛИ ВЕС ЗАДАН, А РАЗМЕРЫ НЕТ) ---
         const thick = 0.5; 
         const coatingDensity = p.coatingConsumption / thick;
 
-        // ... начало функции (расчет thick и coatingDensity оставляем) ...
+        // --- НОВОЕ: Анализируем символ ОДИН РАЗ перед циклом (чтобы не тормозило) ---
+        let symbolMeta = null;
+        if (p.shape === 'symbol') {
+            symbolMeta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
+        }
 
-      for(let i=0; i<20; i++) { // Увеличили число попыток до 20
-          const vInner = this._calcVolume(p.shape, d, h, w, p.polySides);
-          const areaCoat = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides); 
+      for(let i=0; i<20; i++) { 
+          // Переменные для объема и площади
+          let vInner = 0;
+          let areaCoat = 0;
+
+          // --- НОВОЕ: ВЕТВЛЕНИЕ ВНУТРИ ЦИКЛА ---
+          if (p.shape === 'symbol') {
+               // 1. В итерации d - это высота буквы. Пересчитываем ширину (w)
+               w = d * symbolMeta.aspectRatio;
+               
+               // 2. Считаем реальную площадь бисквита (S = W * H * FillFactor)
+               const areaBase = (d * w) * symbolMeta.fillFactor; 
+               vInner = areaBase * h;
+
+               // 3. Считаем площадь покрытия (Верх + Бока)
+               // Периметр буквы сложный, берем эвристику: Периметр рамки * 1.3 (из-за изгибов)
+               const perimeter = 2 * (d + w) * 1.3; 
+               areaCoat = areaBase + (perimeter * h);
+          } 
+          else {
+               // СТАНДАРТНЫЙ РАСЧЕТ (Круг, Квадрат, Прямоугольник)
+               vInner = this._calcVolume(p.shape, d, h, w, p.polySides);
+               areaCoat = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides); 
+          }
+          // -------------------------------------
+
           const vCoat = areaCoat * thick;
-          
           const estWeight = (vInner * p.fillingDensity) + (vCoat * coatingDensity);
 
-          // ВАЖНО: Снизили порог погрешности с 5г до 0.5г для точности
+          // Проверка точности (0.5г)
           if (Math.abs(estWeight - p.targetWeight) < 0.5) break; 
           
           const ratio = p.targetWeight / estWeight;
 
+          // КОРРЕКТИРОВКА РАЗМЕРОВ ДЛЯ СЛЕДУЮЩЕГО ШАГА
           if (p.shape === 'sphere') { 
               d *= Math.pow(ratio, 1/3); h = d; 
           } 
-          else if (p.shape === 'rectangle') {
-               if (p.fixedDiameter && p.fixedWidth) h *= ratio; 
-               else if (p.fixedHeight) { const f = Math.sqrt(ratio); d *= f; w *= f; }
-               else if (p.fixedDiameter) h *= ratio; 
-               else { const f = Math.pow(ratio, 1/3); d *= f; h *= f; w *= f; }
+          else if (p.shape === 'rectangle' || p.shape === 'symbol') { // <-- Добавили symbol сюда
+               if (p.fixedDiameter) h *= ratio; // Если высота буквы фиксирована, меняем толщину торта
+               else if (p.fixedHeight) d *= Math.sqrt(ratio); // Если толщина торта фиксирована, меняем размер буквы
+               else { 
+                   // Если ничего не фиксировано, меняем все пропорционально
+                   const f = Math.pow(ratio, 1/3); 
+                   d *= f; h *= f; w *= f; 
+               }
           } 
           else { 
                if (p.fixedDiameter) h *= ratio; 
@@ -796,20 +836,34 @@ _calculateSingleTier(tierInput, isBottom) {
     }
     
     // ОКРУГЛЕНИЕ РАЗМЕРОВ
-    d = Math.round(d); // Диаметр обычно целое число (форма)
+    d = Math.round(d); 
     if (w) w = Math.round(w);
     
     // ВЫСОТА:
     if (p.shape === 'sphere') {
         h = d; 
     } else {
-        // ВАЖНО: Округляем до СОТЫХ (2 знака), чтобы не терять миллиметры
         h = Math.round(h * 100) / 100;
     }
 
+    // ФИНАЛЬНЫЙ РАСЧЕТ ДЛЯ ВОЗВРАТА (Тут тоже нужна ветка для символа)
+    let vFinal, areaFinal;
     
-    const vFinal = this._calcVolume(p.shape, d, h, w, p.polySides);
-    const areaFinal = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides);
+    if (p.shape === 'symbol') {
+        // Повторяем расчет, т.к. _calcVolume не умеет в символы без meta
+        // Но мы можем схитрить и посчитать тут снова, или передать. 
+        // Проще посчитать, это быстро.
+        const meta = this._analyzeSymbol(p.symbolChar || '5', p.symbolFont || 'Arial');
+        // w и d уже округлены выше
+        const areaBase = (d * w) * meta.fillFactor;
+        vFinal = areaBase * h;
+        const perimeter = 2 * (d + w) * 1.3;
+        areaFinal = areaBase + (perimeter * h);
+    } else {
+        vFinal = this._calcVolume(p.shape, d, h, w, p.polySides);
+        areaFinal = this._calculateSurfaceArea(p.shape, d, h, false, w, p.polySides);
+    }
+
     return { d, h, w, volInner: vFinal, area: areaFinal };
   }
 
@@ -849,6 +903,49 @@ _calculateSingleTier(tierInput, isBottom) {
           side = Math.PI * d * h;
       }
       return side + top + (bottom ? top : 0);
+  }
+
+      // --- НОВЫЙ МЕТОД: АНАЛИЗ СИМВОЛА ---
+  _analyzeSymbol(char, font) {
+      // 1. Создаем виртуальный холст
+      const cvs = document.createElement('canvas');
+      const ctx = cvs.getContext('2d');
+      const size = 100; // Разрешение сканирования
+      cvs.width = size;
+      cvs.height = size;
+
+      // 2. Рисуем символ
+      ctx.font = `bold ${size}px ${font}`;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+      
+      // Измеряем ширину текста
+      const metrics = ctx.measureText(char);
+      const textW = metrics.width;
+      // Эвристика высоты (примерно 75% от размера шрифта для заглавных)
+      const textH = size * 0.75; 
+
+      // Очищаем и рисуем
+      ctx.fillStyle = '#000';
+      ctx.fillText(char, 0, 0);
+
+      // 3. Сканируем пиксели (Считаем площадь)
+      const imgData = ctx.getImageData(0, 0, textW, size).data;
+      let hitCount = 0;
+      for (let i = 3; i < imgData.length; i += 4) {
+          if (imgData[i] > 128) hitCount++; // Считаем непрозрачные пиксели
+      }
+
+      // 4. Вычисляем коэффициенты
+      const boundingBoxArea = textW * size; // Площадь прямоугольника
+      // Fill Factor: какую часть прямоугольника реально занимает буква
+      // (защита от деления на 0, если символ пустой)
+      const fillFactor = (boundingBoxArea > 0) ? (hitCount / boundingBoxArea) : 1; 
+      
+      // Пропорция (Ширина / Высота)
+      const aspectRatio = textW / size;
+
+      return { fillFactor, aspectRatio };
   }
 }
 
@@ -968,6 +1065,43 @@ class CakeVisualizer {
               const midHy = (bCy + tCy) / 2;
               svgContent += `<text x="${midHx}" y="${midHy}" dx="8" fill="${colDim}" font-weight="bold" font-size="12" dominant-baseline="middle">H${fmt(t.h)}</text>`;
 
+          } else if (shape === 'symbol') {
+              const char = t.symbolChar || '5';
+              const font = (t.symbolFont || 'Arial').split(',')[0]; // Берем первое имя шрифта
+              
+              const fontSize = pxD; // Высота буквы в пикселях
+              const textX = cX;
+              const textY = currentBaseCenterY; // Низ буквы
+              
+              // Генерируем уникальный ID для маски/пути (если нужно)
+              // Рисуем "3D" слоями (Стек)
+              const depth = 20; // Глубина 3D эффекта (в пикселях)
+              const layers = 15; // Сколько слоев рисовать для плавности
+              
+              // 1. Рисуем "Тень" (Боковину) - много слоев со сдвигом
+              for (let i = 0; i < layers; i++) {
+                  const shift = (i / layers) * depth;
+                  // Смещаем вверх и вправо (изометрия)
+                  const lx = textX + shift * 0.5; 
+                  const ly = textY - shift * 0.5; 
+                  
+                  // Цвет боковины (темнее)
+                  svgContent += `<text x="${lx}" y="${ly}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${fontSize}" fill="#8D6E63" stroke="#5D4037" stroke-width="1" style="user-select:none;">${char}</text>`;
+              }
+
+              // 2. Рисуем "Лицо" (Верхний слой)
+              // Смещаем на полную глубину
+              const tx = textX + depth * 0.5;
+              const ty = textY - depth * 0.5;
+              
+              // Сама буква
+              svgContent += `<text x="${tx}" y="${ty}" text-anchor="middle" font-family="${font}" font-weight="900" font-size="${fontSize}" fill="url(#${gradId})" stroke="#757575" stroke-width="1" style="user-select:none;">${char}</text>`;
+              
+              // Размеры
+              svgContent += `<text x="${tx}" y="${ty - fontSize*0.8}" text-anchor="middle" fill="${colDim}" font-weight="bold" font-size="12">H${fmt(t.d)} см</text>`;
+              
+              // Высоту торта покажем сбоку
+              svgContent += `<text x="${tx + fontSize*0.4}" y="${ty}" fill="${colDim}" font-size="12">Т:${fmt(t.h)}</text>`;
           } else { 
               const ry = pxR * 0.3;
               const tierTopY = currentBaseCenterY - pxH;
@@ -2840,17 +2974,37 @@ body {
     <div class="form-group" style="flex:2; min-width: 200px;">
         <span class="form-label">Форма торта</span>
         <select id="globalShape" onchange="updateTierUI()" style="font-weight:bold;">
-            <option value="cylinder">Круг (Цилиндр)</option>
-            <option value="square">Квадрат</option>
-            <option value="rectangle">Прямоугольник</option>
-            <option value="sphere">Шар (Бомба)</option>
-            <option value="polygon">Многогранник</option>
+            <option value="cylinder">⚪ Круг (Цилиндр)</option>
+            <option value="square">⬜ Квадрат</option>
+            <option value="rectangle">▭ Прямоугольник</option>
+            <option value="sphere">💣 Шар (Бомба)</option>
+            <option value="polygon">⬡ Многогранник</option>
+            <option value="symbol">🔠 Цифра / Символ</option>
         </select>
     </div>
 
     <div class="form-group" id="grpSides" style="display:none; flex:1;">
         <span class="form-label">Углов</span>
         <input type="number" id="globalSides" value="6">
+    </div>
+
+    <div class="form-group" id="grpSymbol" style="display:none; flex:2; border-left: 2px solid #ccc; padding-left: 10px;">
+        <div style="display:flex; gap:5px;">
+            <div style="flex:1;">
+                <span class="form-label">Знак</span>
+                <input type="text" id="cakeSymbol" value="5" maxlength="2" placeholder="A" style="font-weight:bold; text-align:center; font-size:16px; text-transform:uppercase;" oninput="updateTierUI()">
+            </div>
+            <div style="flex:2;">
+                <span class="form-label">Шрифт</span>
+                <select id="cakeFont" onchange="updateTierUI()" style="font-size:12px;">
+                    <option value="Arial Black, Arial, sans-serif">Жирный (Arial)</option>
+                    <option value="Times New Roman, serif">С засечками (Times)</option>
+                    <option value="Impact, sans-serif">Мощный (Impact)</option>
+                    <option value="Courier New, monospace">Печатная машинка</option>
+                    <option value="Comic Sans MS, cursive">Рукописный</option>
+                </select>
+            </div>
+        </div>
     </div>
     <div class="form-group" id="sphereFillBlock" style="display:none; flex:2;">
         <span class="form-label">Заполнение</span>
@@ -3982,21 +4136,23 @@ function moveTier(idx, direction) {
 }
 
 function updateTierUI() {
-  renderCoatingOptions(); // <--- ДОБАВИТЬ СЮДА ПЕРВОЙ СТРОКОЙ
+    renderCoatingOptions(); 
     const sh = document.getElementById('globalShape').value;
     
-    // Показываем/скрываем специфичные поля
+    // Управление видимостью полей
     const grpSides = document.getElementById('grpSides');
     const sphereFillBlock = document.getElementById('sphereFillBlock');
+    const grpSymbol = document.getElementById('grpSymbol');
     
     if (grpSides) grpSides.style.display = (sh === 'polygon') ? 'block' : 'none';
     if (sphereFillBlock) sphereFillBlock.style.display = (sh === 'sphere') ? 'block' : 'none';
+    if (grpSymbol) grpSymbol.style.display = (sh === 'symbol') ? 'block' : 'none';
 
-    // Обновляем зависимые элементы интерфейса
+    // Обновляем зависимые элементы
     updateCoatingUI(); 
     renderTierRows();
     
-    // Сохраняем в историю только факт смены формы
+    // Сохраняем (чтобы при обновлении страницы не слетело)
     saveToHistory(); 
 }
 
@@ -4074,7 +4230,9 @@ function calculateInitial() {
     isGeometryMode: t.isGeometryMode || false, 
     fixedDiameter: parseFloat(t.fixedDiameter) || null,
     fixedWidth: parseFloat(t.fixedWidth) || null,
-    fixedHeight: parseFloat(t.fixedHeight) || null
+    fixedHeight: parseFloat(t.fixedHeight) || null,
+    symbolChar: document.getElementById('cakeSymbol').value, // <-- Добавить
+    symbolFont: document.getElementById('cakeFont').value
 }));
 
     const payload = {
@@ -4338,6 +4496,8 @@ function calculateSide(side) {
     const payload = {
         tiers: sourceTiers,
         shape: document.getElementById('globalShape').value,
+        symbolChar: document.getElementById('cakeSymbol').value || '5',
+        symbolFont: document.getElementById('cakeFont').value,
         polySides: parseInt(document.getElementById('globalSides').value) || 6,
         sphereFillMode: document.querySelector('input[name="sphereFillMode"]:checked') ? document.querySelector('input[name="sphereFillMode"]:checked').value : 'recipe',
         coatingId: document.getElementById('coatingIdSelect').value,
@@ -11770,6 +11930,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
