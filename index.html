@@ -2741,95 +2741,108 @@ body {
 </div>
 
 <div id="orderFinalizeModal" class="modal-overlay">
-    <div class="modal-box" style="width: 550px;">
-    <h3>📝 Оформление заказа</h3>
+    <div class="modal-box" style="width: 550px; max-height: 95vh; overflow-y: auto;">
+        <h3>📝 Оформление заказа</h3>
     
-    <div class="form-row">
-        <div class="form-group" style="flex:2;">
-            <span class="form-label">Клиент (Имя, Тел или Инста)</span>
-            <input type="text" id="orderClientSearch" list="orderClientsDatalist" placeholder="Начните вводить..." onchange="handleClientSelection()">
-            <datalist id="orderClientsDatalist"></datalist>
-            <input type="hidden" id="orderClientId">
+        <div style="background: #f0f4c3; padding: 10px; border-radius: 8px; margin-bottom: 15px; border: 1px dashed #c0ca33; text-align: center;">
+            <div style="font-size: 12px; font-weight: bold; color: #827717; margin-bottom: 5px;">📸 Референс (Фото дизайна)</div>
+            
+            <input type="file" id="orderRefInput" accept="image/*" style="display:none;" onchange="processOrderImage(this)">
+            
+            <div id="orderRefPreviewBox" onclick="document.getElementById('orderRefInput').click()" 
+                 style="width: 100%; height: 120px; background: #fff; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; position: relative; border: 1px solid #ddd;">
+                <span style="color: #999; font-size: 12px;">Нажмите, чтобы добавить фото</span>
+                <img id="orderRefImg" style="display:none; width: 100%; height: 100%; object-fit: contain;">
+            </div>
+            <button onclick="clearOrderImage()" id="btnDelRef" style="display:none; margin-top:5px; background:none; border:none; color:#d32f2f; font-size:11px; cursor:pointer; text-decoration:underline;">Удалить фото</button>
         </div>
-        <div class="form-group">
-            <span class="form-label">📅 Дата сдачи</span>
-            <input type="date" id="orderDeadline">
-        </div>
-    </div>
 
-    <div class="form-row">
-        <div class="form-group">
-            <span class="form-label">Повод</span>
-            <input type="text" id="orderReason" placeholder="Напр: Юбилей">
+        <div class="form-row">
+            <div class="form-group" style="flex:2;">
+                <span class="form-label">Клиент (Имя, Тел или Инста)</span>
+                <input type="text" id="orderClientSearch" list="orderClientsDatalist" placeholder="Начните вводить..." onchange="handleClientSelection()">
+                <datalist id="orderClientsDatalist"></datalist>
+                <input type="hidden" id="orderClientId">
+            </div>
+            <div class="form-group">
+                <span class="form-label">📅 Дата сдачи</span>
+                <input type="date" id="orderDeadline">
+            </div>
         </div>
-        <div class="form-group">
-            <span class="form-label">Для кого</span>
-            <input type="text" id="orderForWhom" placeholder="Имя именинника">
-        </div>
-    </div>
 
-      <div class="form-row">
-        <div class="form-group">
-            <span class="form-label">Телефон</span>
-            <input type="text" id="orderPhone" placeholder="+7 (___) ___-__-__" oninput="formatPhoneNumber(this)">
+        <div class="form-row">
+            <div class="form-group">
+                <span class="form-label">Повод</span>
+                <input type="text" id="orderReason" placeholder="Напр: Юбилей">
+            </div>
+            <div class="form-group">
+                <span class="form-label">Для кого</span>
+                <input type="text" id="orderForWhom" placeholder="Имя именинника">
+            </div>
         </div>
-        <div class="form-group">
-            <span class="form-label">Ник в соц.сетях</span>
-            <input type="text" id="orderSocial" placeholder="без @">
-        </div>
-    </div>
-    <div class="form-row">
-        <div class="form-group">
-            <span class="form-label">📍 Адрес доставки</span>
-            <input type="text" id="orderAddress" placeholder="Улица, дом, кв...">
-        </div>
-    </div>
-    <div class="form-row">
-        <div class="form-group">
-            <span class="form-label">💰 Предоплата</span>
-            <input type="text" id="orderPrepayment" class="money-input" placeholder="0" oninput="formatMoneyInput(this)">
-        </div>
-        <div class="form-group">
-            <span class="form-label">Остаток</span>
-            <input type="text" id="orderBalance" class="money-input" placeholder="0" oninput="formatMoneyInput(this)">
-        </div>
-    </div>
-<div class="form-row">
-        <div class="form-group" style="flex:1;">
-            <span class="form-label">🎨 Основной цвет торта</span>
-            <input type="text" id="orderColor" placeholder="Напр: Красный, Нежный розовый">
-        </div>
-    </div>
-    <div class="form-row">
-        <div class="form-group">
-            <span class="form-label">💳 Оплата</span>
-            <select id="orderPayment">
-                <option value="Перевод (Kaspi)">Перевод (Kaspi)</option>
-                <option value="Перевод (Halyk)">Перевод (Halyk)</option>
-                <option value="Наличные">Наличные</option>
-                <option value="Удаленная оплата">Удаленная оплата</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <span class="form-label">📍 Получение</span>
-            <select id="orderDelivery">
-                <option value="Самовывоз">Самовывоз</option>
-                <option value="Курьер">Курьер (Доставка)</option>
-                <option value="Ваша доставка">Ваша доставка</option>
-            </select>
-        </div>
-    </div>
 
-    <div class="form-group">
-        <span class="form-label">Пожелания клиента</span>
-        <textarea id="orderComment" rows="2" style="width:100%; border:1px solid #ddd; border-radius:6px; padding:5px; font-family:inherit;"></textarea>
-    </div>
+          <div class="form-row">
+            <div class="form-group">
+                <span class="form-label">Телефон</span>
+                <input type="text" id="orderPhone" placeholder="+7 (___) ___-__-__" oninput="formatPhoneNumber(this)">
+            </div>
+            <div class="form-group">
+                <span class="form-label">Ник в соц.сетях</span>
+                <input type="text" id="orderSocial" placeholder="без @">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <span class="form-label">📍 Адрес доставки</span>
+                <input type="text" id="orderAddress" placeholder="Улица, дом, кв...">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <span class="form-label">💰 Предоплата</span>
+                <input type="text" id="orderPrepayment" class="money-input" placeholder="0" oninput="formatMoneyInput(this)">
+            </div>
+            <div class="form-group">
+                <span class="form-label">Остаток</span>
+                <input type="text" id="orderBalance" class="money-input" placeholder="0" oninput="formatMoneyInput(this)">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group" style="flex:1;">
+                <span class="form-label">🎨 Основной цвет торта</span>
+                <input type="text" id="orderColor" placeholder="Напр: Красный, Нежный розовый">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <span class="form-label">💳 Оплата</span>
+                <select id="orderPayment">
+                    <option value="Перевод (Kaspi)">Перевод (Kaspi)</option>
+                    <option value="Перевод (Halyk)">Перевод (Halyk)</option>
+                    <option value="Наличные">Наличные</option>
+                    <option value="Удаленная оплата">Удаленная оплата</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <span class="form-label">📍 Получение</span>
+                <select id="orderDelivery">
+                    <option value="Самовывоз">Самовывоз</option>
+                    <option value="Курьер">Курьер (Доставка)</option>
+                    <option value="Ваша доставка">Ваша доставка</option>
+                </select>
+            </div>
+        </div>
 
-    <div class="modal-actions">
-        <button class="tab-btn" onclick="document.getElementById('orderFinalizeModal').style.display='none'">Отмена</button>
-        <button class="main-btn" onclick="confirmAddToQueueWithClient()" style="width:auto; padding:10px 30px; background:#4CAF50;">Создать заказ</button>
+        <div class="form-group">
+            <span class="form-label">Пожелания клиента</span>
+            <textarea id="orderComment" rows="2" style="width:100%; border:1px solid #ddd; border-radius:6px; padding:5px; font-family:inherit;"></textarea>
+        </div>
+
+        <div class="modal-actions">
+            <button class="tab-btn" onclick="document.getElementById('orderFinalizeModal').style.display='none'">Отмена</button>
+            <button class="main-btn" onclick="confirmAddToQueueWithClient()" style="width:auto; padding:10px 30px; background:#4CAF50;">Создать заказ</button>
+        </div>
     </div>
-</div>
 </div>
 
       <div id="tab-calc" class="tab-content">
@@ -5760,13 +5773,15 @@ function renderQueue() {
                     </div>` : '<div></div>'}
                     
                     <div class="btn-action-group">
-                        ${isBooking ? 
-                            `<button class="btn-done" style="background:#FFF3E0; color:#E65100; border-color:#FFE0B2;" onclick="startConvertingBooking('${item.id}')">🎂 Собрать</button>` 
-                            : 
-                            `<button class="btn-done" onclick="finishOrder('${item.id}', '${item.name}')">✅ Сделано</button>`
-                        }
-                        <button class="btn-icon" onclick="removeFromQueue('${item.id}')" title="Удалить без сохранения">🗑️</button>
-                    </div>
+        ${item.refImage ? `<button class="btn-done" style="background:#FCE4EC; color:#C2185B; border-color:#F8BBD0;" onclick="viewOrderRef('${item.id}')">📷 Фото</button>` : ''}
+        
+        ${isBooking ? 
+            `<button class="btn-done" ...>🎂 Собрать</button>` 
+            : 
+            `<button class="btn-done" onclick="finishOrder('${item.id}', '${item.name}')">✅ Сделано</button>`
+        }
+        <button class="btn-icon" onclick="removeFromQueue('${item.id}')">🗑️</button>
+    </div>
                 </div>
             </div>`;
         });
@@ -6049,6 +6064,7 @@ function addToQueue() {
     document.getElementById('orderPayment').selectedIndex = 0; // Сброс на первый пункт
     document.getElementById('orderDelivery').selectedIndex = 0;
     document.getElementById('orderComment').value = '';
+    
     // ---------------------------------------------------
 
     // Настраиваем дату (по умолчанию завтра)
@@ -6070,7 +6086,7 @@ function addToQueue() {
         option.innerText = `${c.phone || ''} ${c.social || ''}`; 
         datalist.appendChild(option);
     });
-
+    clearOrderImage(); // <--- ДОБАВИТЬ
     document.getElementById('orderFinalizeModal').style.display = 'flex';
 }
 
@@ -6107,46 +6123,42 @@ function handleClientSelection() {
 
 // 3. Сохранение заказа и пересчет суммы
 async function confirmAddToQueueWithClient() {
-    // 1. Проверки
     const res = appState.results[appState.activeSide];
     if (!res) { alert("Сначала рассчитайте торт!"); return; }
 
     let clientName = document.getElementById('orderClientSearch').value.trim();
     let clientId = document.getElementById('orderClientId').value;
-    
-    // Получаем данные из новых полей
     let clientPhone = document.getElementById('orderPhone').value.trim();
     let clientSocial = document.getElementById('orderSocial').value.trim();
     
-    let isNewClient = false; 
-
     if (!clientName) { alert("Укажите имя клиента!"); return; }
 
-    // 2. Авто-создание клиента, если новый
+    // Авто-создание клиента
     if (!clientId) {
         clientId = 'c' + Date.now();
-        isNewClient = true;
         const newClientObj = {
             name: clientName,
-            phone: clientPhone,   // Сразу сохраняем телефон
-            social: clientSocial, // И соцсеть
+            phone: clientPhone,
+            social: clientSocial,
             created: new Date().toISOString(),
             totalSpend: 0
         };
         await db.ref('clients/' + clientId).set(newClientObj);
-        // Обновляем локальный кэш
-        clientsDataLocal[clientId] = newClientObj; 
+        clientsDataLocal[clientId] = newClientObj;
     }
 
-    // --- ОЧИСТКА СУММ ОТ ПРОБЕЛОВ ---
-    const prepStr = document.getElementById('orderPrepayment').value.replace(/\D/g, ''); // "10 000" -> "10000"
+    const prepStr = document.getElementById('orderPrepayment').value.replace(/\D/g, '');
     const balStr = document.getElementById('orderBalance').value.replace(/\D/g, '');
-    
     const prepaymentVal = parseFloat(prepStr) || 0;
     const balanceVal = parseFloat(balStr) || 0;
-
-    // 3. Сбор данных о заказе
     const orderPrice = res.costs.finalPrice;
+
+    // Сбор начинок для текста
+    const fillingNames = [...new Set(res.tiers.map(t => t.recipeName))].join(' + ');
+    const orderWeight = (res.weights.total / 1000).toFixed(2);
+    const orderDate = document.getElementById('orderDeadline').value;
+    const orderComment = document.getElementById('orderComment').value;
+
     const orderData = {
         id: 'ord_' + Date.now(),
         clientId: clientId,
@@ -6154,60 +6166,146 @@ async function confirmAddToQueueWithClient() {
         phone: clientPhone,
         social: clientSocial,
         address: document.getElementById('orderAddress').value.trim(),
-        
-        // Пишем уже чистые числа
         prepayment: prepaymentVal,
         balance: balanceVal,
-
-        date: document.getElementById('orderDeadline').value,
+        date: orderDate,
         reason: document.getElementById('orderReason').value,
         forWhom: document.getElementById('orderForWhom').value,
-        color: document.getElementById('orderColor').value, 
+        color: document.getElementById('orderColor').value,
         payment: document.getElementById('orderPayment').value,
         delivery: document.getElementById('orderDelivery').value,
-        comment: document.getElementById('orderComment').value,
+        comment: orderComment,
         price: orderPrice,
-        weight: (res.weights.total / 1000).toFixed(2),
+        weight: orderWeight,
         data: res,
         labor: JSON.parse(JSON.stringify(currentLaborList || [])),
-        extras: JSON.parse(JSON.stringify(extrasList || []))
+        extras: JSON.parse(JSON.stringify(extrasList || [])),
+        
+        // --- СОХРАНЯЕМ ФОТО ---
+        refImage: currentOrderImageBase64 
     };
 
-    // 4. Логика Плана (Замена Брони или Новый заказ)
     if (activeBookingId) {
         const idx = productionQueue.findIndex(b => b.id === activeBookingId);
         if (idx !== -1) {
-            productionQueue[idx] = orderData; 
+            productionQueue[idx] = orderData;
             db.ref(`clients/${clientId}/history/${activeBookingId}`).remove();
         } else {
-            productionQueue.push(orderData); 
+            productionQueue.push(orderData);
         }
-        activeBookingId = null; 
+        activeBookingId = null;
     } else {
-        productionQueue.push(orderData); 
+        productionQueue.push(orderData);
     }
     saveQueue();
 
-    // 5. Финал
+    // Закрываем окно
     document.getElementById('orderFinalizeModal').style.display = 'none';
+    
+    // Очищаем фото из памяти формы
+    clearOrderImage();
+
+    // --- WHATSAPP АВТОМАТИЗАЦИЯ ---
+    if (clientPhone) {
+        const cleanPhone = clientPhone.replace(/\D/g, '');
+        const dateRu = orderDate.split('-').reverse().join('.');
+        
+        const waText = `Здравствуйте, ${clientName}! Ваша дата забронирована 🎂\n\n` +
+            `📅 Готовность: *${dateRu}*\n` +
+            `🍰 Начинка: ${fillingNames}\n` +
+            `⚖️ Вес: ${orderWeight} кг\n` +
+            `📝 Пожелания: ${orderComment || 'По фото'}\n\n` +
+            `💰 Предоплата: ${prepaymentVal} ₸\n` +
+            `💳 Остаток: ${balanceVal} ₸\n\n` +
+            `Всё верно?`;
+
+        if(confirm("📲 Открыть WhatsApp с подтверждением заказа?")) {
+            window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(waText)}`, '_blank');
+        }
+    }
 
     // Предлагаем календарь
     const links = createCalendarLinks(orderData);
-    if(confirm("✅ Заказ добавлен в План!\n\nОткрыть Google Календарь для напоминания?")) {
+    if(confirm("✅ Заказ добавлен! Открыть Календарь?")) {
         window.open(links.googleUrl, '_blank');
     }
+}
 
-    // --- ИСПРАВЛЕННАЯ ЛОГИКА ОТКРЫТИЯ КАРТОЧКИ ---
-    // Открываем окно "Заполните данные", ТОЛЬКО если клиент новый И мы НЕ заполнили контакты
-    if (isNewClient) {
-        // Если нет ни телефона, ни инстаграма - тогда просим заполнить
-        if (!clientPhone && !clientSocial) {
-            setTimeout(() => {
-                openClientModal(clientId);
-                alert(`Это новый клиент "${clientName}".\nЗаполните телефон или соцсети для связи.`); 
-            }, 500);
-        }
-        // Иначе (если хоть что-то заполнили) - молча радуемся жизни
+     // --- 1. ОБРАБОТКА ФОТО (СЖАТИЕ) ---
+let currentOrderImageBase64 = null; // Глобальная переменная для текущего фото
+
+function processOrderImage(input) {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            const img = new Image();
+            img.src = e.target.result;
+            
+            img.onload = function() {
+                // Сжимаем
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Максимальный размер 800px (хватит для телефона)
+                const MAX_WIDTH = 800;
+                const MAX_HEIGHT = 800;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width *= MAX_HEIGHT / height;
+                        height = MAX_HEIGHT;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Конвертируем в JPEG с качеством 0.6 (60%)
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+                
+                // Сохраняем и показываем
+                currentOrderImageBase64 = dataUrl;
+                document.getElementById('orderRefImg').src = dataUrl;
+                document.getElementById('orderRefImg').style.display = 'block';
+                document.getElementById('orderRefPreviewBox').querySelector('span').style.display = 'none';
+                document.getElementById('btnDelRef').style.display = 'inline-block';
+            };
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function clearOrderImage() {
+    currentOrderImageBase64 = null;
+    const input = document.getElementById('orderRefInput');
+    const img = document.getElementById('orderRefImg');
+    const span = document.getElementById('orderRefPreviewBox')?.querySelector('span');
+    const btn = document.getElementById('btnDelRef');
+
+    if (input) input.value = '';
+    if (img) { img.src = ''; img.style.display = 'none'; }
+    if (span) span.style.display = 'block';
+    if (btn) btn.style.display = 'none';
+}
+
+// --- 2. ПРОСМОТР РЕФЕРЕНСА НА ВЕСЬ ЭКРАН ---
+function viewOrderRef(orderId) {
+    const order = productionQueue.find(o => o.id === orderId);
+    if(order && order.refImage) {
+        const container = document.getElementById('lightboxSvgContainer');
+        // Вставляем картинку вместо SVG
+        container.innerHTML = `<img src="${order.refImage}" style="max-width:100%; max-height:100%; object-fit:contain;">`;
+        document.getElementById('cakeLightbox').style.display = 'flex';
     }
 }
 
@@ -6326,99 +6424,110 @@ function generateBatchReport() {
     };
 
     // 2. ОБРАБОТКА ДАННЫХ
-    // 2. ОБРАБОТКА ДАННЫХ
-ordersToProcess.forEach(ord => {
-    // ЗАЩИТА: Если это бронь или заказ без данных расчета, просто идем к следующему
-    if (!ord.data || !ord.data.detailedBlocks) {
-        console.warn("Пропущен заказ без данных состава:", ord.name);
-        return; 
-    }
+    ordersToProcess.forEach(ord => {
+        if (!ord.data || !ord.data.detailedBlocks) return; 
 
-    const ordColor = ord.color ? ord.color.trim() : null;
+        const ordColor = ord.color ? ord.color.trim() : null;
 
-    ord.data.detailedBlocks.forEach(block => {
-        // Добавляем еще одну проверку внутри блока на наличие ингредиентов
-        if (!block.ingredients) return; 
+        ord.data.detailedBlocks.forEach(block => {
+            if (!block.ingredients) return; 
 
-        const type = block.type; 
-        const tierObj = getTierObj(block.name, ord.data);
-        
-        let sizeInfo = "";
-        let tierHeight = 0;
-        
-        if (tierObj) {
-            const shape = ord.data.geometry.shape;
-            const d = Math.round(tierObj.d);
-            const h = Math.round(tierObj.h);
-            const w = tierObj.w ? Math.round(tierObj.w) : d;
-            tierHeight = h;
-            sizeInfo = (shape === 'rectangle') ? `${d}x${w} H${h}` : `D${d} H${h}`;
-        } else {
-            sizeInfo = ord.data.geometry ? `D${ord.data.geometry.d}` : "";
-            tierHeight = ord.data.geometry ? ord.data.geometry.h : 0;
-        }
+            const type = block.type; 
+            const tierObj = getTierObj(block.name, ord.data);
+            
+            let sizeInfo = "";
+            let tierHeight = 0;
+            
+            // --- НОВАЯ ЛОГИКА МУССОВ ---
+            let displayD = 0;
+            let displayW = 0;
 
-        const nameLower = block.name.toLowerCase();
-        const isRecipeExtra = nameLower.includes('велюр') || nameLower.includes('гляссаж') || nameLower.includes('покрытие');
+            if (tierObj) {
+                const shape = ord.data.geometry.shape;
+                displayD = Math.round(tierObj.d);
+                const h = Math.round(tierObj.h);
+                displayW = tierObj.w ? Math.round(tierObj.w) : displayD;
+                tierHeight = h;
+                
+                sizeInfo = (shape === 'rectangle') ? `${displayD}x${displayW} H${h}` : `D${displayD} H${h}`;
+            } else {
+                sizeInfo = ord.data.geometry ? `D${ord.data.geometry.d}` : "";
+                tierHeight = ord.data.geometry ? ord.data.geometry.h : 0;
+                displayD = ord.data.geometry ? ord.data.geometry.d : 0;
+            }
 
-        // A: ДЕКОР
-        if (type === 'extra' && !isRecipeExtra) {
-            block.ingredients.forEach(ing => {
-                const itemName = ing.name; 
-                if (!batches[itemName]) {
-                    batches[itemName] = {
-                        name: itemName, type: 'decor_item', totalWeight: 0, ingredients: {}, tasks: [],        
+            // ПРОВЕРКА НА МУСС
+            const nameLower = block.name.toLowerCase();
+            if (nameLower.includes('мусс')) {
+                // Отнимаем 2 см от диаметра/длины И от ширины
+                let mousseD = displayD - 2;
+                let mousseW = displayW - 2; 
+                
+                let mousseLabel = "";
+                const shape = ord.data.geometry.shape;
+                
+                // Если прямоугольник - пишем оба размера
+                if (shape === 'rectangle') {
+                    mousseLabel = `${mousseD}x${mousseW}`;
+                } else {
+                    // Для остальных форм (включая квадрат) достаточно D (или S)
+                    mousseLabel = `D${mousseD}`;
+                }
+                
+                sizeInfo += ` <span style="color:#E65100; font-weight:bold; background:#FFF3E0; padding:0 3px; border-radius:3px;">(Мусс ${mousseLabel})</span>`;
+            }
+            // -----------------------------
+
+            const isRecipeExtra = nameLower.includes('велюр') || nameLower.includes('гляссаж') || nameLower.includes('покрытие');
+
+            if (type === 'extra' && !isRecipeExtra) {
+                block.ingredients.forEach(ing => {
+                    const itemName = ing.name; 
+                    if (!batches[itemName]) {
+                        batches[itemName] = {
+                            name: itemName, type: 'decor_item', totalWeight: 0, ingredients: {}, tasks: [],        
+                            coatingBaseTotal: 0, coatingBaseTasks: [], coatingColors: {}
+                        };
+                    }
+                    const batch = batches[itemName];
+                    if (!batch.ingredients[ing.name]) batch.ingredients[ing.name] = { amount: 0, unit: ing.unit };
+                    batch.ingredients[ing.name].amount += ing.amount;
+                    batch.tasks.push({ client: ord.name, info: sizeInfo, displayValue: `${ing.amount} ${ing.unit}` });
+                });
+            } 
+            else {
+                const cleanName = getCleanName(block.name); 
+                
+                if (!batches[cleanName]) {
+                    batches[cleanName] = {
+                        name: cleanName, type: type, totalWeight: 0, ingredients: {}, tasks: [],
                         coatingBaseTotal: 0, coatingBaseTasks: [], coatingColors: {}
                     };
                 }
-                const batch = batches[itemName];
-                if (!batch.ingredients[ing.name]) batch.ingredients[ing.name] = { amount: 0, unit: ing.unit };
-                batch.ingredients[ing.name].amount += ing.amount;
-                batch.tasks.push({ client: ord.name, info: sizeInfo, displayValue: `${ing.amount} ${ing.unit}` });
-            });
-        } 
-        // B: ПРОДУКТЫ (БИСКВИТЫ, КРЕМЫ)
-        else {
-            const cleanName = getCleanName(block.name); 
-            
-            if (!batches[cleanName]) {
-                batches[cleanName] = {
-                    name: cleanName, type: type, totalWeight: 0, ingredients: {}, tasks: [],
-                    coatingBaseTotal: 0, coatingBaseTasks: [], coatingColors: {}
-                };
-            }
-            const batch = batches[cleanName];
-            let blockWeight = 0;
-            
-            // --- ИЗМЕНЕНИЕ: ГРУППИРОВКА ПО СТРОКАМ, А НЕ ПО ИМЕНИ ---
-            block.ingredients.forEach((ing, idx) => {
-                // Используем индекс (idx), чтобы одинаковые ингредиенты на разных строках не слипались
-                if (!batch.ingredients[idx]) {
-                    batch.ingredients[idx] = { 
-                        name: ing.name, // Сохраняем имя внутри объекта
-                        amount: 0, 
-                        unit: ing.unit 
-                    };
-                }
-                batch.ingredients[idx].amount += ing.amount;
+                const batch = batches[cleanName];
+                let blockWeight = 0;
                 
-                let weightInGrams = 0;
-                if (ing.unit === 'шт') {
-                    const refIng = myIngredients.find(i => i.name === ing.name);
-                    weightInGrams = ing.amount * ((refIng && refIng.singleWeight) ? refIng.singleWeight : 0);
-                } else if (['г','ml','мл'].includes(ing.unit)) {
-                    weightInGrams = ing.amount;
-                }
-                blockWeight += weightInGrams;
-            });
-            
-            batch.totalWeight += blockWeight;
-            // ... далее код без изменений (логика отрисовки задач)
+                block.ingredients.forEach((ing, idx) => {
+                    if (!batch.ingredients[idx]) {
+                        batch.ingredients[idx] = { name: ing.name, amount: 0, unit: ing.unit };
+                    }
+                    batch.ingredients[idx].amount += ing.amount;
+                    
+                    let weightInGrams = 0;
+                    if (ing.unit === 'шт') {
+                        const refIng = myIngredients.find(i => i.name === ing.name);
+                        weightInGrams = ing.amount * ((refIng && refIng.singleWeight) ? refIng.singleWeight : 0);
+                    } else if (['г','ml','мл'].includes(ing.unit)) {
+                        weightInGrams = ing.amount;
+                    }
+                    blockWeight += weightInGrams;
+                });
+                
+                batch.totalWeight += blockWeight;
 
-                // --- ЛОГИКА ОТОБРАЖЕНИЯ ЗАДАЧ (Слева) ---
+                // ЛОГИКА ЗАМЕСОВ
                 const batchesCount = ord.batchCount || 1; 
 
-                // 1. БИСКВИТЫ (С учетом замесов)
                 if (cleanName.toLowerCase().includes('бисквит')) {
                     const lossPerBatch = 15; 
                     const weightPerBatchRaw = blockWeight / batchesCount; 
@@ -6456,11 +6565,8 @@ ordersToProcess.forEach(ord => {
                         });
                     }
                 }
-                // 2. ПОКРЫТИЕ (С учетом замесов + Окрашивание)
                 else if (type === 'coating') {
                     const weightPerBatchRaw = blockWeight / batchesCount;
-
-                    // Мини-рецепт для крема
                     let recipeHTML = "";
                     if (batchesCount > 1) {
                         const ingList = block.ingredients.map(ing => {
@@ -6478,7 +6584,6 @@ ordersToProcess.forEach(ord => {
                         }
 
                         if (ordColor) {
-                            // Если есть цвет: делим
                             const rough = weightPerBatchRaw * 0.67;
                             const finish = weightPerBatchRaw * 0.33;
                             
@@ -6496,7 +6601,6 @@ ordersToProcess.forEach(ord => {
                                 displayValue: `${prefix}<b>~${Math.round(finish)} г</b>` 
                             });
                         } else {
-                            // Без цвета (белый)
                             batch.coatingBaseTotal += weightPerBatchRaw;
                             batch.coatingBaseTasks.push({ 
                                 client: ord.name, 
@@ -6506,7 +6610,6 @@ ordersToProcess.forEach(ord => {
                         }
                     }
                 } 
-                // 3. ОСТАЛЬНОЕ (Начинки и прочее - пока без замесов, обычно их варят сразу)
                 else {
                     batch.tasks.push({ client: ord.name, info: sizeInfo, displayValue: `~${Math.round(blockWeight)} г` });
                 }
@@ -6618,30 +6721,21 @@ ordersToProcess.forEach(ord => {
                     <div style="font-size:11px; font-weight:bold; text-transform:uppercase; color:#999; margin-bottom:8px;">🥣 Закуп / Общий склад:</div>
                     <table style="width:100%; font-size:13px; border-collapse:collapse;">`;
         
-        // --- ИЗМЕНЕНИЕ: ПЕРЕБОР ПО ЗНАЧЕНИЯМ (так как ключи теперь цифры 0,1,2...) ---
         Object.values(b.ingredients).forEach(data => {
             const ingName = data.name; 
-        let val = data.amount;
-        
-        // ЛОГИКА ОТОБРАЖЕНИЯ:
-        // Если это штуки (шт) - оставляем как есть (1 или 1.5)
-        // Если это граммы - показываем 2 знака (120.45 г)
-        // Если число целое - показываем без дроби
-        
-        let displayVal;
-        if (val > 5) {
-            // Если больше 5 — жестко округляем до целого
-            displayVal = Math.round(val);
-        } else {
-            // Если 5 или меньше — оставляем точность (для агара, красителей и т.д.)
-            if (data.unit === 'шт') {
-                 displayVal = (val % 1 === 0) ? val : val.toFixed(1);
+            let val = data.amount;
+            let displayVal;
+            if (val > 5) {
+                displayVal = Math.round(val);
             } else {
-                 displayVal = (val % 1 === 0) ? val : val.toFixed(2);
+                if (data.unit === 'шт') {
+                     displayVal = (val % 1 === 0) ? val : val.toFixed(1);
+                } else {
+                     displayVal = (val % 1 === 0) ? val : val.toFixed(2);
+                }
             }
-        }
 
-        let displayAmount = `${displayVal} ${data.unit}`;
+            let displayAmount = `${displayVal} ${data.unit}`;
             if (ingName.toLowerCase().includes('яйцо') && data.unit === 'г') {
                 let approxPcs = Math.round(val / 55);
                 displayAmount += ` <small style="color:#666; font-weight:normal;">(~${approxPcs} шт)</small>`;
@@ -6661,36 +6755,34 @@ ordersToProcess.forEach(ord => {
                     </div>
                     <div style="padding:0;">`;
         decorBatches.forEach((b, idx) => {
-    const rowBg = (idx % 2 === 0) ? '#fff' : '#f9fbe7';
-    let totalQtyStr = "";
-    for (const [ingName, data] of Object.entries(b.ingredients)) { totalQtyStr = `${data.amount} ${data.unit}`; }
+            const rowBg = (idx % 2 === 0) ? '#fff' : '#f9fbe7';
+            let totalQtyStr = "";
+            for (const [ingName, data] of Object.entries(b.ingredients)) { totalQtyStr = `${data.amount} ${data.unit}`; }
 
-    // Проверяем, есть ли у нас детальный комментарий (например, для шпажек)
-    // Ищем комментарий в первом попавшемся задании (так как они сгруппированы по имени)
-    const detailInfo = ordersToProcess.map(ord => {
-        const found = ord.extras.find(ex => ex.name === b.name || b.name.includes(ex.name));
-        return found ? found.comment : null;
-    }).find(c => c !== null);
+            const detailInfo = ordersToProcess.map(ord => {
+                const found = ord.extras.find(ex => ex.name === b.name || b.name.includes(ex.name));
+                return found ? found.comment : null;
+            }).find(c => c !== null);
 
-    html += `<div style="background:${rowBg}; padding:8px 15px; border-bottom:1px solid #eee; display:flex; flex-direction:column;">
-        <div style="width:100%; display:flex; justify-content:space-between; margin-bottom:4px;">
-            <span style="font-weight:bold; font-size:14px; color:#333;">📦 ${b.name}</span>
-            <span style="font-weight:bold; font-size:13px; color:#2E7D32; background:#C8E6C9; padding:1px 6px; border-radius:4px;">Всего: ${totalQtyStr}</span>
-        </div>
-        
-        ${detailInfo ? `<div style="font-size:12px; color:#E65100; font-weight:bold; margin-bottom:5px; padding-left:10px;">📐 Инструкция: ${detailInfo}</div>` : ''}
+            html += `<div style="background:${rowBg}; padding:8px 15px; border-bottom:1px solid #eee; display:flex; flex-direction:column;">
+                <div style="width:100%; display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="font-weight:bold; font-size:14px; color:#333;">📦 ${b.name}</span>
+                    <span style="font-weight:bold; font-size:13px; color:#2E7D32; background:#C8E6C9; padding:1px 6px; border-radius:4px;">Всего: ${totalQtyStr}</span>
+                </div>
+                
+                ${detailInfo ? `<div style="font-size:12px; color:#E65100; font-weight:bold; margin-bottom:5px; padding-left:10px;">📐 Инструкция: ${detailInfo}</div>` : ''}
 
-        <div style="width:100%; padding-left:10px;">
-            <table style="width:100%; font-size:13px; color:#555;">`;
+                <div style="width:100%; padding-left:10px;">
+                    <table style="width:100%; font-size:13px; color:#555;">`;
             
-    b.tasks.forEach(t => {
-        html += `<tr>
-            <td style="padding:3px 0;">└ <span class="task-client">${t.client}</span> <span class="task-info">(${t.info})</span></td>
-            <td style="text-align:right;">${t.displayValue}</td>
-        </tr>`;
-    });
-    html += `</table></div></div>`;
-});
+            b.tasks.forEach(t => {
+                html += `<tr>
+                    <td style="padding:3px 0;">└ <span class="task-client">${t.client}</span> <span class="task-info">(${t.info})</span></td>
+                    <td style="text-align:right;">${t.displayValue}</td>
+                </tr>`;
+            });
+            html += `</table></div></div>`;
+        });
         html += `</div></div>`;
     }
     
@@ -9101,7 +9193,8 @@ function finishOrder(id, clientName) {
         const completedOrder = {
             ...order,
             completedAt: new Date().toISOString(),
-            status: 'completed'
+            status: 'completed',
+          refImage: null
         };
 
         // А. Сохраняем клиенту
@@ -11770,3 +11863,4 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
