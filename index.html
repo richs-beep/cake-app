@@ -2599,6 +2599,25 @@ body {
     <script src="https://accounts.google.com/gsi/client" async defer></script>    
   </head>
   <body>
+
+<div id="successModal" class="modal-overlay" style="z-index: 10001;">
+    <div class="modal-box" style="width: 350px; text-align: center;">
+        <div style="font-size: 40px; margin-bottom: 10px;">🎉</div>
+        <h3 style="margin: 0 0 10px 0; color: #2E7D32;">Заказ принят!</h3>
+        <div style="font-size: 13px; color: #666; margin-bottom: 20px;">Выберите дальнейшие действия:</div>
+        
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button id="btnSuccessWA" class="main-btn" style="background:#25D366; display:none; align-items:center; justify-content:center; gap:8px;">
+                <span>💬</span> Отправить в WhatsApp
+            </button>
+            <button id="btnSuccessCal" class="main-btn" style="background:#4285F4; align-items:center; justify-content:center; gap:8px;">
+                <span>📅</span> Добавить в Календарь
+            </button>
+            <button class="tab-btn" onclick="document.getElementById('successModal').style.display='none'">Закрыть</button>
+        </div>
+    </div>
+</div>
+    
     <datalist id="allIngsDatalist"></datalist>
     <datalist id="allLaborDatalist"></datalist>
 
@@ -6200,35 +6219,46 @@ async function confirmAddToQueueWithClient() {
     saveQueue();
 
     // Закрываем окно
+   // ... (код сохранения заказа выше остается тем же) ...
+    
+    // Закрываем окно оформления
     document.getElementById('orderFinalizeModal').style.display = 'none';
     
-    // Очищаем фото из памяти формы
+    // Очищаем фото
     clearOrderImage();
 
-    // --- WHATSAPP АВТОМАТИЗАЦИЯ ---
+    // --- ЛОГИКА ФИНАЛЬНОГО ОКНА ---
+    const waBtn = document.getElementById('btnSuccessWA');
+    const calBtn = document.getElementById('btnSuccessCal');
+
+    // 1. Настройка кнопки WhatsApp
     if (clientPhone) {
         const cleanPhone = clientPhone.replace(/\D/g, '');
         const dateRu = orderDate.split('-').reverse().join('.');
         
-        const waText = `Здравствуйте, ${clientName}! Ваша дата забронирована 🎂\n\n` +
-            `📅 Готовность: *${dateRu}*\n` +
+        const waText = `Ваша заказ принят\n\n` +
+            `📅 Дата: *${dateRu}*\n` +
             `🍰 Начинка: ${fillingNames}\n` +
             `⚖️ Вес: ${orderWeight} кг\n` +
             `📝 Пожелания: ${orderComment || 'По фото'}\n\n` +
-            `💰 Предоплата: ${prepaymentVal} ₸\n` +
-            `💳 Остаток: ${balanceVal} ₸\n\n` +
+            `💳 Предоплата: ${prepaymentVal.toLocaleString('ru-RU')} ₸\n` +
+            `💳 Остаток: ${balanceVal.toLocaleString('ru-RU')} ₸\n\n` +
             `Всё верно?`;
 
-        if(confirm("📲 Открыть WhatsApp с подтверждением заказа?")) {
-            window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(waText)}`, '_blank');
-        }
+        waBtn.style.display = 'flex';
+        // При клике открываем WhatsApp в новой вкладке
+        waBtn.onclick = () => window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(waText)}`, '_blank');
+    } else {
+        waBtn.style.display = 'none';
     }
 
-    // Предлагаем календарь
+    // 2. Настройка кнопки Календаря
     const links = createCalendarLinks(orderData);
-    if(confirm("✅ Заказ добавлен! Открыть Календарь?")) {
-        window.open(links.googleUrl, '_blank');
-    }
+    // При клике открываем Календарь
+    calBtn.onclick = () => window.open(links.googleUrl, '_blank');
+
+    // 3. Открываем окно успеха
+    document.getElementById('successModal').style.display = 'flex';
 }
 
      // --- 1. ОБРАБОТКА ФОТО (СЖАТИЕ) ---
@@ -11863,4 +11893,5 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
