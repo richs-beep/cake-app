@@ -6474,19 +6474,18 @@ function generateBatchReport() {
 
     let batches = {};
 
-    // Хелпер: Очистка имени блока от "Ярус 1: ", "Покрытие: "
-    // Оставляет суть: "Крем | Тропический баунти"
+    // --- ИСПРАВЛЕНО: ЖЕЛЕЗОБЕТОННАЯ ОЧИСТКА ИМЕНИ ---
+    // Берем всё, что после последнего двоеточия.
+    // Было: "Покрытие (Ярус 1): Крем | Тропический баунти" -> Стало: "Крем | Тропический баунти"
     const getCleanName = (rawName) => {
-        let name = rawName;
-        // Если есть двоеточие, берем правую часть
-        if (name.includes(':')) {
-            name = name.split(':').pop(); 
+        if (rawName.includes(':')) {
+            return rawName.split(':').pop().trim();
         }
-        // Дочищаем возможные остатки скобок или лишних пробелов
-        return name.replace(/(\(?\s*Ярус\s+[^):]+\s*\)?)/gi, '')
-                   .replace(/Покрытие/gi, '')
-                   .replace(/Велюр/gi, '')
-                   .trim();
+        // Резерв на случай старых форматов без двоеточия
+        return rawName.replace(/(\(?\s*Ярус\s+[^):]+\s*\)?)/gi, '')
+                      .replace(/Покрытие/gi, '')
+                      .replace(/Велюр/gi, '')
+                      .trim();
     };
 
     const getTierObj = (rawName, orderData) => {
@@ -6499,7 +6498,7 @@ function generateBatchReport() {
         return null;
     };
 
-    // 2. ОБРАБОТКА (ГЛАВНЫЙ ЦИКЛ)
+    // 2. ОБРАБОТКА ДАННЫХ
     ordersToProcess.forEach(ord => {
         if (!ord.data || !ord.data.detailedBlocks) return; 
 
@@ -6511,7 +6510,7 @@ function generateBatchReport() {
             const type = block.type; 
             const tierObj = getTierObj(block.name, ord.data);
             
-            // --- РАЗМЕРЫ ---
+            // --- РАЗМЕРЫ И МУССЫ ---
             let sizeInfo = "";
             let tierHeight = 0;
             let displayD = 0;
@@ -6530,7 +6529,6 @@ function generateBatchReport() {
                 displayD = ord.data.geometry ? ord.data.geometry.d : 0;
             }
 
-            // МУССЫ (-2 см)
             const nameLower = block.name.toLowerCase();
             if (nameLower.includes('мусс')) {
                 let mousseD = displayD - 2;
@@ -6538,10 +6536,11 @@ function generateBatchReport() {
                 let mousseLabel = (ord.data.geometry.shape === 'rectangle') ? `${mousseD}x${mousseW}` : `D${mousseD}`;
                 sizeInfo += ` <span style="color:#E65100; font-weight:bold; background:#FFF3E0; padding:0 3px; border-radius:3px;">(Мусс ${mousseLabel})</span>`;
             }
+            // -----------------------
 
             const isRecipeExtra = nameLower.includes('велюр') || nameLower.includes('гляссаж') || nameLower.includes('покрытие');
 
-            // --- КЕЙС 1: ДЕКОР ---
+            // КЕЙС 1: ДЕКОР / УПАКОВКА (Без уварки)
             if (type === 'extra' && !isRecipeExtra) {
                 block.ingredients.forEach(ing => {
                     const itemName = ing.name; 
@@ -6557,7 +6556,7 @@ function generateBatchReport() {
                     batch.tasks.push({ client: ord.name, info: sizeInfo, displayValue: `${ing.amount} ${ing.unit}` });
                 });
             } 
-            // --- КЕЙС 2: ПРОДУКТЫ (ОСНОВНАЯ ЛОГИКА) ---
+            // КЕЙС 2: ПРОДУКТЫ (БИСКВИТ, НАЧИНКА, КРЕМ) - ЕДИНАЯ ЛОГИКА
             else {
                 const cleanName = getCleanName(block.name); 
                 
@@ -6572,18 +6571,17 @@ function generateBatchReport() {
                 // Переменные для текущей задачи (один торт)
                 let currentBlockRawSum = 0;
                 let taskBaseReadyWeight = 0; 
-                let taskSpecialItems = []; // Массив для ингредиентов с уваркой
+                let taskSpecialItems = []; 
 
-                // ИЩЕМ ОРИГИНАЛЬНЫЙ БЛОК В РЕЦЕПТЕ (ОДИН РАЗ НА БЛОК)
+                // --- ПОИСК БЛОКА В РЕЦЕПТЕ (ДЛЯ УВАРКИ) ---
                 let originalBlock = null;
                 if (tierObj && tierObj.recipeId) {
                     const originalRecipe = myRecipes.find(r => r.id === tierObj.recipeId);
                     if (originalRecipe && originalRecipe.blocks) {
-                        // Ищем блок, имя которого совпадает с cleanName (игнорируя регистр)
-                        // Пример: Clean="Крем | Тропический баунти" == Block="Крем | Тропический баунти"
+                        // Ищем блок, имя которого совпадает с очищенным именем
                         originalBlock = originalRecipe.blocks.find(b => b.name.trim().toLowerCase() === cleanName.toLowerCase());
                         
-                        // Если точного совпадения нет, пробуем искать вхождение (на всякий случай)
+                        // Резервный поиск (если есть мелкие отличия)
                         if (!originalBlock) {
                              originalBlock = originalRecipe.blocks.find(b => cleanName.toLowerCase().includes(b.name.trim().toLowerCase()));
                         }
@@ -6592,7 +6590,7 @@ function generateBatchReport() {
 
                 // --- ЦИКЛ ПО ИНГРЕДИЕНТАМ ---
                 block.ingredients.forEach((ing, idx) => {
-                    // Группировка для закупа (по имени)
+                    // Группировка для закупа (общий котел)
                     const ingKey = ing.name; 
                     if (!batch.ingredients[ingKey]) {
                         batch.ingredients[ingKey] = { name: ing.name, amount: 0, unit: ing.unit };
@@ -6612,20 +6610,19 @@ function generateBatchReport() {
                     currentBlockRawSum += weightInGrams;
                     batch.totalWeight += weightInGrams;
 
-                    // 2. Считаем ГОТОВЫЙ вес (Проверяем уварку в оригинальном блоке)
+                    // 2. Считаем готовый вес (Проверяем уварку в оригинальном блоке)
                     let readyWeightInGrams = weightInGrams; 
                     let isSpecial = false;
 
                     if (originalBlock) {
-                        // Ищем настройки ингредиента в базе рецептов
-                        // Приоритет поиска: по ID, потом по Имени
+                        // Ищем ингредиент по ID
                         let origIng = originalBlock.ingredients.find(i => i.id === ing.id);
                         
+                        // Если ID не совпал (редкость), ищем по имени
                         if (!origIng) {
-                            // Если ID потерялся, ищем по имени
                             origIng = originalBlock.ingredients.find(i => {
                                 const dbIng = myIngredients.find(mi => mi.id === i.id);
-                                return dbIng && dbIng.name === ing.name;
+                                return dbIng && dbIng.name.toLowerCase().trim() === ing.name.toLowerCase().trim();
                             });
                         }
 
@@ -6634,8 +6631,8 @@ function generateBatchReport() {
                             const origIn = parseFloat(origIng.weight);
                             const origOut = parseFloat(origIng.outputWeight);
                             
-                            // Критерий уварки: Выход задан и он отличается от входа
-                            if (origOut && origIn > 0 && Math.abs(origOut - origIn) > 0.1) {
+                            // Критерий уварки: Выход задан и он отличается от Входа более чем на 1г
+                            if (origOut && origIn > 0 && Math.abs(origOut - origIn) > 1) {
                                 const ratio = origOut / origIn;
                                 readyWeightInGrams = weightInGrams * ratio;
                                 isSpecial = true;
@@ -6650,7 +6647,7 @@ function generateBatchReport() {
                     }
                 });
                 
-                // Итоговый готовый вес (Основа + Спец)
+                // Итоговый готовый вес задачи
                 const totalTaskReadyWeight = taskBaseReadyWeight + taskSpecialItems.reduce((s, i) => s + i.weight, 0);
                 const batchesCount = ord.batchCount || 1; 
 
@@ -6662,7 +6659,7 @@ function generateBatchReport() {
                 const readyBasePerBatch = taskBaseReadyWeight / batchesCount;
                 const readySpecialPerBatch = taskSpecialItems.map(i => ({...i, weight: i.weight / batchesCount}));
 
-                // HTML Мини-рецепт (для закупа)
+                // HTML Мини-рецепт (для закупа - СЫРОЙ)
                 let recipeHTML = "";
                 if (batchesCount > 1) {
                     const ingList = block.ingredients.map(ing => {
@@ -6673,18 +6670,15 @@ function generateBatchReport() {
                     recipeHTML = `<div style="margin-top:4px; padding:5px; background:rgba(0,0,0,0.03); border-radius:4px; font-size:11px; line-height:1.4; border-left:3px solid #795548; color:#444;">🥣 <b>НА 1 ЗАМЕС (Сырой):</b><br>${ingList}</div>`;
                 }
 
-                // --- HTML ДЕТАЛИЗАЦИЯ (КТО СКОЛЬКО ВЕСИТ) ---
+                // --- ДЕТАЛИЗАЦИЯ (КТО СКОЛЬКО ВЕСИТ) ---
                 let breakdownHTML = "";
-                // Показываем детализацию, если есть спец. ингредиенты
                 if (readySpecialPerBatch.length > 0) {
                     breakdownHTML += `<div style="font-size:11px; color:#555; margin-top:3px; border-left:2px solid #FFCC80; padding-left:5px; background:#FFFDE7;">`;
                     
-                    // Основа
                     if (readyBasePerBatch > 1) {
                         breakdownHTML += `<div>🔹 Основа: <b>${Math.round(readyBasePerBatch)} г</b></div>`;
                     }
                     
-                    // Спец ингредиенты
                     readySpecialPerBatch.forEach(item => {
                         breakdownHTML += `<div>🔸 ${item.name}: <b>${Math.round(item.weight)} г</b></div>`;
                     });
@@ -6693,7 +6687,7 @@ function generateBatchReport() {
                 }
                 // ---------------------------------------------
 
-                // Расчет распределения по формам
+                // Распределение по формам
                 for (let i = 1; i <= batchesCount; i++) {
                     let distributionStr = "";
                     const distWeight = Math.floor(totalReadyPerBatch); 
@@ -6710,11 +6704,10 @@ function generateBatchReport() {
                         prefix = `<span style="background:#333; color:#fff; padding:1px 4px; border-radius:3px; font-size:10px; margin-right:5px;">ЗАМЕС ${i}/${batchesCount}</span>`;
                     }
                     
-                    // Если это КРЕМ и есть цвет
+                    // Если это КРЕМ (Покрытие) и есть цвет
                     if (type === 'coating' && ordColor) {
                         const rough = totalReadyPerBatch * 0.67;
                         
-                        // Основная детализация идет в "Черновой" слой
                         batch.coatingBaseTotal += rough;
                         batch.coatingBaseTasks.push({ 
                             client: ord.name, info: sizeInfo, 
@@ -6728,7 +6721,7 @@ function generateBatchReport() {
                             displayValue: `${prefix}<b>~${Math.round(finish)} г</b>` 
                         });
                     }
-                    // Обычный слой (Бисквит, Начинка, Крем без цвета)
+                    // Иначе (Бисквит, Начинка, Крем без цвета)
                     else {
                         if (type === 'coating') {
                             batch.coatingBaseTotal += totalReadyPerBatch;
@@ -11995,6 +11988,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
