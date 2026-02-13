@@ -8986,8 +8986,8 @@ function createCalendarLinks(item) {
         if (item.forWhom) headerInfo += `Кому: ${item.forWhom}\n`;
 
         let paymentInfo = item.payment || 'Не указано';
-        if (item.prepayment) paymentInfo += ` | Аванс: ${item.prepayment} ${currency}`;
-        if (item.balance) paymentInfo += ` | Остаток: ${item.balance} ${currency}`;
+        if (item.prepayment) paymentInfo += ` | Аванс: ${parseFloat(item.prepayment).toLocaleString('ru-RU')} ${currency}`;
+        if (item.balance) paymentInfo += ` | Остаток: ${parseFloat(item.balance).toLocaleString('ru-RU')} ${currency}`;
 
         let delivInfo = item.delivery || 'Не указано';
         if (item.address) delivInfo += `\n📍 Адрес: ${item.address}`;
@@ -11893,5 +11893,6 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
