@@ -6553,6 +6553,7 @@ function generateBatchReport() {
             else {
                 const cleanName = getCleanName(block.name); 
                 
+                // Ключ партии = Имя слоя (чтобы объединять одинаковые слои)
                 if (!batches[cleanName]) {
                     batches[cleanName] = {
                         name: cleanName, type: type, totalWeight: 0, ingredients: {}, tasks: [],
@@ -6568,6 +6569,7 @@ function generateBatchReport() {
 
                 // --- ЦИКЛ ПО ИНГРЕДИЕНТАМ ---
                 block.ingredients.forEach((ing, idx) => {
+                    // Глобальный ключ ингредиента в batch.ingredients[] — это индекс (по порядку)
                     if (!batch.ingredients[idx]) {
                         batch.ingredients[idx] = { name: ing.name, amount: 0, unit: ing.unit };
                     }
@@ -6586,35 +6588,37 @@ function generateBatchReport() {
                     currentBlockRawSum += weightInGrams;
                     batch.totalWeight += weightInGrams;
 
-                    // 2. Считаем готовый вес (ищем уварку в рецепте)
+                    // 2. Считаем готовый вес (ищем уварку СТРОГО В ЭТОМ БЛОКЕ РЕЦЕПТА)
                     let readyWeightInGrams = weightInGrams; 
                     let isSpecial = false;
 
                     if (tierObj && tierObj.recipeId) {
                         const originalRecipe = myRecipes.find(r => r.id === tierObj.recipeId);
                         if (originalRecipe && originalRecipe.blocks) {
-                            // Ищем блок по имени (с очисткой от пробелов и регистра)
+                            // Ищем блок, имя которого (очищенное) совпадает с текущим cleanName
+                            // Это гарантирует, что мы смотрим именно "Крем", а не "Бисквит"
                             const origBlock = originalRecipe.blocks.find(b => getCleanName(b.name).toLowerCase() === cleanName.toLowerCase());
                             
                             if (origBlock) {
-                                // Пытаемся найти ингредиент
+                                // Теперь внутри найденного блока ищем ингредиент.
+                                // Самый надежный способ - по ID ингредиента.
                                 let origIng = origBlock.ingredients.find(i => i.id === ing.id);
                                 
-                                // Резервный поиск по имени
+                                // Резерв: если ID не совпал (редкость), ищем по имени через базу
                                 if (!origIng) {
-                                    origIng = origBlock.ingredients.find(i => {
-                                        const dbIng = myIngredients.find(mi => mi.id === i.id);
-                                        return dbIng && dbIng.name === ing.name;
-                                    });
+                                    const dbIng = myIngredients.find(mi => mi.name === ing.name);
+                                    if (dbIng) {
+                                        origIng = origBlock.ingredients.find(i => i.id === dbIng.id);
+                                    }
                                 }
                                 
-                                // Если нашли, проверяем выход
+                                // Если нашли ингредиент именно в ЭТОМ блоке — проверяем выход
                                 if (origIng) {
                                     const origIn = parseFloat(origIng.weight);
                                     const origOut = parseFloat(origIng.outputWeight);
                                     
-                                    // Условие уварки: Выход задан и отличается от Входа более чем на 1г
-                                    if (origOut && origIn > 0 && Math.abs(origOut - origIn) > 1) {
+                                    // Условие уварки: Выход задан и отличается от Входа
+                                    if (origOut && origIn > 0 && Math.abs(origOut - origIn) > 0.1) {
                                         const ratio = origOut / origIn;
                                         readyWeightInGrams = weightInGrams * ratio;
                                         isSpecial = true;
@@ -6656,17 +6660,13 @@ function generateBatchReport() {
 
                 // --- ГЕНЕРАЦИЯ ДЕТАЛИЗАЦИИ (КТО СКОЛЬКО ВЕСИТ) ---
                 let breakdownHTML = "";
-                
-                // Показываем детализацию, если есть хоть один спец. ингредиент (уварка)
                 if (readySpecialPerBatch.length > 0) {
                     breakdownHTML += `<div style="font-size:11px; color:#555; margin-top:3px; border-left:2px solid #FFCC80; padding-left:5px; background:#FFFDE7;">`;
                     
-                    // 1. Выводим Основу (всё, что не уварилось)
                     if (readyBasePerBatch > 1) {
                         breakdownHTML += `<div>🔹 Основа: <b>${Math.round(readyBasePerBatch)} г</b></div>`;
                     }
                     
-                    // 2. Выводим Спец. ингредиенты (уваренные)
                     readySpecialPerBatch.forEach(item => {
                         breakdownHTML += `<div>🔸 ${item.name}: <b>${Math.round(item.weight)} г</b></div>`;
                     });
@@ -6695,8 +6695,7 @@ function generateBatchReport() {
                     // Если это КРЕМ (Покрытие) и есть цвет
                     if (type === 'coating' && ordColor) {
                         const rough = totalReadyPerBatch * 0.67;
-                        
-                        // ВАЖНО: Детализацию добавляем только к "черновому" слою (там основной замес)
+                        // ВАЖНО: Детализацию добавляем только к "черновому" слою
                         batch.coatingBaseTotal += rough;
                         batch.coatingBaseTasks.push({ 
                             client: ord.name, info: sizeInfo, 
@@ -11978,6 +11977,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
