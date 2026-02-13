@@ -663,6 +663,7 @@ _calculateSingleTier(tierInput, isBottom) {
                       blockCost += cost;
                       
                       blockIngs.push({
+                        id: item.id,
                           name: item.name, 
                           amount: parseFloat(rawAmount.toFixed(1)), 
                           unit: unitForProduction,
@@ -6569,17 +6570,18 @@ function generateBatchReport() {
                 let taskBaseReadyWeight = 0; 
                 let taskSpecialItems = []; 
 
-                // 1. ИЩЕМ БЛОК В РЕЦЕПТЕ
+                
+               // 1. ИЩЕМ БЛОК В РЕЦЕПТЕ (УЛУЧШЕННЫЙ ПОИСК)
                 let originalBlock = null;
                 if (tierObj && tierObj.recipeId) {
                     const originalRecipe = myRecipes.find(r => r.id === tierObj.recipeId);
                     if (originalRecipe && originalRecipe.blocks) {
-                        // Точное совпадение очищенных имен
-                        originalBlock = originalRecipe.blocks.find(b => getCleanName(b.name).toLowerCase() === cleanName.toLowerCase());
+                        // Попытка 1: По точному совпадению имен
+                        originalBlock = originalRecipe.blocks.find(b => getCleanName(b.name).toLowerCase().trim() === cleanName.toLowerCase().trim());
                         
-                        // Резервный поиск
+                        // Попытка 2: Если имена чуть отличаются, ищем блок, который содержит название
                         if (!originalBlock) {
-                             originalBlock = originalRecipe.blocks.find(b => cleanName.toLowerCase().includes(getCleanName(b.name).toLowerCase()));
+                             originalBlock = originalRecipe.blocks.find(b => cleanName.toLowerCase().includes(getCleanName(b.name).toLowerCase().trim()));
                         }
                     }
                 }
@@ -6608,10 +6610,20 @@ function generateBatchReport() {
                     let isSpecial = false;
 
                     if (originalBlock) {
-                        let origIng = originalBlock.ingredients.find(i => i.id === ing.id);
+                        // АГРЕССИВНЫЙ ПОИСК ИНГРЕДИЕНТА
+                        let origIng = null;
+                        
+                        // 1. По ID (если есть)
+                        if (ing.id) {
+                            origIng = originalBlock.ingredients.find(i => i.id === ing.id);
+                        }
+                        
+                        // 2. По Имени (через базу ингредиентов)
                         if (!origIng) {
                             origIng = originalBlock.ingredients.find(i => {
+                                // Находим оригинальный ингредиент в базе по его ID из рецепта
                                 const dbIng = myIngredients.find(mi => mi.id === i.id);
+                                // Сравниваем имя из базы с именем в заказе (чистим пробелы и регистр)
                                 return dbIng && dbIng.name.toLowerCase().trim() === ing.name.toLowerCase().trim();
                             });
                         }
@@ -6627,7 +6639,6 @@ function generateBatchReport() {
                             }
                         }
                     }
-                    
                     if (isSpecial) {
                         taskSpecialItems.push({ name: ing.name, weight: readyWeightInGrams });
                     } else {
@@ -11966,6 +11977,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
