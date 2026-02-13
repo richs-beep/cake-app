@@ -2853,8 +2853,10 @@ body {
         </div>
 
         <div class="form-group">
-            <span class="form-label">Пожелания клиента</span>
-            <textarea id="orderComment" rows="2" style="width:100%; border:1px solid #ddd; border-radius:6px; padding:5px; font-family:inherit;"></textarea>
+            <span class="form-label">Оформление (декор)</span>
+            <textarea id="orderComment" rows="6" 
+                      placeholder="Опишите детали заказа..." 
+                      style="width:100%; border:1px solid #ddd; border-radius:6px; padding:10px; font-family:inherit; resize:vertical; min-height: 120px;"></textarea>
         </div>
 
         <div class="modal-actions">
@@ -5050,46 +5052,36 @@ function loadRec(id){
   setRecipeLockState(true);
 }
 
-// --- 2. ОТРИСОВКА БЛОКОВ (С защитой от ошибок) ---
+
 // --- 2. ОТРИСОВКА БЛОКОВ (ИСПРАВЛЕНО ОТОБРАЖЕНИЕ ВЕСА) ---
-function renderBlocks(r){
+function renderBlocks(r) {
     const c = document.getElementById('blocksContainer'); 
     c.innerHTML = ''; 
     
     let tot = 0; 
-    // Защита: если блоков нет, создаем пустой массив
     const blocks = r.blocks || [];
 
     blocks.forEach((b, bx) => {
         let rows = '';
-        // Защита: если ингредиентов нет, создаем пустой массив
+        let blockRawWeight = 0; // Считаем сырой вес блока
+
         const ings = b.ingredients || [];
 
         ings.forEach((l, ix) => {
             const ing = myIngredients.find(i => i.id === l.id);
             const val = parseFloat(l.weight) || 0;
             
-            // Считаем вес для инфо (только для подсчета Итого, не меняя значение в поле)
-            // Считаем вес для инфо
             let weightInGrams = val;
-            
             if (ing && ing.unit === 'шт') {
-                // Проверяем вашу настройку "В гр" (учитываем и boolean true, и строку "true" после импорта)
                 const useWeightMode = ing.useWeightInRecipe === true || ing.useWeightInRecipe === "true";
-
                 if (useWeightMode) {
-                    // ВАРИАНТ А: Галочка "В гр" стоит.
-                    // Значит введенное число (например, 121) — это уже граммы.
-                    // Оставляем как есть.
                     weightInGrams = val;
                 } else {
-                    // ВАРИАНТ Б: Галочки нет.
-                    // Значит введенное число (например, 2) — это штуки.
-                    // Переводим в вес: 2 * 55 = 110 г.
                     weightInGrams = val * (ing.singleWeight || 0);
                 }
             }
             
+            blockRawWeight += weightInGrams; // Суммируем сырой вес
             tot += weightInGrams;
             
             const n = ing ? ing.name : (l.id === '' ? '' : '??? (Удален)');
@@ -5102,12 +5094,34 @@ function renderBlocks(r){
             </div>`;
         });
 
+        // --- ЛОГИКА УВАРКИ (ВЫХОД) ---
+        const outW = parseFloat(b.outputWeight) || 0;
+        let yieldInfo = "";
+        if (outW > 0 && blockRawWeight > 0) {
+            const yieldPct = (outW / blockRawWeight) * 100;
+            const diff = outW - blockRawWeight;
+            const color = diff < 0 ? '#d32f2f' : '#2E7D32';
+            yieldInfo = `<span style="font-size:11px; color:${color}; margin-left:5px;">(${Math.round(yieldPct)}% / ${Math.round(diff)}г)</span>`;
+        }
+        // -----------------------------
+
         const div = document.createElement('div'); 
         div.className = 'recipe-block';
         div.innerHTML = `
-            <div style="display:flex; justify-content:space-between; margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:5px;">
-                <input style="border:none; font-weight:bold; color:#1976D2; font-size:14px; width:70%;" value="${b.name}" onchange="updBN(${bx},this.value)">
-                <button class="del-btn" style="font-size:12px;" onclick="delBlk(${bx})">Удалить блок</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:5px;">
+                <div style="flex:2; display:flex; align-items:center;">
+                    <input style="border:none; font-weight:bold; color:#1976D2; font-size:14px; width:100%;" value="${b.name}" onchange="updBN(${bx},this.value)" placeholder="Название слоя">
+                </div>
+                
+                <div style="flex:1; display:flex; align-items:center; justify-content:flex-end; gap:5px;">
+                    <span style="font-size:10px; color:#E65100; font-weight:bold;">Выход:</span>
+                    <input type="number" placeholder="${Math.round(blockRawWeight)}" value="${b.outputWeight || ''}" 
+                           onchange="updBlockOutput(${bx}, this.value)" 
+                           style="width:60px; font-size:12px; font-weight:bold; text-align:center; border:1px solid #FFCC80; background:#FFF3E0; border-radius:4px; padding:2px;">
+                    ${yieldInfo}
+                </div>
+
+                <button class="del-btn" style="font-size:12px; margin-left:10px;" onclick="delBlk(${bx})">🗑️</button>
             </div>
             ${rows}
             <div style="margin-top:10px; text-align:center;">
@@ -5116,26 +5130,22 @@ function renderBlocks(r){
         c.appendChild(div);
     });
     
-    // --- ОБНОВЛЕННАЯ ЛОГИКА ОТОБРАЖЕНИЯ ВЕСА ---
+    // Инфо по общему весу
     const rawWeight = tot;
-    const outputWeight = parseFloat(document.getElementById('editRecOutput').value) || 0; // Берем из поля Выход
+    const outputWeight = parseFloat(document.getElementById('editRecOutput').value) || 0; 
     
     const infoEl = document.getElementById('recTotalWeightInfo');
     const lossEl = document.getElementById('lossInfo');
     
-    // Показываем сырой вес красиво (1 200 вместо 1200)
     infoEl.innerText = Math.round(rawWeight).toLocaleString('ru-RU');
     
-    // Считаем Упек (разница между Сырым и Готовым/Выходом)
     if (outputWeight > 0 && rawWeight > 0) {
         const diff = rawWeight - outputWeight;
         const lossPercent = (diff / rawWeight) * 100;
         
         if (diff > 0) {
-            // Обычная ситуация: сырого больше, чем готового (вода испарилась)
             lossEl.innerHTML = ` (Упек: <b style="color:#d32f2f;">-${Math.round(diff)}г</b> / ${lossPercent.toFixed(1)}%)`;
         } else if (diff < 0) {
-            // Странная ситуация: готового больше (например, пропитка)
             lossEl.innerHTML = ` (Привес: <b style="color:#2E7D32;">+${Math.round(Math.abs(diff))}г</b>)`;
         } else {
             lossEl.innerHTML = ` (Без потерь)`;
@@ -5355,6 +5365,22 @@ function updBN(bIndex, val) {
     r.blocks[bIndex].name = val;
     saveRecs();
 }
+
+     function updBlockOutput(bIndex, val) {
+    const r = myRecipes.find(x => x.id === activeRecId);
+    if (!r) return;
+    
+    // Сохраняем (или удаляем, если пусто)
+    if (val && val > 0) {
+        r.blocks[bIndex].outputWeight = parseFloat(val);
+    } else {
+        delete r.blocks[bIndex].outputWeight;
+    }
+    
+    saveRecs(); // Сохраняем в базу
+    renderBlocks(r); // Перерисовываем (чтобы обновились проценты)
+}
+     
       function deleteCurrentRecipe(){ 
     saveToHistory();
     if(confirm('Удалить этот рецепт?')){
@@ -6236,11 +6262,11 @@ async function confirmAddToQueueWithClient() {
         const cleanPhone = clientPhone.replace(/\D/g, '');
         const dateRu = orderDate.split('-').reverse().join('.');
         
-        const waText = `Ваша заказ принят\n\n` +
+        const waText = `Ваш заказ принят\n\n` +
             `📅 Дата: *${dateRu}*\n` +
             `🍰 Начинка: ${fillingNames}\n` +
             `⚖️ Вес: ${orderWeight} кг\n` +
-            `📝 Пожелания: ${orderComment || 'По фото'}\n\n` +
+            `📝 Оформление (декор): ${orderComment || 'По фото'}\n\n` +
             `💳 Предоплата: ${prepaymentVal.toLocaleString('ru-RU')} ₸\n` +
             `💳 Остаток: ${balanceVal.toLocaleString('ru-RU')} ₸\n\n` +
             `Всё верно?`;
@@ -6468,7 +6494,7 @@ function generateBatchReport() {
             let sizeInfo = "";
             let tierHeight = 0;
             
-            // --- НОВАЯ ЛОГИКА МУССОВ ---
+            // --- НОВАЯ ЛОГИКА МУССОВ (-2см) ---
             let displayD = 0;
             let displayW = 0;
 
@@ -6486,24 +6512,11 @@ function generateBatchReport() {
                 displayD = ord.data.geometry ? ord.data.geometry.d : 0;
             }
 
-            // ПРОВЕРКА НА МУСС
             const nameLower = block.name.toLowerCase();
             if (nameLower.includes('мусс')) {
-                // Отнимаем 2 см от диаметра/длины И от ширины
                 let mousseD = displayD - 2;
                 let mousseW = displayW - 2; 
-                
-                let mousseLabel = "";
-                const shape = ord.data.geometry.shape;
-                
-                // Если прямоугольник - пишем оба размера
-                if (shape === 'rectangle') {
-                    mousseLabel = `${mousseD}x${mousseW}`;
-                } else {
-                    // Для остальных форм (включая квадрат) достаточно D (или S)
-                    mousseLabel = `D${mousseD}`;
-                }
-                
+                let mousseLabel = (ord.data.geometry.shape === 'rectangle') ? `${mousseD}x${mousseW}` : `D${mousseD}`;
                 sizeInfo += ` <span style="color:#E65100; font-weight:bold; background:#FFF3E0; padding:0 3px; border-radius:3px;">(Мусс ${mousseLabel})</span>`;
             }
             // -----------------------------
@@ -6511,6 +6524,7 @@ function generateBatchReport() {
             const isRecipeExtra = nameLower.includes('велюр') || nameLower.includes('гляссаж') || nameLower.includes('покрытие');
 
             if (type === 'extra' && !isRecipeExtra) {
+                // ... обработка декора (оставляем как есть) ...
                 block.ingredients.forEach(ing => {
                     const itemName = ing.name; 
                     if (!batches[itemName]) {
@@ -6535,7 +6549,7 @@ function generateBatchReport() {
                     };
                 }
                 const batch = batches[cleanName];
-                let blockWeight = 0;
+                let blockWeight = 0; // Сырой вес (для закупа)
                 
                 block.ingredients.forEach((ing, idx) => {
                     if (!batch.ingredients[idx]) {
@@ -6555,14 +6569,52 @@ function generateBatchReport() {
                 
                 batch.totalWeight += blockWeight;
 
-                // ЛОГИКА ЗАМЕСОВ
+                // --- 💥 ГЛАВНОЕ: РАСЧЕТ УВАРКИ 💥 ---
+                // Пытаемся найти оригинальный блок в рецепте, чтобы узнать коэффициент выхода
+                let yieldFactor = 1.0;
+                if (tierObj && tierObj.recipeId) {
+                    const originalRecipe = myRecipes.find(r => r.id === tierObj.recipeId);
+                    if (originalRecipe && originalRecipe.blocks) {
+                        // Ищем блок по имени. Это не идеально, но самый надежный способ сейчас.
+                        const originalBlock = originalRecipe.blocks.find(b => getCleanName(b.name) === cleanName);
+                        
+                        if (originalBlock && originalBlock.outputWeight > 0) {
+                            // Считаем сырой вес в ОРИГИНАЛЬНОМ рецепте
+                            let origRaw = 0;
+                            originalBlock.ingredients.forEach(i => {
+                                const refIng = myIngredients.find(x => x.id === i.id);
+                                let w = parseFloat(i.weight)||0;
+                                if (refIng && refIng.unit === 'шт' && !(refIng.useWeightInRecipe)) {
+                                    w = w * (refIng.singleWeight || 0);
+                                }
+                                origRaw += w;
+                            });
+                            
+                            if (origRaw > 0) {
+                                yieldFactor = originalBlock.outputWeight / origRaw;
+                            }
+                        }
+                    }
+                }
+                // ------------------------------------
+
                 const batchesCount = ord.batchCount || 1; 
 
-                if (cleanName.toLowerCase().includes('бисквит')) {
-                    const lossPerBatch = 15; 
+                // 1. БИСКВИТЫ / НАЧИНКИ
+                if (cleanName.toLowerCase().includes('бисквит') || type === 'filling') {
                     const weightPerBatchRaw = blockWeight / batchesCount; 
+                    
+                    // ВЕС ДЛЯ РОЗЛИВА (ПРИМЕНЯЕМ КОЭФФИЦИЕНТ!)
+                    const weightPerBatchReady = weightPerBatchRaw * yieldFactor;
 
                     let recipeHTML = "";
+                    let warningHTML = "";
+
+                    // Если есть уварка, пишем об этом
+                    if (yieldFactor < 0.98) {
+                        warningHTML = `<div style="font-size:10px; color:#d32f2f; margin-top:2px;">🔥 Уварка: ${(yieldFactor*100).toFixed(0)}% (Сырой: ${Math.round(weightPerBatchRaw)}г → Готовый: ${Math.round(weightPerBatchReady)}г)</div>`;
+                    }
+
                     if (batchesCount > 1) {
                         const ingList = block.ingredients.map(ing => {
                             const val = ing.amount / batchesCount;
@@ -6573,14 +6625,15 @@ function generateBatchReport() {
                     }
                     
                     for (let i = 1; i <= batchesCount; i++) {
-                        const netWeight = weightPerBatchRaw - lossPerBatch;
                         let distributionStr = "";
+                        // Для распределения используем ГОТОВЫЙ (уваренный) вес
+                        const distWeight = Math.floor(weightPerBatchReady); 
                         
-                        if (tierHeight > 10) {
-                            const portion = Math.floor(netWeight / 2);
+                        if (tierHeight > 10 && cleanName.toLowerCase().includes('бисквит')) {
+                            const portion = Math.floor(distWeight / 2);
                             distributionStr = ` | <span style="color:#E65100; font-weight:bold;">⤵️ 2 формы по ~${portion} г</span>`;
                         } else {
-                            distributionStr = ` | <span style="color:#E65100; font-weight:bold;">⤵️ в форму ~${Math.floor(netWeight)} г</span>`;
+                            distributionStr = ` | <span style="color:#E65100; font-weight:bold;">⤵️ в кольцо ~${distWeight} г</span>`;
                         }
 
                         let prefix = "";
@@ -6588,15 +6641,19 @@ function generateBatchReport() {
                             prefix = `<span style="background:#333; color:#fff; padding:1px 4px; border-radius:3px; font-size:10px; margin-right:5px;">ЗАМЕС ${i}/${batchesCount}</span>`;
                         }
                         
+                        // В отображении показываем ГОТОВЫЙ вес для розлива
                         batch.tasks.push({ 
                             client: ord.name, 
                             info: sizeInfo, 
-                            displayValue: `${prefix}<b>~${Math.round(weightPerBatchRaw)} г</b> (теста) ${distributionStr} ${recipeHTML}`
+                            displayValue: `${prefix}<b>~${Math.round(weightPerBatchReady)} г</b> (готового) ${distributionStr} ${warningHTML} ${recipeHTML}`
                         });
                     }
                 }
+                // 2. ПОКРЫТИЕ (Тут обычно уварки нет, но на всякий случай оставим логику, если вдруг ганаш уваривают)
                 else if (type === 'coating') {
                     const weightPerBatchRaw = blockWeight / batchesCount;
+                    const weightPerBatchReady = weightPerBatchRaw * yieldFactor;
+
                     let recipeHTML = "";
                     if (batchesCount > 1) {
                         const ingList = block.ingredients.map(ing => {
@@ -6614,8 +6671,8 @@ function generateBatchReport() {
                         }
 
                         if (ordColor) {
-                            const rough = weightPerBatchRaw * 0.67;
-                            const finish = weightPerBatchRaw * 0.33;
+                            const rough = weightPerBatchReady * 0.67;
+                            const finish = weightPerBatchReady * 0.33;
                             
                             batch.coatingBaseTotal += rough;
                             batch.coatingBaseTasks.push({ 
@@ -6631,17 +6688,18 @@ function generateBatchReport() {
                                 displayValue: `${prefix}<b>~${Math.round(finish)} г</b>` 
                             });
                         } else {
-                            batch.coatingBaseTotal += weightPerBatchRaw;
+                            batch.coatingBaseTotal += weightPerBatchReady;
                             batch.coatingBaseTasks.push({ 
                                 client: ord.name, 
                                 info: sizeInfo, 
-                                displayValue: `${prefix}<b>~${Math.round(weightPerBatchRaw)} г</b> (Весь) ${recipeHTML}` 
+                                displayValue: `${prefix}<b>~${Math.round(weightPerBatchReady)} г</b> (Весь) ${recipeHTML}` 
                             });
                         }
                     }
                 } 
                 else {
-                    batch.tasks.push({ client: ord.name, info: sizeInfo, displayValue: `~${Math.round(blockWeight)} г` });
+                    const readyW = blockWeight * yieldFactor;
+                    batch.tasks.push({ client: ord.name, info: sizeInfo, displayValue: `~${Math.round(readyW)} г` });
                 }
             }
         });
@@ -6698,10 +6756,10 @@ function generateBatchReport() {
         else if (b.type === 'coating') { bg = '#EFEBE9'; border = '#795548'; icon = '🎨'; }
         else if (b.type === 'extra')   { bg = '#F3E5F5'; border = '#9C27B0'; icon = '✨'; }
 
-        let listTitle = (b.type === 'extra') ? 'Расход:' : 'Карта разлива:';
-        if (b.coatingBaseTasks.length > 0) listTitle = 'Распределение:';
+        let listTitle = (b.type === 'extra') ? 'Расход:' : 'Карта разлива (Готовый вес):';
+        if (b.coatingBaseTasks.length > 0) listTitle = 'Распределение (Готовый вес):';
 
-        const weightLabel = (b.totalWeight > 0) ? `Всего: <b>${(b.totalWeight/1000).toFixed(2)} кг</b>` : '';
+        const weightLabel = (b.totalWeight > 0) ? `Сырой вес (Итого): <b>${(b.totalWeight/1000).toFixed(2)} кг</b>` : '';
 
         html += `<div class="batch-card" style="background:${bg}; border-color:${border};">
                     <div class="batch-header">
@@ -11893,6 +11951,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
