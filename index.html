@@ -2642,15 +2642,14 @@ body {
 /* Верхний слой (Светлый бисквит) */
 .cake-top {
     z-index: 2;
-    /* Применяем базовую перекраску + делаем чуть ярче и добавляем мягкую тень */
-    filter: invert(1) sepia(1) saturate(4) hue-rotate(15deg) brightness(1.1) contrast(0.9) drop-shadow(0px 5px 8px rgba(0,0,0,0.25));
+    /* ДОБАВИЛ brightness(0) в начале: любой цвет -> черный -> белый -> бисквит */
+    filter: brightness(0) invert(1) sepia(1) saturate(4) hue-rotate(15deg) brightness(1.1) contrast(0.9) drop-shadow(0px 5px 8px rgba(0,0,0,0.25));
 }
 
 /* Боковые слои (Темная корочка) */
 .cake-side {
-    /* Применяем базовую перекраску + сильно затемняем и повышаем контраст для эффекта корочки */
-    filter: invert(1) sepia(1) saturate(4) hue-rotate(15deg) brightness(0.5) contrast(1.5);
-    /* Чуть размоем края для мягкости */
+    /* ДОБАВИЛ brightness(0) в начале */
+    filter: brightness(0) invert(1) sepia(1) saturate(4) hue-rotate(15deg) brightness(0.5) contrast(1.5);
     opacity: 0.95;
 }
       
@@ -3803,12 +3802,12 @@ body {
                 <div style="flex:2; display:flex; gap:10px; background:#f5f5f5; padding:10px; border-radius:8px; border:1px solid #ddd;">
                     
                     <div class="form-group">
-                        <span class="form-label">Длина (см)</span>
+                        <span class="form-label">Длина (Вертик.)</span>
                         <input type="number" id="inpL" value="25" oninput="recalcFromDimensions('L')">
                     </div>
                     
                     <div class="form-group">
-                        <span class="form-label">Ширина (см)</span>
+                        <span class="form-label">Ширина (Горизонт.)</span>
                         <input type="number" id="inpW" value="18" oninput="recalcFromDimensions('W')">
                         <div style="margin-top:5px; font-size:10px;">
                             <label><input type="checkbox" id="linkAspect" checked> Пропорции</label>
@@ -3816,7 +3815,7 @@ body {
                     </div>
                     
                     <div class="form-group">
-                        <span class="form-label">Высота (см)</span>
+                        <span class="form-label">Высота (Толщина)</span>
                         <input type="number" id="inpH" value="10" oninput="recalcFromDimensions('H')">
                     </div>
 
@@ -12444,28 +12443,32 @@ function finalizeCalc(L, W, H, weight) {
 }
 
 // Обновление 3D
-// Обновление 3D
 function update3DScene(L, W, H) {
     const box = document.getElementById('ghostBox');
     const stack = document.getElementById('cakeStack');
     
     if (!box || !stack) return;
 
-    // Масштабирование
+    // Масштабирование для экрана
     const maxDim = Math.max(L, W);
     const scale = 160 / maxDim; 
     
-    const pxL = L * scale; 
-    const pxW = W * scale; 
-    const pxH = H * scale; 
+    const pxL = L * scale; // Длина (вертикаль в CSS height)
+    const pxW = W * scale; // Ширина (горизонталь в CSS width)
+    const pxH = H * scale; // Высота (толщина)
     
-    // Размер контейнера (Призрак)
+    // Меняем размер контейнера
     box.style.width = pxW + 'px';
     box.style.height = pxL + 'px';
     
-    // Подписи
-    document.getElementById('lblL').innerText = Math.round(L);
-    document.getElementById('lblW').innerText = Math.round(W);
+    // --- ИСПРАВЛЕНИЕ: ПРАВИЛЬНЫЕ ПОДПИСИ ---
+    // lblL находится снизу (горизонталь) -> туда пишем Ширину (W)
+    document.getElementById('lblL').innerText = Math.round(W) + ' (Ш)';
+    
+    // lblW находится слева (вертикаль) -> туда пишем Длину (L)
+    document.getElementById('lblW').innerText = Math.round(L) + ' (Д)';
+    
+    // H (высота/толщина)
     document.getElementById('lblH').innerText = 'H' + Math.round(H);
     
     // Двигаем слои торта
@@ -12474,8 +12477,7 @@ function update3DScene(L, W, H) {
     
     layers.forEach(layer => {
         const idx = parseInt(layer.dataset.layerIdx);
-        
-        // Распределяем слои равномерно от 0 до pxH
+        // Распределяем слои равномерно
         const zPos = (idx / (totalLayers - 1)) * pxH;
         
         layer.style.width = pxW + 'px';
@@ -12546,6 +12548,7 @@ function transferShapeToMain() {
   </body>
 
 </html>
+
 
 
 
