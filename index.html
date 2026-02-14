@@ -3891,8 +3891,13 @@ body {
                 </div>
             </div>
 
-            <div class="visual-container">
-                <div class="scene-stage" id="sceneStage">
+            <div class="visual-container" style="height: 300px; background: #fff; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; perspective: 1000px; overflow: hidden; position: relative;">
+                
+                <div class="zoom-hint-btn" onclick="openShapeLightbox()" style="z-index: 20; position: absolute; top: 10px; left: 10px;">🔍</div>
+
+                <div id="shapeControls" class="tier-ctrl-group" style="right: 10px; bottom: 10px; left: auto; transform: none; position: absolute; z-index: 20;"></div>
+
+                <div id="sceneStage" class="scene-stage">
                     <div id="ghostBox" class="ghost-box">
                         <div id="lblL" class="dim-label" style="bottom:-25px; left:50%; transform:translateX(-50%);">L</div>
                         <div id="lblW" class="dim-label" style="left:-35px; top:50%; transform:translateY(-50%);">W</div>
@@ -7950,7 +7955,6 @@ function saveToHistory() {
             extras: JSON.parse(JSON.stringify(extrasList || [])),
             laborList: JSON.parse(JSON.stringify(currentLaborList || [])),
             clients: JSON.parse(JSON.stringify(clientsDataLocal || {})),
-            // --- ДОБАВЛЕНО ---
             archive: JSON.parse(JSON.stringify(archiveOrders || [])),
             stockHistory: JSON.parse(JSON.stringify(stockHistory || [])),
             calcState: {
@@ -7958,10 +7962,16 @@ function saveToHistory() {
                 coatingId: document.getElementById('coatingIdSelect')?.value || '',
                 extraCoatingId: document.getElementById('extraCoatingIdSelect')?.value || ''
             },
-          colorsPalette: JSON.parse(JSON.stringify(myColorsPalette || [])),
-            colorSelected: JSON.parse(JSON.stringify(colorState.colors || {}))
+            colorsPalette: JSON.parse(JSON.stringify(myColorsPalette || [])),
+            colorSelected: JSON.parse(JSON.stringify(colorState.colors || {})),
+            
+            // 🔥 НОВОЕ: Сохраняем состояние фигур
+            shapeState: JSON.parse(JSON.stringify(shapeState)) 
         };
+        
+        // Защита от дублей (если ничего не изменилось - не сохраняем)
         if (historyStack.length > 0 && JSON.stringify(currentState) === JSON.stringify(historyStack[historyStack.length - 1])) return;
+        
         historyStack.push(currentState);
         if (historyStack.length > MAX_HISTORY) historyStack.shift();
         redoStack = []; 
@@ -7995,45 +8005,72 @@ function applyState(state) {
     archiveOrders = JSON.parse(JSON.stringify(state.archive || []));
     stockHistory = JSON.parse(JSON.stringify(state.stockHistory || []));
     
-    // Возвращаем шапку калькулятора
+    // Калькулятор
     if (state.calcState) {
         if (document.getElementById('globalShape')) document.getElementById('globalShape').value = state.calcState.shape;
         if (document.getElementById('coatingIdSelect')) document.getElementById('coatingIdSelect').value = state.calcState.coatingId;
         if (document.getElementById('extraCoatingIdSelect')) document.getElementById('extraCoatingIdSelect').value = state.calcState.extraCoatingId;
-        updateTierUI(); // Обновляем видимость полей под форму
+        updateTierUI(); 
     }
     
-    localStorage.setItem('myCakeIngredients', JSON.stringify(myIngredients));
-    localStorage.setItem('myCakeRecipes', JSON.stringify(myRecipes));
-    localStorage.setItem('myCakeLabor', JSON.stringify(myLaborServices));
-    localStorage.setItem('cakeProductionQueue', JSON.stringify(productionQueue));
-    localStorage.setItem('cachedClients', JSON.stringify(clientsDataLocal));
-    renderClientsCloud(); // Обновляем список клиентов на экране
-
-     // --- ВОССТАНОВЛЕНИЕ ЛАБОРАТОРИИ ЦВЕТА ---
+    // Колористика
     if (state.colorsPalette) {
         myColorsPalette = JSON.parse(JSON.stringify(state.colorsPalette));
         localStorage.setItem('myColorsPalette', JSON.stringify(myColorsPalette));
         if (typeof renderPaletteUI === 'function') renderPaletteUI();
     }
-    
     if (state.colorSelected) {
         colorState.colors = JSON.parse(JSON.stringify(state.colorSelected));
-        // Перекрашиваем плашки
-        const updatePatch = (id, rgb) => {
-            const el = document.getElementById(id);
-            if (el && rgb) el.style.background = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
-        };
+        // Восстанавливаем цвета плашек
+        const updatePatch = (id, rgb) => { const el = document.getElementById(id); if (el && rgb) el.style.background = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`; };
         updatePatch('patchWhite', colorState.colors.white);
         updatePatch('patchBase', colorState.colors.base);
         updatePatch('patchTargetWhite', colorState.colors.targetWhite);
         updatePatch('patchTarget', colorState.colors.target);
+    }
+
+    // 🔥 НОВОЕ: Восстановление Фигур
+    if (state.shapeState) {
+        shapeState = JSON.parse(JSON.stringify(state.shapeState));
         
-        // Скрываем результат старого расчета, так как цвета откатились
-        const resBlock = document.getElementById('colorResultBlock');
-        if (resBlock) resBlock.style.display = 'none';
+        // Восстанавливаем UI
+        const isCircle = (shapeState.currentShape === 'circle');
+        const radio = document.querySelector(`input[name="bakeShape"][value="${shapeState.currentShape}"]`);
+        if(radio) radio.checked = true;
+        
+        // Показываем нужные блоки
+        document.getElementById('blockRect').style.display = isCircle ? 'none' : 'contents';
+        document.getElementById('blockCircle').style.display = isCircle ? 'block' : 'none';
+        
+        const ghost = document.getElementById('ghostBox');
+        if(isCircle) ghost.classList.add('is-circle'); else ghost.classList.remove('is-circle');
+        
+        // Заполняем инпуты
+        const {l, w, h, d, weight} = shapeState.current;
+        const setVal = (id, v) => { const el = document.getElementById(id); if(el) el.value = v; };
+        setVal('inpL', Math.round(l));
+        setVal('inpW', Math.round(w));
+        setVal('inpD', Math.round(d));
+        setVal('inpH', h);
+        setVal('inpWeight', weight);
+
+        // Перерисовываем сцену и слои
+        if (shapeState.cleanImgUrl) {
+            document.getElementById('shapeCalcBlock').style.display = 'block';
+            updateShapeRecipes();
+            generate3DLayers(); // Рисуем слои заново
+            update3DScene(l, w, h, d); // Ставим их на место
+        }
     }
   
+    // Обновляем всё остальное
+    localStorage.setItem('myCakeIngredients', JSON.stringify(myIngredients));
+    localStorage.setItem('myCakeRecipes', JSON.stringify(myRecipes));
+    localStorage.setItem('myCakeLabor', JSON.stringify(myLaborServices));
+    localStorage.setItem('cakeProductionQueue', JSON.stringify(productionQueue));
+    localStorage.setItem('cachedClients', JSON.stringify(clientsDataLocal));
+    renderClientsCloud(); 
+
     updateUI(); 
     renderQueue();
     updateQueueBadge();
@@ -8041,41 +8078,22 @@ function applyState(state) {
     if (typeof renderExtras === 'function') renderExtras();
     updateHistoryButtons();
     if (appState.results && appState.results.Right) calculateSide('Right');
-  // --- ВСТАВЛЯЕМ СЮДА ---
-    if (document.getElementById('historyModal')?.style.display === 'flex') {
-        openStockHistory(); // Перерисовываем журнал, если он открыт
-    }
-  // --- ВОССТАНОВЛЕНИЕ ЭКРАНА РЕДАКТОРА РЕЦЕПТА ---
+    if (document.getElementById('historyModal')?.style.display === 'flex') openStockHistory(); 
+    
     if (activeRecId) {
         const restoredRec = myRecipes.find(x => x.id === activeRecId);
         if (restoredRec) {
-            // Обновляем шапку рецепта
-            document.getElementById('editRecName').value = restoredRec.name || ''; 
-            document.getElementById('editRecType').value = restoredRec.type || 'filling';
-            document.getElementById('editRecOutput').value = restoredRec.outputWeight || ''; 
-            document.getElementById('calibDiam').value = restoredRec.calibrationD || 16; 
-            document.getElementById('calibHeight').value = restoredRec.calibrationH || 10;
-            document.getElementById('calibShape').value = restoredRec.calibrationShape || 'cylinder';
-            document.getElementById('calibFill').value = restoredRec.fillPercent || 100;
-            document.getElementById('editTargetFinWeight').value = restoredRec.targetFinishedWeight || '';
-            
-            // Перерисовываем ингредиенты без блокировки экрана
-            renderBlocks(restoredRec);
+             renderBlocks(restoredRec);
         } else {
-            // Если рецепт был создан только что, а мы нажали "Отмена" (Ctrl+Z)
-            document.getElementById('recipeEditor').style.display = 'none';
-            document.getElementById('recipePlaceholder').style.display = 'flex';
-            activeRecId = null;
+             document.getElementById('recipeEditor').style.display = 'none';
+             document.getElementById('recipePlaceholder').style.display = 'flex';
+             activeRecId = null;
         }
     }
-  // --- ВОССТАНОВЛЕНИЕ ЭКРАНА КЛИЕНТА ---
+    
     const clIdVal = document.getElementById('clId').value;
     if (document.getElementById('clientModal').style.display === 'flex' && clIdVal) {
-        if (clientsDataLocal[clIdVal]) {
-            openClientModal(clIdVal); // Перезаполняем поля старыми данными
-        } else {
-            closeClientModal(); // Если откатились до момента, когда клиента еще не было
-        }
+        if (clientsDataLocal[clIdVal]) openClientModal(clIdVal); else closeClientModal();
     }
 }
 
@@ -12652,6 +12670,7 @@ function stepShape(axis, delta) {
 
 let holdTimer = null, holdInterval = null;
 function startChange(id, delta, axis) {
+    saveToHistory(); // <--- СОХРАНЯЕМ ПЕРЕД НАЧАЛОМ ИЗМЕНЕНИЯ
     stepShape(axis, delta);
     holdTimer = setTimeout(() => {
         holdInterval = setInterval(() => stepShape(axis, delta), 100); 
@@ -12660,6 +12679,7 @@ function startChange(id, delta, axis) {
 function stopChange() { clearTimeout(holdTimer); clearInterval(holdInterval); }
 
 function stepWeight(delta) {
+  saveToHistory(); 
     const el = document.getElementById('inpWeight');
     let val = parseFloat(el.value) || 0;
     val += delta;
@@ -12699,6 +12719,38 @@ function transferShapeToMain() {
     }, 200);
 }
 
+     // --- ФУНКЦИЯ ЛУПЫ ДЛЯ ФИГУР ---
+function openShapeLightbox() {
+    const sceneHtml = document.getElementById('sceneStage').outerHTML;
+    const container = document.getElementById('lightboxSvgContainer');
+    
+    // Очищаем и вставляем клонированную сцену
+    container.innerHTML = '';
+    
+    // Создаем обертку, чтобы сохранить перспективу и центровку
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = `
+        width: 100%; height: 100%; 
+        display: flex; align-items: center; justify-content: center; 
+        perspective: 1200px; overflow: visible;
+    `;
+    
+    // Вставляем сцену внутрь
+    wrapper.innerHTML = sceneHtml;
+    container.appendChild(wrapper);
+    
+    // Находим вставленную сцену и увеличиваем её (Zoom)
+    const stage = wrapper.querySelector('.scene-stage');
+    if (stage) {
+        // Увеличиваем масштаб в 1.5 раза для детального просмотра
+        stage.style.transform = "scale(1.8) rotateX(60deg) rotateZ(-45deg)";
+    }
+    
+    // Показываем лайтбокс
+    document.getElementById('cakeLightbox').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
 
     </script>
 
@@ -12713,6 +12765,7 @@ function transferShapeToMain() {
   </body>
 
 </html>
+
 
 
 
