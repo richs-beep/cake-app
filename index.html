@@ -3419,10 +3419,25 @@ body {
 
         <div class="form-row" style="margin-bottom: 20px;">
             <div class="form-group" style="flex: 1;">
-                <label class="main-btn" style="background:#607D8B; display:inline-block; text-align:center; cursor:pointer;">
-                    📸 Загрузить фото
-                    <input type="file" id="colorImageInput" accept="image/*" style="display:none;" onchange="handleColorImage(event)">
-                </label>
+                <label class="main-btn" style="
+    background: linear-gradient(135deg, #42A5F5 0%, #1565C0 100%); /* Красивый синий градиент */
+    padding: 12px 30px; 
+    width: auto; 
+    display: inline-flex; 
+    align-items: center; 
+    gap: 10px; 
+    border-radius: 50px; /* Круглые края (как капсула) */
+    box-shadow: 0 4px 15px rgba(33, 150, 243, 0.35); /* Мягкая тень */
+    border: none;
+    cursor: pointer;
+    transition: transform 0.2s;
+">
+    <span style="font-size: 20px;">📂</span> 
+    <span style="font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">
+        Выберите файл
+    </span>
+    <input type="file" id="svgInput" accept="image/*" style="display:none;" onchange="handleSvgUpload(this)">
+</label>
             </div>
             <div class="form-group" style="flex: 2; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="color-step-box" id="boxWhite" onclick="activatePicker('white')">
@@ -12765,6 +12780,7 @@ function openShapeLightbox() {
   </body>
 
 </html>
+
 
 
 
