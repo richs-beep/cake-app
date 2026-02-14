@@ -12603,8 +12603,8 @@ function generate3DLayers() {
     if (!stack) return;
   
     stack.innerHTML = '';
-  const layerCount = 80;
-    for(let i=0; i<30; i++) {
+
+    for(let i=0; i<80; i++) {
         const div = document.createElement('div');
         div.className = (i === 29) ? 'cake-layer cake-top' : 'cake-layer cake-side';
         div.style.backgroundImage = `url('${shapeState.cleanImgUrl}')`;
@@ -12663,15 +12663,85 @@ function transferShapeToMain() {
 }
 
 
-// --- ЛОГИКА СТЕППЕРОВ (ЗАЖИМ КНОПКИ) ---
+// ==========================================
+// 🕹️ КНОПКИ УПРАВЛЕНИЯ (СТЕППЕРЫ) - ВЕРНУЛИ НА МЕСТО
+// ==========================================
+
+// 1. Отрисовка кнопок поверх 3D сцены
+function renderShapeControls(L, W, H, D) {
+    const c = document.getElementById('shapeControls');
+    if (!c) return;
+    
+    const isRect = (shapeState.currentShape === 'rect');
+    let html = '';
+    
+    // Вспомогательная функция для генерации HTML кнопки
+    const btn = (axis, dir, label) => `
+        <button class="ctrl-btn" 
+            onmousedown="startChange(null, ${dir}, '${axis}')" 
+            ontouchstart="startChange(null, ${dir}, '${axis}')" 
+            onmouseup="stopChange()" 
+            onmouseleave="stopChange()" 
+            ontouchend="stopChange()">
+            ${label}
+        </button>`;
+
+    if (isRect) {
+        // Длина (L)
+        html += `<div class="ctrl-row">${btn('L', -1, '-')} <span class="ctrl-label" style="width:auto; padding:0 5px;">Д: ${Math.round(L)}</span> ${btn('L', 1, '+')}</div>`;
+        // Ширина (W)
+        html += `<div class="ctrl-row">${btn('W', -1, '-')} <span class="ctrl-label" style="width:auto; padding:0 5px;">Ш: ${Math.round(W)}</span> ${btn('W', 1, '+')}</div>`;
+    } else {
+        // Диаметр (D)
+        html += `<div class="ctrl-row">${btn('D', -1, '-')} <span class="ctrl-label" style="width:auto; padding:0 5px;">D: ${Math.round(D)}</span> ${btn('D', 1, '+')}</div>`;
+    }
+
+    // Высота (H)
+    html += `<div class="ctrl-row">${btn('H', -0.5, '-')} <span class="ctrl-label" style="width:auto; padding:0 5px;">H: ${Math.round(H)}</span> ${btn('H', 0.5, '+')}</div>`;
+    
+    c.innerHTML = html;
+}
+
+// 2. Логика изменения (Шаг)
+function stepShape(axis, delta) {
+    let inputId = '';
+    if (axis === 'L') inputId = 'inpL';
+    else if (axis === 'W') inputId = 'inpW';
+    else if (axis === 'H') inputId = 'inpH';
+    else if (axis === 'D') inputId = 'inpD';
+    
+    const el = document.getElementById(inputId);
+    if (!el) return;
+    
+    let val = parseFloat(el.value) || 0;
+    val += delta;
+    
+    // Округляем
+    if (axis === 'H') val = Math.round(val * 2) / 2; // Шаг 0.5 для высоты
+    else val = Math.round(val); // Шаг 1 для остальных
+    
+    if (val < 1) val = 1;
+    
+    el.value = val;
+    
+    // Запускаем пересчет
+    recalcFromDimensions(axis);
+    
+    if (navigator.vibrate) navigator.vibrate(5);
+}
+
+// 3. Логика "Зажатия" кнопки (чтобы быстро мотало)
 let holdTimer = null;
 let holdInterval = null;
 
 function startChange(id, delta, axis) {
-    performStep(id, delta, axis);
+    // Делаем первый шаг сразу
+    stepShape(axis, delta);
+    
+    // Ждем 400мс и запускаем "пулемет"
     holdTimer = setTimeout(() => {
         holdInterval = setInterval(() => {
-            performStep(id, delta, axis);
+            stepShape(axis, delta);
         }, 100); 
     }, 400); 
 }
@@ -12681,23 +12751,7 @@ function stopChange() {
     clearInterval(holdInterval);
 }
 
-function performStep(id, delta, axis) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    
-    let val = parseFloat(el.value) || 0;
-    val += delta;
-    
-    if (axis === 'H') val = Math.round(val * 2) / 2;
-    else val = Math.round(val);
-    
-    if (val < 1) val = 1;
-    el.value = val;
-    
-    if (axis) recalcFromDimensions(axis);
-    if (navigator.vibrate) navigator.vibrate(5);
-}
-
+// 4. Степпер для Веса (отдельная кнопка на панели веса)
 function stepWeight(delta) {
     const el = document.getElementById('inpWeight');
     let val = parseFloat(el.value) || 0;
@@ -12706,8 +12760,6 @@ function stepWeight(delta) {
     el.value = val.toFixed(1);
     recalcFromWeight();
 }
-
-   
     </script>
 
 <script>
@@ -12721,6 +12773,7 @@ function stepWeight(delta) {
   </body>
 
 </html>
+
 
 
 
