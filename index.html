@@ -1197,6 +1197,56 @@ class CakeVisualizer {
     
     <style>
 
+      /* --- СТИЛИ ДЛЯ СТЕППЕРА (Кнопки +/-) --- */
+.stepper {
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.stepper input {
+    border: none !important;
+    text-align: center;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 0;
+    margin: 0;
+    box-shadow: none !important;
+    width: 100%;
+    /* Убираем стандартные стрелки */
+    -moz-appearance: textfield; 
+}
+.stepper input::-webkit-outer-spin-button,
+.stepper input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.step-btn {
+    width: 40px;
+    height: 40px;
+    background: #eee;
+    border: none;
+    font-size: 20px;
+    font-weight: bold;
+    color: #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    /* Запрет выделения при долгом нажатии */
+    user-select: none; 
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+.step-btn:active {
+    background: #FF5722;
+    color: white;
+}
+
       /* --- КОЛОРИСТИКА --- */
 .color-step-box {
     flex: 1;
@@ -3799,24 +3849,66 @@ body {
                     </div>
                 </div>
 
-                <div style="flex:2; display:flex; gap:10px; background:#f5f5f5; padding:10px; border-radius:8px; border:1px solid #ddd;">
+                <div style="flex:2; display:flex; flex-direction:column; gap:10px; background:#f5f5f5; padding:10px; border-radius:8px; border:1px solid #ddd;">
                     
-                    <div class="form-group">
-                        <span class="form-label">Длина (Вертик.)</span>
-                        <input type="number" id="inpL" value="25" oninput="recalcFromDimensions('L')">
-                    </div>
-                    
-                    <div class="form-group">
-                        <span class="form-label">Ширина (Горизонт.)</span>
-                        <input type="number" id="inpW" value="18" oninput="recalcFromDimensions('W')">
-                        <div style="margin-top:5px; font-size:10px;">
-                            <label><input type="checkbox" id="linkAspect" checked> Пропорции</label>
+                    <div class="form-group" style="width:100%;">
+                        <span class="form-label">Длина (Вер.)</span>
+                        <div class="stepper">
+                            <button class="step-btn" 
+                                    onmousedown="startChange('inpL', -1, 'L')" ontouchstart="startChange('inpL', -1, 'L')"
+                                    onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">
+                                −
+                            </button>
+                            
+                            <input type="number" id="inpL" value="25" onchange="recalcFromDimensions('L')">
+                            
+                            <button class="step-btn" 
+                                    onmousedown="startChange('inpL', 1, 'L')" ontouchstart="startChange('inpL', 1, 'L')"
+                                    onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">
+                                +
+                            </button>
                         </div>
                     </div>
                     
-                    <div class="form-group">
-                        <span class="form-label">Высота (Толщина)</span>
-                        <input type="number" id="inpH" value="10" oninput="recalcFromDimensions('H')">
+                    <div class="form-group" style="width:100%;">
+                        <span class="form-label">Ширина (Гор.)</span>
+                        <div class="stepper">
+                            <button class="step-btn" 
+                                    onmousedown="startChange('inpW', -1, 'W')" ontouchstart="startChange('inpW', -1, 'W')"
+                                    onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">
+                                −
+                            </button>
+                            
+                            <input type="number" id="inpW" value="18" onchange="recalcFromDimensions('W')">
+                            
+                            <button class="step-btn" 
+                                    onmousedown="startChange('inpW', 1, 'W')" ontouchstart="startChange('inpW', 1, 'W')"
+                                    onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">
+                                +
+                            </button>
+                        </div>
+                        <div style="margin-top:5px; font-size:11px; text-align:center;">
+                            <label><input type="checkbox" id="linkAspect" checked> 🔗 Пропорции</label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="width:100%;">
+                        <span class="form-label">Высота (толщ.)</span>
+                        <div class="stepper">
+                            <button class="step-btn" 
+                                    onmousedown="startChange('inpH', -0.5, 'H')" ontouchstart="startChange('inpH', -0.5, 'H')"
+                                    onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">
+                                −
+                            </button>
+                            
+                            <input type="number" id="inpH" value="10" onchange="recalcFromDimensions('H')">
+                            
+                            <button class="step-btn" 
+                                    onmousedown="startChange('inpH', 0.5, 'H')" ontouchstart="startChange('inpH', 0.5, 'H')"
+                                    onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">
+                                +
+                            </button>
+                        </div>
                     </div>
 
                 </div>
@@ -12535,6 +12627,56 @@ function transferShapeToMain() {
     }, 200);
 }
 
+     // --- ЛОГИКА КНОПОК +/- (REPEATER) ---
+let holdTimer = null;
+let holdInterval = null;
+
+// Функция старта (нажали палец)
+function startChange(inputId, delta, axis) {
+    // Чтобы не срабатывали мышь и тач одновременно
+    if (holdTimer) return;
+
+    // 1. Выполняем действие сразу один раз
+    doStep(inputId, delta, axis);
+
+    // 2. Ждем 400мс, если палец всё еще нажат -> запускаем пулемет
+    holdTimer = setTimeout(() => {
+        holdInterval = setInterval(() => {
+            doStep(inputId, delta, axis);
+        }, 100); // Скорость изменения (100мс)
+    }, 400);
+}
+
+// Функция стопа (убрали палец)
+function stopChange() {
+    clearTimeout(holdTimer);
+    clearInterval(holdInterval);
+    holdTimer = null;
+    holdInterval = null;
+}
+
+// Само действие изменения
+function doStep(inputId, delta, axis) {
+    const el = document.getElementById(inputId);
+    let val = parseFloat(el.value) || 0;
+    
+    // Прибавляем/убавляем
+    val += delta;
+    
+    // Защита от отрицательных чисел
+    if (val < 1) val = 1;
+
+    // Округляем (для высоты до 0.5, для остальных до целых, если хотите)
+    // Но так как delta может быть 0.5, используем toFixed
+    el.value = (val % 1 === 0) ? val : val.toFixed(1);
+
+    // ВИБРАЦИЯ (Тактильный отклик)
+    if (navigator.vibrate) navigator.vibrate(15); 
+
+    // Запускаем пересчет калькулятора
+    recalcFromDimensions(axis);
+}
+
     </script>
 
 <script>
@@ -12548,6 +12690,7 @@ function transferShapeToMain() {
   </body>
 
 </html>
+
 
 
 
