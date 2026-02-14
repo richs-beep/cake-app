@@ -12221,31 +12221,24 @@ function autoAddPackaging(res) {
     }
 }
 
- // ==========================================
-
 // ==========================================
-// 🔢 МОДУЛЬ ФИГУРНЫХ ТОРТОВ 3.0 (Circle + Steppers)
+// 🔢 МОДУЛЬ ФИГУРНЫХ ТОРТОВ 3.2 (Fix Aspect Ratio)
 // ==========================================
 
 let shapeState = {
     cleanImgUrl: null, 
-    nativeRatio: 1,    // W / H
+    nativeRatio: 1,    // W / H (Ширина / Длина)
     
-    // Эффективность (Заполнение)
     kFactorRect: 1,    
     kFactorCircle: 1,  
+    radiusToHeightRatio: 1, 
     
-    // Для расчетов круга
-    radiusToHeightRatio: 1, // Отношение радиуса к высоте фигуры
-    
-    // Текущий режим
     currentShape: 'rect', // 'rect' | 'circle'
     
-    // Текущие результаты
     current: { l: 0, w: 0, h: 0, d: 0, weight: 0 }
 };
 
-// 1. Загрузка (без изменений)
+// 1. Загрузка
 function handleSvgUpload(input) {
     const file = input.files[0];
     if (!file) return;
@@ -12258,23 +12251,41 @@ function handleSvgUpload(input) {
     reader.readAsDataURL(file);
 }
 
-// 2. АНАЛИЗ (ПРЯМОУГОЛЬНИК И КРУГ)
+// 2. АНАЛИЗ (ТЕПЕРЬ БЕЗ ИСКАЖЕНИЙ)
 function cropAndAnalyze(img) {
+    // --- ИСПРАВЛЕНИЕ: Берем родные пропорции картинки ---
+    const MAX_SIDE = 1000; // Ограничиваем макс размер для скорости
+    let w = img.width;
+    let h = img.height;
+    
+    // Если картинка огромная, уменьшаем, но СОХРАНЯЕМ ПРОПОРЦИИ
+    if (w > MAX_SIDE || h > MAX_SIDE) {
+        const ratio = w / h;
+        if (w > h) { w = MAX_SIDE; h = w / ratio; }
+        else { h = MAX_SIDE; w = h * ratio; }
+    }
+    
+    // Округляем до целых, canvas любит целые числа
+    w = Math.floor(w);
+    h = Math.floor(h);
+
     const cvs = document.createElement('canvas');
     const ctx = cvs.getContext('2d');
-    const W = 1000; const H = 1000;
-    cvs.width = W; cvs.height = H;
-    ctx.drawImage(img, 0, 0, W, H);
+    cvs.width = w; 
+    cvs.height = h;
     
-    const imgData = ctx.getImageData(0,0,W,H);
+    // Рисуем картинку в её родных пропорциях
+    ctx.drawImage(img, 0, 0, w, h);
+    
+    const imgData = ctx.getImageData(0,0,w,h);
     const data = imgData.data;
     
-    let minX=W, minY=H, maxX=0, maxY=0, solidCount=0;
+    let minX=w, minY=h, maxX=0, maxY=0, solidCount=0;
     
     // 1. Проход: ищем границы (Bounding Box)
-    for(let y=0; y<H; y++) {
-        for(let x=0; x<W; x++) {
-            const i = (y*W+x)*4;
+    for(let y=0; y<h; y++) {
+        for(let x=0; x<w; x++) {
+            const i = (y*w+x)*4;
             const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
             
             // Фильтр белого и прозрачного
@@ -12282,7 +12293,7 @@ function cropAndAnalyze(img) {
             const isWhite = (r > 230 && g > 230 && b > 230);
             
             if (isTransparent || isWhite) {
-                data[i+3] = 0; // Стираем фон
+                data[i+3] = 0; // Стираем фон (делаем прозрачным)
             } else {
                 if(x < minX) minX = x;
                 if(x > maxX) maxX = x;
@@ -12295,71 +12306,76 @@ function cropAndAnalyze(img) {
     
     if(solidCount === 0) { alert("Фигура не найдена!"); return; }
     
-    // Размеры прямоугольника
+    // Размеры чистого прямоугольника (полезная часть)
     const realW = maxX - minX;
     const realH = maxY - minY;
     
-    // 2. Проход: Считаем радиус для КРУГА
-    // Центр круга берем в центре прямоугольника (для выпечки это логичнее всего)
+    // 2. Считаем круг (Описываем полезную часть)
     const centerX = minX + realW / 2;
     const centerY = minY + realH / 2;
     let maxDistSq = 0;
 
     for(let y=minY; y<=maxY; y++) {
         for(let x=minX; x<=maxX; x++) {
-            const i = (y*W+x)*4;
-            if (data[i+3] > 0) { // Если это пиксель торта
+            const i = (y*w+x)*4;
+            if (data[i+3] > 0) { // Пиксель торта
                 const distSq = (x - centerX)**2 + (y - centerY)**2;
                 if (distSq > maxDistSq) maxDistSq = distSq;
             }
         }
     }
-    const maxRadius = Math.sqrt(maxDistSq); // Минимальный радиус формы
+    const maxRadius = Math.sqrt(maxDistSq);
 
-    // --- СОХРАНЯЕМ РЕЗУЛЬТАТЫ ---
-    ctx.putImageData(imgData, 0, 0); // Обновляем холст (стерли белое)
-    const pad = 2;
+    // --- СОХРАНЯЕМ ЧИСТУЮ КАРТИНКУ ---
+    ctx.putImageData(imgData, 0, 0); // Обновляем холст (где стерли белый фон)
+    
+    const pad = 2; // Отступ в пикселях
     const cleanCvs = document.createElement('canvas');
     cleanCvs.width = realW + pad*2;
     cleanCvs.height = realH + pad*2;
+    
+    // Вырезаем только полезную часть
     cleanCvs.getContext('2d').drawImage(cvs, minX, minY, realW, realH, pad, pad, realW, realH);
     
     shapeState.cleanImgUrl = cleanCvs.toDataURL();
+    
+    // --- ГЛАВНОЕ: Считаем пропорции по вырезанному кусочку ---
+    // Теперь это отношение именно ПОЛЕЗНОЙ ширины к ПОЛЕЗНОЙ высоте
     shapeState.nativeRatio = realW / realH; 
     
-    // K-Факторы (Эффективность)
+    // Эффективность (Заполнение)
     const areaRect = realW * realH;
     const areaCircle = Math.PI * maxRadius * maxRadius;
     
     shapeState.kFactorRect = solidCount / areaRect;
     shapeState.kFactorCircle = solidCount / areaCircle;
     
-    // Отношение сторон для круга (D к L)
     shapeState.radiusToHeightRatio = (maxRadius * 2) / realH; 
 
-    // --- АВТОВЫБОР ЛУЧШЕЙ ФОРМЫ ---
-    // Сравниваем отходы. Где K-фактор больше, там отходов меньше.
+    // --- АВТОВЫБОР ФОРМЫ ---
     let best = 'rect';
-    let msg = "Прямоугольник эффективнее.";
+    let msg = "Прямоугольник.";
     
-    // Если круг хотя бы так же хорош (или лучше) - предлагаем круг
+    // Если круг почти так же хорош (95% эффективности прямоугольника), берем его
     if (shapeState.kFactorCircle >= shapeState.kFactorRect * 0.95) {
-         // (с небольшим допуском 5%, т.к. круг печь проще чем сложный прямоугольник)
         if (shapeState.kFactorCircle > shapeState.kFactorRect) {
              best = 'circle';
              msg = "Круг эффективнее!";
         }
     }
     
-    // Переключаем UI
     document.querySelector(`input[name="bakeShape"][value="${best}"]`).checked = true;
-    toggleShapeType(); // Применяем переключение
+    toggleShapeType(); 
     
-    document.getElementById('svgStatusText').innerText = `✅ Анализ: Rect ${Math.round(shapeState.kFactorRect*100)}% vs Circle ${Math.round(shapeState.kFactorCircle*100)}%. -> ${msg}`;
+    document.getElementById('svgStatusText').innerText = `✅ Анализ: Rect ${Math.round(shapeState.kFactorRect*100)}% / Circle ${Math.round(shapeState.kFactorCircle*100)}%. ${msg}`;
     document.getElementById('shapeCalcBlock').style.display = 'block';
     
     updateShapeRecipes();
     generate3DLayers();
+    
+    // Сбрасываем галочку пропорций в "Включено"
+    document.getElementById('linkAspect').checked = true;
+    
     recalcFromWeight();
 }
 
@@ -12381,8 +12397,6 @@ function toggleShapeType() {
         blockCircle.style.display = 'block';
         ghost.classList.add('is-circle');
     }
-    
-    // Пересчитываем под новую форму
     recalcFromWeight();
 }
 
@@ -12392,15 +12406,12 @@ function recalcFromWeight() {
     const h = parseFloat(document.getElementById('inpH').value) || 10;
     const density = getDensity();
     
-    // Общий объем фигуры
     const volSymbol = (weightKg * 1000) / density;
-    // Площадь фигуры
     const areaSymbol = volSymbol / h;
     
     if (shapeState.currentShape === 'rect') {
-        // --- ПРЯМОУГОЛЬНИК ---
         const areaBox = areaSymbol / shapeState.kFactorRect;
-        const ratio = shapeState.nativeRatio; // W / L
+        const ratio = shapeState.nativeRatio; 
         const L = Math.sqrt(areaBox / ratio);
         const W = L * ratio;
         
@@ -12408,13 +12419,10 @@ function recalcFromWeight() {
         updateInputNoTrigger('inpW', W);
         finalizeCalc(L, W, h, 0, weightKg);
     } else {
-        // --- КРУГ ---
-        const areaBox = areaSymbol / shapeState.kFactorCircle; // Площадь круга
-        // S = pi * r^2  ->  r = sqrt(S / pi)  -> D = 2 * r
+        const areaBox = areaSymbol / shapeState.kFactorCircle; 
         const radius = Math.sqrt(areaBox / Math.PI);
         const D = radius * 2;
         
-        // Вычисляем, какими были бы L и W внутри этого круга, чтобы правильно отрисовать картинку
         const visualL = D / shapeState.radiusToHeightRatio;
         const visualW = visualL * shapeState.nativeRatio;
 
@@ -12429,34 +12437,36 @@ function recalcFromDimensions(source) {
     const density = getDensity();
     let H = parseFloat(document.getElementById('inpH').value) || 10;
     let targetWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
+    const linkAspect = document.getElementById('linkAspect').checked;
 
     if (shapeState.currentShape === 'rect') {
         let L = parseFloat(document.getElementById('inpL').value) || 20;
         let W = parseFloat(document.getElementById('inpW').value) || 15;
         
-        // Пропорции
-        if (document.getElementById('linkAspect').checked && (source === 'L' || source === 'W')) {
-            if (source === 'L') { W = L * shapeState.nativeRatio; updateInputNoTrigger('inpW', W); }
-            else { L = W / shapeState.nativeRatio; updateInputNoTrigger('inpL', L); }
+        if (linkAspect) {
+            if (source === 'L') { 
+                W = L * shapeState.nativeRatio; 
+                updateInputNoTrigger('inpW', W); 
+            } else if (source === 'W') { 
+                L = W / shapeState.nativeRatio; 
+                updateInputNoTrigger('inpL', L); 
+            }
         }
 
         if (isLocked) {
-             // Фикс. Вес -> Подгоняем H
              const targetVol = (targetWeight * 1000) / density;
+             
              if (source === 'H') {
-                 // Меняли высоту -> меняем L/W
                  const neededArea = (targetVol / H) / shapeState.kFactorRect;
-                 const ratio = W / L;
-                 L = Math.sqrt(neededArea / ratio); W = L * ratio;
+                 const ratioToUse = linkAspect ? shapeState.nativeRatio : (W / L);
+                 L = Math.sqrt(neededArea / ratioToUse); W = L * ratioToUse;
                  updateInputNoTrigger('inpL', L); updateInputNoTrigger('inpW', W);
              } else {
-                 // Меняли L/W -> меняем H
                  const areaBox = L * W;
                  H = targetVol / (areaBox * shapeState.kFactorRect);
                  updateInputNoTrigger('inpH', H);
              }
         } else {
-            // Фикс. Размер -> Считаем Вес
             const areaSymbol = (L * W) * shapeState.kFactorRect;
             targetWeight = (areaSymbol * H * density) / 1000;
             updateInputNoTrigger('inpWeight', targetWeight);
@@ -12464,33 +12474,29 @@ function recalcFromDimensions(source) {
         finalizeCalc(L, W, H, 0, targetWeight);
 
     } else {
-        // --- КРУГ ---
+        // КРУГ
         let D = parseFloat(document.getElementById('inpD').value) || 20;
         
         if (isLocked) {
             const targetVol = (targetWeight * 1000) / density;
             if (source === 'H') {
-                // Меняли H -> меняем D
                 const neededAreaSymbol = targetVol / H;
                 const neededAreaCircle = neededAreaSymbol / shapeState.kFactorCircle;
                 D = Math.sqrt(neededAreaCircle / Math.PI) * 2;
                 updateInputNoTrigger('inpD', D);
             } else {
-                // Меняли D -> меняем H
                 const areaCircle = Math.PI * Math.pow(D/2, 2);
                 const areaSymbol = areaCircle * shapeState.kFactorCircle;
                 H = targetVol / areaSymbol;
                 updateInputNoTrigger('inpH', H);
             }
         } else {
-            // Фикс. Размер -> Считаем Вес
             const areaCircle = Math.PI * Math.pow(D/2, 2);
             const areaSymbol = areaCircle * shapeState.kFactorCircle;
             targetWeight = (areaSymbol * H * density) / 1000;
             updateInputNoTrigger('inpWeight', targetWeight);
         }
         
-        // Для визуализации нам нужны "виртуальные" L и W картинки внутри круга
         const visualL = D / shapeState.radiusToHeightRatio;
         const visualW = visualL * shapeState.nativeRatio;
         
@@ -12498,7 +12504,7 @@ function recalcFromDimensions(source) {
     }
 }
 
-// Финализация и Вывод
+// Финализация
 function finalizeCalc(L, W, H, D, weight) {
     const density = getDensity();
     let totalVol = 0;
@@ -12521,7 +12527,7 @@ function finalizeCalc(L, W, H, D, weight) {
     update3DScene(L, W, H, D);
 }
 
-// Обновление 3D (ИСПРАВЛЕННЫЕ ОСИ)
+// Обновление 3D
 function update3DScene(L, W, H, D) {
     const box = document.getElementById('ghostBox');
     const stack = document.getElementById('cakeStack');
@@ -12529,9 +12535,10 @@ function update3DScene(L, W, H, D) {
 
     const maxDim = (shapeState.currentShape === 'circle') ? D : Math.max(L, W);
     const scale = 160 / maxDim; 
-    
     const pxH = H * scale; 
     
+    renderShapeControls(L, W, H, D || 0);
+
     if (shapeState.currentShape === 'circle') {
         const pxD = D * scale;
         box.style.width = pxD + 'px';
@@ -12541,7 +12548,7 @@ function update3DScene(L, W, H, D) {
         document.getElementById('lblL').innerText = ''; 
         document.getElementById('lblW').innerText = `D ${Math.round(D)}`;
         document.getElementById('lblW').style.left = '-40px'; 
-        document.getElementById('lblH').innerText = 'H' + Math.round(H);
+        document.getElementById('lblH').innerText = 'H ' + Math.round(H);
         
     } else {
         const pxL = L * scale; 
@@ -12550,31 +12557,23 @@ function update3DScene(L, W, H, D) {
         box.style.height = pxL + 'px';
         box.style.borderRadius = '0';
         
-        // --- ИСПРАВЛЕНИЕ: ПРАВИЛЬНЫЕ ПОДПИСИ ---
-        // Нижняя подпись - это Ширина
         document.getElementById('lblL').innerText = Math.round(W) + ' (Ш)';
-        // Боковая подпись - это Длина
         document.getElementById('lblW').innerText = Math.round(L) + ' (Д)';
         document.getElementById('lblW').style.left = '-35px';
-        document.getElementById('lblH').innerText = 'H' + Math.round(H);
+        document.getElementById('lblH').innerText = 'H ' + Math.round(H);
     }
     
-    // Рисуем торт
     const pxImgL = L * scale;
     const pxImgW = W * scale;
     
     const layers = document.querySelectorAll('.cake-layer');
     const totalLayers = layers.length;
-    
     layers.forEach(layer => {
         const idx = parseInt(layer.dataset.layerIdx);
         const zPos = (idx / (totalLayers - 1)) * pxH;
-        
         layer.style.width = pxImgW + 'px';
         layer.style.height = pxImgL + 'px';
         layer.style.transform = `translateZ(${zPos}px)`;
-        
-        // Центрируем
         layer.style.top = '50%';
         layer.style.left = '50%';
         layer.style.marginTop = (-pxImgL/2) + 'px';
@@ -12582,7 +12581,54 @@ function update3DScene(L, W, H, D) {
     });
 }
 
-// Перенос в Главный Калькулятор
+// Вспомогательные функции
+function updateShapeRecipes() { 
+    const sel = document.getElementById('shapeRecipeSelect');
+    if (!sel) return;
+    sel.innerHTML = '';
+    const fillings = myRecipes.filter(r => r.type === 'filling');
+    fillings.forEach(r => {
+        const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
+        const density = r.outputWeight / vol; 
+        const opt = document.createElement('option');
+        opt.value = r.id; 
+        opt.dataset.density = density; 
+        opt.innerText = `${r.name} (~${density.toFixed(2)} г/см³)`;
+        sel.appendChild(opt);
+    });
+}
+
+function generate3DLayers() { 
+    const stack = document.getElementById('cakeStack');
+    if (!stack) return;
+    stack.innerHTML = '';
+    for(let i=0; i<30; i++) {
+        const div = document.createElement('div');
+        div.className = (i === 29) ? 'cake-layer cake-top' : 'cake-layer cake-side';
+        div.style.backgroundImage = `url('${shapeState.cleanImgUrl}')`;
+        div.dataset.layerIdx = i; 
+        stack.appendChild(div);
+    }
+}
+
+function getDensity() {
+    const sel = document.getElementById('shapeRecipeSelect');
+    if (!sel) return 0.8;
+    const selectedOpt = sel.options[sel.selectedIndex];
+    return selectedOpt ? parseFloat(selectedOpt.dataset.density) : 0.8; 
+}
+
+function toggleLockMode() {
+    const isLocked = document.getElementById('lockWeight').checked;
+    document.getElementById('lockStatusText').innerText = isLocked ? "🔒 ВЕС ЗАФИКСИРОВАН" : "🔓 ВЕС МЕНЯЕТСЯ";
+    document.getElementById('lockStatusText').style.color = isLocked ? "#2E7D32" : "#E65100";
+}
+
+function updateInputNoTrigger(id, val) {
+    const el = document.getElementById(id);
+    if(el) el.value = val < 10 ? val.toFixed(1) : Math.round(val);
+}
+
 function transferShapeToMain() {
     const { l, w, h, d } = shapeState.current;
     if (h === 0) return;
@@ -12595,13 +12641,11 @@ function transferShapeToMain() {
         weight: 0, 
         recipeId: recId,
         isGeometryMode: true,
-        // Если круг, передаем D. Если прямоуг - L и W
         fixedDiameter: isCircle ? parseFloat(d.toFixed(1)) : parseFloat(l.toFixed(1)), 
         fixedWidth: isCircle ? null : parseFloat(w.toFixed(1)),
         fixedHeight: parseFloat(h.toFixed(1)) 
     };
 
-    // Ставим глобальную форму
     document.getElementById('globalShape').value = isCircle ? 'cylinder' : 'rectangle';
     updateTierUI();
     
@@ -12615,6 +12659,7 @@ function transferShapeToMain() {
         alert(`✅ Перенесено!\nФорма: ${shapeName} см.\nВысота: ${h} см.`);
     }, 200);
 }
+
 
 // --- ЛОГИКА СТЕППЕРОВ (ЗАЖИМ КНОПКИ) ---
 let holdTimer = null;
@@ -12721,6 +12766,7 @@ function updateInputNoTrigger(id, val) {
   </body>
 
 </html>
+
 
 
 
