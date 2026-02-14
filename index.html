@@ -1198,53 +1198,46 @@ class CakeVisualizer {
     <style>
 
       /* --- СТИЛИ ДЛЯ СТЕППЕРА (Кнопки +/-) --- */
+/* Стили для степперов */
 .stepper {
     display: flex;
-    align-items: center;
-    background: #fff;
-    border: 1px solid #ccc;
-    border-radius: 8px;
+    align-items: stretch;
+    border: 1px solid #ddd;
+    border-radius: 6px;
     overflow: hidden;
+    background: #fff;
 }
-
 .stepper input {
-    border: none !important;
+    border: none;
     text-align: center;
-    font-size: 16px;
     font-weight: bold;
-    padding: 0;
-    margin: 0;
-    box-shadow: none !important;
+    font-size: 16px;
     width: 100%;
-    /* Убираем стандартные стрелки */
-    -moz-appearance: textfield; 
+    border-left: 1px solid #eee;
+    border-right: 1px solid #eee;
+    margin: 0;
+    border-radius: 0;
+    -moz-appearance: textfield; /* Убираем стандартные стрелки */
 }
 .stepper input::-webkit-outer-spin-button,
 .stepper input::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
 }
-
 .step-btn {
-    width: 40px;
-    height: 40px;
-    background: #eee;
+    background: #f9f9f9;
     border: none;
-    font-size: 20px;
+    color: #1976D2;
     font-weight: bold;
-    color: #555;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    font-size: 18px;
+    width: 40px;
     cursor: pointer;
-    /* Запрет выделения при долгом нажатии */
-    user-select: none; 
-    -webkit-user-select: none;
-    touch-action: manipulation;
+    transition: 0.2s;
+    touch-action: manipulation; /* Для быстрого тапа */
 }
 .step-btn:active {
-    background: #FF5722;
-    color: white;
+    background: #ddd;
+    color: #0D47A1;
 }
 
       /* --- КОЛОРИСТИКА --- */
@@ -3826,128 +3819,111 @@ body {
         <div id="shapeCalcBlock" style="display:none; margin-top:20px;">
             
             <div class="form-group" style="margin-bottom:15px;">
-                <span class="form-label">🍰 Начинка</span>
+                <span class="form-label">🍰 Начинка (Плотность)</span>
                 <select id="shapeRecipeSelect" onchange="recalcFromWeight()" style="font-weight:bold; background:#fff3e0;">
                     </select>
+            </div>
+
+            <div style="margin-bottom:15px; background:#fff; padding:8px; border-radius:8px; border:1px solid #ddd; display:flex; justify-content:center; gap:15px;">
+                <span class="form-label" style="align-self:center; margin:0;">Форма:</span>
+                <label style="cursor:pointer; display:flex; align-items:center; gap:5px;">
+                    <input type="radio" name="bakeShape" value="rect" onchange="toggleShapeType()"> ⬜ Прямоугольник
+                </label>
+                <label style="cursor:pointer; display:flex; align-items:center; gap:5px;">
+                    <input type="radio" name="bakeShape" value="circle" onchange="toggleShapeType()"> ⚪ Круг
+                </label>
             </div>
 
             <div style="display:flex; flex-wrap:wrap; gap:20px; margin-bottom:20px;">
                 
                 <div style="flex:1; min-width:140px; background:#e8f5e9; padding:10px; border-radius:8px; border:1px solid #c8e6c9;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                        <span class="form-label">⚖️ Чистый вес (кг)</span>
+                        <span class="form-label">⚖️ Чистый вес</span>
                         <label class="switch" style="transform:scale(0.6); margin:0;">
                             <input type="checkbox" id="lockWeight" checked onchange="toggleLockMode()">
                             <span class="slider"></span>
                         </label>
                     </div>
-                    <input type="number" id="inpWeight" value="2.0" step="0.1" 
-                           style="font-size:24px; font-weight:900; color:#2E7D32; text-align:center; height:50px;"
-                           oninput="recalcFromWeight()">
+                    <div class="stepper" style="border-color:#a5d6a7;">
+                        <button class="step-btn" onclick="stepWeight(-0.1)">−</button>
+                        <input type="number" id="inpWeight" value="2.0" step="0.1" style="color:#2E7D32;" oninput="recalcFromWeight()">
+                        <button class="step-btn" onclick="stepWeight(0.1)">+</button>
+                    </div>
                     <div style="text-align:center; font-size:10px; color:#666; margin-top:5px;">
                         <span id="lockStatusText">🔒 ВЕС ЗАФИКСИРОВАН</span>
                     </div>
                 </div>
 
-                <div style="flex:2; display:flex; flex-direction:column; gap:10px; background:#f5f5f5; padding:10px; border-radius:8px; border:1px solid #ddd;">
+                <div id="dimsContainer" style="flex:2; display:flex; flex-direction:column; gap:10px; background:#f5f5f5; padding:10px; border-radius:8px; border:1px solid #ddd;">
                     
-                    <div class="form-group" style="width:100%;">
-                        <span class="form-label">Длина (Вер.)</span>
-                        <div class="stepper">
-                            <button class="step-btn" 
-                                    onmousedown="startChange('inpL', -1, 'L')" ontouchstart="startChange('inpL', -1, 'L')"
-                                    onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">
-                                −
-                            </button>
-                            
-                            <input type="number" id="inpL" value="25" onchange="recalcFromDimensions('L')">
-                            
-                            <button class="step-btn" 
-                                    onmousedown="startChange('inpL', 1, 'L')" ontouchstart="startChange('inpL', 1, 'L')"
-                                    onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">
-                                +
-                            </button>
+                    <div id="blockRect" style="display:contents;">
+                        <div class="form-group" style="width:100%;">
+                            <span class="form-label">Длина (Вертикаль)</span>
+                            <div class="stepper">
+                                <button class="step-btn" onmousedown="startChange('inpL', -1, 'L')" ontouchstart="startChange('inpL', -1, 'L')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">−</button>
+                                <input type="number" id="inpL" value="25" onchange="recalcFromDimensions('L')">
+                                <button class="step-btn" onmousedown="startChange('inpL', 1, 'L')" ontouchstart="startChange('inpL', 1, 'L')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">+</button>
+                            </div>
+                        </div>
+                        <div class="form-group" style="width:100%;">
+                            <span class="form-label">Ширина (Горизонталь)</span>
+                            <div class="stepper">
+                                <button class="step-btn" onmousedown="startChange('inpW', -1, 'W')" ontouchstart="startChange('inpW', -1, 'W')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">−</button>
+                                <input type="number" id="inpW" value="18" onchange="recalcFromDimensions('W')">
+                                <button class="step-btn" onmousedown="startChange('inpW', 1, 'W')" ontouchstart="startChange('inpW', 1, 'W')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">+</button>
+                            </div>
+                            <div style="font-size:10px; text-align:center; margin-top:2px;">
+                                <label><input type="checkbox" id="linkAspect" checked> 🔗 Пропорции</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="blockCircle" style="display:none; width:100%;">
+                        <div class="form-group" style="width:100%;">
+                            <span class="form-label" style="color:#E91E63;">Диаметр (см)</span>
+                            <div class="stepper">
+                                <button class="step-btn" onmousedown="startChange('inpD', -1, 'D')" ontouchstart="startChange('inpD', -1, 'D')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">−</button>
+                                <input type="number" id="inpD" value="20" style="color:#E91E63;" onchange="recalcFromDimensions('D')">
+                                <button class="step-btn" onmousedown="startChange('inpD', 1, 'D')" ontouchstart="startChange('inpD', 1, 'D')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">+</button>
+                            </div>
                         </div>
                     </div>
                     
                     <div class="form-group" style="width:100%;">
-                        <span class="form-label">Ширина (Гор.)</span>
+                        <span class="form-label">Высота (Толщина)</span>
                         <div class="stepper">
-                            <button class="step-btn" 
-                                    onmousedown="startChange('inpW', -1, 'W')" ontouchstart="startChange('inpW', -1, 'W')"
-                                    onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">
-                                −
-                            </button>
-                            
-                            <input type="number" id="inpW" value="18" onchange="recalcFromDimensions('W')">
-                            
-                            <button class="step-btn" 
-                                    onmousedown="startChange('inpW', 1, 'W')" ontouchstart="startChange('inpW', 1, 'W')"
-                                    onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">
-                                +
-                            </button>
-                        </div>
-                        <div style="margin-top:5px; font-size:11px; text-align:center;">
-                            <label><input type="checkbox" id="linkAspect" checked> 🔗 Пропорции</label>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group" style="width:100%;">
-                        <span class="form-label">Высота (толщ.)</span>
-                        <div class="stepper">
-                            <button class="step-btn" 
-                                    onmousedown="startChange('inpH', -0.5, 'H')" ontouchstart="startChange('inpH', -0.5, 'H')"
-                                    onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">
-                                −
-                            </button>
-                            
+                            <button class="step-btn" onmousedown="startChange('inpH', -0.5, 'H')" ontouchstart="startChange('inpH', -0.5, 'H')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">−</button>
                             <input type="number" id="inpH" value="10" onchange="recalcFromDimensions('H')">
-                            
-                            <button class="step-btn" 
-                                    onmousedown="startChange('inpH', 0.5, 'H')" ontouchstart="startChange('inpH', 0.5, 'H')"
-                                    onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">
-                                +
-                            </button>
+                            <button class="step-btn" onmousedown="startChange('inpH', 0.5, 'H')" ontouchstart="startChange('inpH', 0.5, 'H')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">+</button>
                         </div>
                     </div>
 
                 </div>
             </div>
 
-            <div class="scene-container">
+            <div class="visual-container">
                 <div class="scene-stage" id="sceneStage">
-                    
                     <div id="ghostBox" class="ghost-box">
                         <div id="lblL" class="dim-label" style="bottom:-25px; left:50%; transform:translateX(-50%);">L</div>
                         <div id="lblW" class="dim-label" style="left:-35px; top:50%; transform:translateY(-50%);">W</div>
                         <div id="lblH" class="dim-label" style="right:-35px; bottom:0;">H</div>
                     </div>
-
                     <div id="cakeStack"></div>
                 </div>
             </div>
 
             <div style="margin-top:15px; display:flex; gap:10px; font-size:13px;">
                 <div style="flex:1; background:#ffebee; padding:10px; border-radius:6px; color:#c62828;">
-                    ✂️ <b>Отходы (Обрезки):</b><br>
-                    <span id="infoWaste">0 кг (0%)</span>
+                    ✂️ <b>Отходы:</b><br><span id="infoWaste">0 кг</span>
                 </div>
                 <div style="flex:1; background:#e3f2fd; padding:10px; border-radius:6px; color:#1565C0;">
-                    📦 <b>Общий вес выпечки:</b><br>
-                    <span id="infoTotal">0 кг</span>
+                    📦 <b>Выпечка:</b><br><span id="infoTotal">0 кг</span>
                 </div>
             </div>
 
             <div style="margin-top:20px; text-align:center;">
-                <button class="main-btn" onclick="transferShapeToMain()" 
-                        style="background:linear-gradient(45deg, #FF9800, #F57C00); box-shadow: 0 4px 15px rgba(255, 152, 0, 0.4);">
-                    ✅ Применить размеры и Начинку
-                </button>
-                <div style="margin-top:5px; font-size:11px; color:#888;">
-                    Перенесет размеры L x W x H и выбранную начинку в главный калькулятор
-                </div>
+                <button class="main-btn" onclick="transferShapeToMain()" style="background:linear-gradient(45deg, #FF9800, #F57C00);">✅ Применить размеры и Начинку</button>
             </div>
-
         </div>
     </div>
 </div>
@@ -12246,76 +12222,68 @@ function autoAddPackaging(res) {
 }
 
  // ==========================================
-// 🔢 МОДУЛЬ ФИГУРНЫХ ТОРТОВ 2.0 (Smart SVG)
+
+// ==========================================
+// 🔢 МОДУЛЬ ФИГУРНЫХ ТОРТОВ 3.0 (Circle + Steppers)
 // ==========================================
 
 let shapeState = {
-    originalImg: null, // Исходник
-    cleanImgUrl: null, // Обрезанная картинка (DataURL)
-    nativeRatio: 1,    // Соотношение сторон самой цифры (без полей)
-    kFactor: 1,        // Коэффициент заполнения (0.1 - 1.0)
+    cleanImgUrl: null, 
+    nativeRatio: 1,    // W / H
     
-    // Текущие расчетные данные
-    current: { l: 0, w: 0, h: 0, weight: 0, waste: 0, total: 0 }
+    // Эффективность (Заполнение)
+    kFactorRect: 1,    
+    kFactorCircle: 1,  
+    
+    // Для расчетов круга
+    radiusToHeightRatio: 1, // Отношение радиуса к высоте фигуры
+    
+    // Текущий режим
+    currentShape: 'rect', // 'rect' | 'circle'
+    
+    // Текущие результаты
+    current: { l: 0, w: 0, h: 0, d: 0, weight: 0 }
 };
 
-// 1. Загрузка и УМНЫЙ КРОППИНГ
+// 1. Загрузка (без изменений)
 function handleSvgUpload(input) {
     const file = input.files[0];
     if (!file) return;
-    
     const reader = new FileReader();
     reader.onload = function(e) {
         const img = new Image();
-        img.onload = function() {
-            cropAndAnalyze(img);
-        };
+        img.onload = function() { cropAndAnalyze(img); };
         img.src = e.target.result;
     };
     reader.readAsDataURL(file);
 }
 
+// 2. АНАЛИЗ (ПРЯМОУГОЛЬНИК И КРУГ)
 function cropAndAnalyze(img) {
-    // Рисуем на большом холсте для анализа
     const cvs = document.createElement('canvas');
     const ctx = cvs.getContext('2d');
-    const W = 1000; 
-    const H = 1000;
+    const W = 1000; const H = 1000;
     cvs.width = W; cvs.height = H;
-    
-    // Рисуем исходную картинку (растягиваем для четкости анализа)
     ctx.drawImage(img, 0, 0, W, H);
     
-    // Получаем массив всех пикселей [R, G, B, Alpha, R, G, B, Alpha...]
     const imgData = ctx.getImageData(0,0,W,H);
     const data = imgData.data;
     
     let minX=W, minY=H, maxX=0, maxY=0, solidCount=0;
     
-    // ПРОХОДИМ ПО КАЖДОМУ ПИКСЕЛЮ
+    // 1. Проход: ищем границы (Bounding Box)
     for(let y=0; y<H; y++) {
         for(let x=0; x<W; x++) {
-            const i = (y * W + x) * 4;
+            const i = (y*W+x)*4;
+            const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
             
-            const r = data[i];
-            const g = data[i+1];
-            const b = data[i+2];
-            const a = data[i+3]; // Прозрачность (0-255)
-
-            // --- МАГИЯ: ОПРЕДЕЛЯЕМ "ПУСТОТУ" ---
-            // 1. Если пиксель полностью прозрачный (как в PNG/SVG)
+            // Фильтр белого и прозрачного
             const isTransparent = (a < 50);
-            
-            // 2. Если пиксель БЕЛЫЙ или очень светлый (как фон в JPEG)
-            // (R, G и B больше 230 из 255)
             const isWhite = (r > 230 && g > 230 && b > 230);
             
             if (isTransparent || isWhite) {
-                // Если это фон - ДЕЛАЕМ ЕГО ПРОЗРАЧНЫМ ФИЗИЧЕСКИ
-                // (Это нужно, чтобы убрать белый квадрат вокруг JPEG)
-                data[i+3] = 0; 
+                data[i+3] = 0; // Стираем фон
             } else {
-                // ЭТО ТОРТ! (Темный или цветной пиксель)
                 if(x < minX) minX = x;
                 if(x > maxX) maxX = x;
                 if(y < minY) minY = y;
@@ -12325,63 +12293,382 @@ function cropAndAnalyze(img) {
         }
     }
     
-    if(solidCount === 0) { 
-        alert("Не вижу фигуру! \nПопробуйте картинку с более темным, контрастным силуэтом."); 
-        return; 
-    }
+    if(solidCount === 0) { alert("Фигура не найдена!"); return; }
     
-    // Обновляем данные на холсте (теперь там прозрачный фон вместо белого)
-    ctx.putImageData(imgData, 0, 0);
-    
-    // Реальные размеры фигуры
+    // Размеры прямоугольника
     const realW = maxX - minX;
     const realH = maxY - minY;
     
-    // Добавим микро-отступ (padding), чтобы края не резались резко
+    // 2. Проход: Считаем радиус для КРУГА
+    // Центр круга берем в центре прямоугольника (для выпечки это логичнее всего)
+    const centerX = minX + realW / 2;
+    const centerY = minY + realH / 2;
+    let maxDistSq = 0;
+
+    for(let y=minY; y<=maxY; y++) {
+        for(let x=minX; x<=maxX; x++) {
+            const i = (y*W+x)*4;
+            if (data[i+3] > 0) { // Если это пиксель торта
+                const distSq = (x - centerX)**2 + (y - centerY)**2;
+                if (distSq > maxDistSq) maxDistSq = distSq;
+            }
+        }
+    }
+    const maxRadius = Math.sqrt(maxDistSq); // Минимальный радиус формы
+
+    // --- СОХРАНЯЕМ РЕЗУЛЬТАТЫ ---
+    ctx.putImageData(imgData, 0, 0); // Обновляем холст (стерли белое)
     const pad = 2;
-    
-    // 2. Создаем ЧИСТУЮ картинку (кропнутую)
     const cleanCvs = document.createElement('canvas');
-    cleanCvs.width = realW + (pad*2);
-    cleanCvs.height = realH + (pad*2);
+    cleanCvs.width = realW + pad*2;
+    cleanCvs.height = realH + pad*2;
+    cleanCvs.getContext('2d').drawImage(cvs, minX, minY, realW, realH, pad, pad, realW, realH);
     
-    // Вырезаем кусок с большого холста (где мы уже стерли белый фон)
-    cleanCvs.getContext('2d').drawImage(
-        cvs, 
-        minX, minY, realW, realH, // Откуда берем
-        pad, pad, realW, realH    // Куда кладем
-    );
-    
-    // Сохраняем данные
     shapeState.cleanImgUrl = cleanCvs.toDataURL();
     shapeState.nativeRatio = realW / realH; 
     
-    // Считаем площадь: заполненные пиксели / площадь прямоугольника
-    shapeState.kFactor = solidCount / (realW * realH); 
+    // K-Факторы (Эффективность)
+    const areaRect = realW * realH;
+    const areaCircle = Math.PI * maxRadius * maxRadius;
     
-    // Обновляем UI
-    document.getElementById('svgStatusText').innerText = `✅ Обработано. Заполнение: ${Math.round(shapeState.kFactor*100)}%`;
+    shapeState.kFactorRect = solidCount / areaRect;
+    shapeState.kFactorCircle = solidCount / areaCircle;
+    
+    // Отношение сторон для круга (D к L)
+    shapeState.radiusToHeightRatio = (maxRadius * 2) / realH; 
+
+    // --- АВТОВЫБОР ЛУЧШЕЙ ФОРМЫ ---
+    // Сравниваем отходы. Где K-фактор больше, там отходов меньше.
+    let best = 'rect';
+    let msg = "Прямоугольник эффективнее.";
+    
+    // Если круг хотя бы так же хорош (или лучше) - предлагаем круг
+    if (shapeState.kFactorCircle >= shapeState.kFactorRect * 0.95) {
+         // (с небольшим допуском 5%, т.к. круг печь проще чем сложный прямоугольник)
+        if (shapeState.kFactorCircle > shapeState.kFactorRect) {
+             best = 'circle';
+             msg = "Круг эффективнее!";
+        }
+    }
+    
+    // Переключаем UI
+    document.querySelector(`input[name="bakeShape"][value="${best}"]`).checked = true;
+    toggleShapeType(); // Применяем переключение
+    
+    document.getElementById('svgStatusText').innerText = `✅ Анализ: Rect ${Math.round(shapeState.kFactorRect*100)}% vs Circle ${Math.round(shapeState.kFactorCircle*100)}%. -> ${msg}`;
     document.getElementById('shapeCalcBlock').style.display = 'block';
     
-    updateShapeRecipes(); 
+    updateShapeRecipes();
     generate3DLayers();
     recalcFromWeight();
 }
 
-// ВОТ ОНА, ПОТЕРЯННАЯ ФУНКЦИЯ!
-function updateShapeRecipes() {
+// 3. Переключение типа формы (UI)
+function toggleShapeType() {
+    const shape = document.querySelector('input[name="bakeShape"]:checked').value;
+    shapeState.currentShape = shape;
+    
+    const blockRect = document.getElementById('blockRect');
+    const blockCircle = document.getElementById('blockCircle');
+    const ghost = document.getElementById('ghostBox');
+    
+    if (shape === 'rect') {
+        blockRect.style.display = 'contents';
+        blockCircle.style.display = 'none';
+        ghost.classList.remove('is-circle');
+    } else {
+        blockRect.style.display = 'none';
+        blockCircle.style.display = 'block';
+        ghost.classList.add('is-circle');
+    }
+    
+    // Пересчитываем под новую форму
+    recalcFromWeight();
+}
+
+// 4. ГЛАВНЫЙ РАСЧЕТ (ОБНОВЛЕННЫЙ)
+function recalcFromWeight() {
+    const weightKg = parseFloat(document.getElementById('inpWeight').value) || 2;
+    const h = parseFloat(document.getElementById('inpH').value) || 10;
+    const density = getDensity();
+    
+    // Общий объем фигуры
+    const volSymbol = (weightKg * 1000) / density;
+    // Площадь фигуры
+    const areaSymbol = volSymbol / h;
+    
+    if (shapeState.currentShape === 'rect') {
+        // --- ПРЯМОУГОЛЬНИК ---
+        const areaBox = areaSymbol / shapeState.kFactorRect;
+        const ratio = shapeState.nativeRatio; // W / L
+        const L = Math.sqrt(areaBox / ratio);
+        const W = L * ratio;
+        
+        updateInputNoTrigger('inpL', L);
+        updateInputNoTrigger('inpW', W);
+        finalizeCalc(L, W, h, 0, weightKg);
+    } else {
+        // --- КРУГ ---
+        const areaBox = areaSymbol / shapeState.kFactorCircle; // Площадь круга
+        // S = pi * r^2  ->  r = sqrt(S / pi)  -> D = 2 * r
+        const radius = Math.sqrt(areaBox / Math.PI);
+        const D = radius * 2;
+        
+        // Вычисляем, какими были бы L и W внутри этого круга, чтобы правильно отрисовать картинку
+        const visualL = D / shapeState.radiusToHeightRatio;
+        const visualW = visualL * shapeState.nativeRatio;
+
+        updateInputNoTrigger('inpD', D);
+        finalizeCalc(visualL, visualW, h, D, weightKg);
+    }
+}
+
+// Расчет от размеров (ОБНОВЛЕННЫЙ)
+function recalcFromDimensions(source) {
+    const isLocked = document.getElementById('lockWeight').checked;
+    const density = getDensity();
+    let H = parseFloat(document.getElementById('inpH').value) || 10;
+    let targetWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
+
+    if (shapeState.currentShape === 'rect') {
+        let L = parseFloat(document.getElementById('inpL').value) || 20;
+        let W = parseFloat(document.getElementById('inpW').value) || 15;
+        
+        // Пропорции
+        if (document.getElementById('linkAspect').checked && (source === 'L' || source === 'W')) {
+            if (source === 'L') { W = L * shapeState.nativeRatio; updateInputNoTrigger('inpW', W); }
+            else { L = W / shapeState.nativeRatio; updateInputNoTrigger('inpL', L); }
+        }
+
+        if (isLocked) {
+             // Фикс. Вес -> Подгоняем H
+             const targetVol = (targetWeight * 1000) / density;
+             if (source === 'H') {
+                 // Меняли высоту -> меняем L/W
+                 const neededArea = (targetVol / H) / shapeState.kFactorRect;
+                 const ratio = W / L;
+                 L = Math.sqrt(neededArea / ratio); W = L * ratio;
+                 updateInputNoTrigger('inpL', L); updateInputNoTrigger('inpW', W);
+             } else {
+                 // Меняли L/W -> меняем H
+                 const areaBox = L * W;
+                 H = targetVol / (areaBox * shapeState.kFactorRect);
+                 updateInputNoTrigger('inpH', H);
+             }
+        } else {
+            // Фикс. Размер -> Считаем Вес
+            const areaSymbol = (L * W) * shapeState.kFactorRect;
+            targetWeight = (areaSymbol * H * density) / 1000;
+            updateInputNoTrigger('inpWeight', targetWeight);
+        }
+        finalizeCalc(L, W, H, 0, targetWeight);
+
+    } else {
+        // --- КРУГ ---
+        let D = parseFloat(document.getElementById('inpD').value) || 20;
+        
+        if (isLocked) {
+            const targetVol = (targetWeight * 1000) / density;
+            if (source === 'H') {
+                // Меняли H -> меняем D
+                const neededAreaSymbol = targetVol / H;
+                const neededAreaCircle = neededAreaSymbol / shapeState.kFactorCircle;
+                D = Math.sqrt(neededAreaCircle / Math.PI) * 2;
+                updateInputNoTrigger('inpD', D);
+            } else {
+                // Меняли D -> меняем H
+                const areaCircle = Math.PI * Math.pow(D/2, 2);
+                const areaSymbol = areaCircle * shapeState.kFactorCircle;
+                H = targetVol / areaSymbol;
+                updateInputNoTrigger('inpH', H);
+            }
+        } else {
+            // Фикс. Размер -> Считаем Вес
+            const areaCircle = Math.PI * Math.pow(D/2, 2);
+            const areaSymbol = areaCircle * shapeState.kFactorCircle;
+            targetWeight = (areaSymbol * H * density) / 1000;
+            updateInputNoTrigger('inpWeight', targetWeight);
+        }
+        
+        // Для визуализации нам нужны "виртуальные" L и W картинки внутри круга
+        const visualL = D / shapeState.radiusToHeightRatio;
+        const visualW = visualL * shapeState.nativeRatio;
+        
+        finalizeCalc(visualL, visualW, H, D, targetWeight);
+    }
+}
+
+// Финализация и Вывод
+function finalizeCalc(L, W, H, D, weight) {
+    const density = getDensity();
+    let totalVol = 0;
+    
+    if (shapeState.currentShape === 'rect') {
+        totalVol = L * W * H;
+    } else {
+        totalVol = Math.PI * Math.pow(D/2, 2) * H;
+    }
+    
+    const totalWeight = (totalVol * density) / 1000;
+    const waste = totalWeight - weight;
+    const wastePct = totalWeight > 0 ? (waste / totalWeight) * 100 : 0;
+    
+    document.getElementById('infoTotal').innerText = `${totalWeight.toFixed(2)} кг`;
+    document.getElementById('infoWaste').innerText = `${waste.toFixed(2)} кг (${Math.round(wastePct)}%)`;
+    
+    shapeState.current = { l: L, w: W, h: H, d: D, weight: weight };
+    
+    update3DScene(L, W, H, D);
+}
+
+// Обновление 3D (ИСПРАВЛЕННЫЕ ОСИ)
+function update3DScene(L, W, H, D) {
+    const box = document.getElementById('ghostBox');
+    const stack = document.getElementById('cakeStack');
+    if (!box || !stack) return;
+
+    const maxDim = (shapeState.currentShape === 'circle') ? D : Math.max(L, W);
+    const scale = 160 / maxDim; 
+    
+    const pxH = H * scale; 
+    
+    if (shapeState.currentShape === 'circle') {
+        const pxD = D * scale;
+        box.style.width = pxD + 'px';
+        box.style.height = pxD + 'px';
+        box.style.borderRadius = '50%';
+        
+        document.getElementById('lblL').innerText = ''; 
+        document.getElementById('lblW').innerText = `D ${Math.round(D)}`;
+        document.getElementById('lblW').style.left = '-40px'; 
+        document.getElementById('lblH').innerText = 'H' + Math.round(H);
+        
+    } else {
+        const pxL = L * scale; 
+        const pxW = W * scale;
+        box.style.width = pxW + 'px';
+        box.style.height = pxL + 'px';
+        box.style.borderRadius = '0';
+        
+        // --- ИСПРАВЛЕНИЕ: ПРАВИЛЬНЫЕ ПОДПИСИ ---
+        // Нижняя подпись - это Ширина
+        document.getElementById('lblL').innerText = Math.round(W) + ' (Ш)';
+        // Боковая подпись - это Длина
+        document.getElementById('lblW').innerText = Math.round(L) + ' (Д)';
+        document.getElementById('lblW').style.left = '-35px';
+        document.getElementById('lblH').innerText = 'H' + Math.round(H);
+    }
+    
+    // Рисуем торт
+    const pxImgL = L * scale;
+    const pxImgW = W * scale;
+    
+    const layers = document.querySelectorAll('.cake-layer');
+    const totalLayers = layers.length;
+    
+    layers.forEach(layer => {
+        const idx = parseInt(layer.dataset.layerIdx);
+        const zPos = (idx / (totalLayers - 1)) * pxH;
+        
+        layer.style.width = pxImgW + 'px';
+        layer.style.height = pxImgL + 'px';
+        layer.style.transform = `translateZ(${zPos}px)`;
+        
+        // Центрируем
+        layer.style.top = '50%';
+        layer.style.left = '50%';
+        layer.style.marginTop = (-pxImgL/2) + 'px';
+        layer.style.marginLeft = (-pxImgW/2) + 'px';
+    });
+}
+
+// Перенос в Главный Калькулятор
+function transferShapeToMain() {
+    const { l, w, h, d } = shapeState.current;
+    if (h === 0) return;
+    
+    const recId = document.getElementById('shapeRecipeSelect').value;
+    const isCircle = (shapeState.currentShape === 'circle');
+    
+    const newTier = {
+        id: Date.now(),
+        weight: 0, 
+        recipeId: recId,
+        isGeometryMode: true,
+        // Если круг, передаем D. Если прямоуг - L и W
+        fixedDiameter: isCircle ? parseFloat(d.toFixed(1)) : parseFloat(l.toFixed(1)), 
+        fixedWidth: isCircle ? null : parseFloat(w.toFixed(1)),
+        fixedHeight: parseFloat(h.toFixed(1)) 
+    };
+
+    // Ставим глобальную форму
+    document.getElementById('globalShape').value = isCircle ? 'cylinder' : 'rectangle';
+    updateTierUI();
+    
+    appState.tiers = [newTier];
+    switchTab('calc');
+    renderTierRows();
+    
+    setTimeout(() => {
+        calculateInitial(); 
+        const shapeName = isCircle ? `Круг D${Math.round(d)}` : `Прямоугольник ${Math.round(l)}x${Math.round(w)}`;
+        alert(`✅ Перенесено!\nФорма: ${shapeName} см.\nВысота: ${h} см.`);
+    }, 200);
+}
+
+// --- ЛОГИКА СТЕППЕРОВ (ЗАЖИМ КНОПКИ) ---
+let holdTimer = null;
+let holdInterval = null;
+
+function startChange(id, delta, axis) {
+    performStep(id, delta, axis);
+    holdTimer = setTimeout(() => {
+        holdInterval = setInterval(() => {
+            performStep(id, delta, axis);
+        }, 100); 
+    }, 400); 
+}
+
+function stopChange() {
+    clearTimeout(holdTimer);
+    clearInterval(holdInterval);
+}
+
+function performStep(id, delta, axis) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    
+    let val = parseFloat(el.value) || 0;
+    val += delta;
+    
+    if (axis === 'H') val = Math.round(val * 2) / 2;
+    else val = Math.round(val);
+    
+    if (val < 1) val = 1;
+    el.value = val;
+    
+    if (axis) recalcFromDimensions(axis);
+    if (navigator.vibrate) navigator.vibrate(5);
+}
+
+function stepWeight(delta) {
+    const el = document.getElementById('inpWeight');
+    let val = parseFloat(el.value) || 0;
+    val += delta;
+    if (val < 0.1) val = 0.1;
+    el.value = val.toFixed(1);
+    recalcFromWeight();
+}
+
+// Вспомогательные функции
+function updateShapeRecipes() { 
     const sel = document.getElementById('shapeRecipeSelect');
     if (!sel) return;
     sel.innerHTML = '';
-    
-    // Фильтруем только начинки
     const fillings = myRecipes.filter(r => r.type === 'filling');
-    
     fillings.forEach(r => {
-        // Считаем плотность на лету (Вес / Объем эталона)
         const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
-        const density = r.outputWeight / vol; // г/см3
-        
+        const density = r.outputWeight / vol; 
         const opt = document.createElement('option');
         opt.value = r.id; 
         opt.dataset.density = density; 
@@ -12390,192 +12677,24 @@ function updateShapeRecipes() {
     });
 }
 
-// Создаем "стопку" картинок для объема (псевдо 3D)
-// Создаем "стопку" картинок для объема (псевдо 3D)
-function generate3DLayers() {
+function generate3DLayers() { 
     const stack = document.getElementById('cakeStack');
     if (!stack) return;
     stack.innerHTML = '';
-    
-    // Увеличиваем число слоев для плотности (было 10, стало 30)
-    const layerCount = 30; 
-    
-    for(let i=0; i<layerCount; i++) {
+    for(let i=0; i<30; i++) {
         const div = document.createElement('div');
-        // Самый последний слой (i === layerCount - 1) — это крышка
-        div.className = (i === layerCount - 1) ? 'cake-layer cake-top' : 'cake-layer cake-side';
+        div.className = (i === 29) ? 'cake-layer cake-top' : 'cake-layer cake-side';
         div.style.backgroundImage = `url('${shapeState.cleanImgUrl}')`;
         div.dataset.layerIdx = i; 
         stack.appendChild(div);
     }
 }
 
-// --- ЛОГИКА РАСЧЕТА ---
-
 function getDensity() {
     const sel = document.getElementById('shapeRecipeSelect');
     if (!sel) return 0.8;
-    // Берем плотность из data-атрибута выбранной опции
     const selectedOpt = sel.options[sel.selectedIndex];
     return selectedOpt ? parseFloat(selectedOpt.dataset.density) : 0.8; 
-}
-
-// Сценарий А: Изменили ВЕС (или сменили начинку) -> Считаем размеры
-function recalcFromWeight() {
-    const weightKg = parseFloat(document.getElementById('inpWeight').value) || 2;
-    const h = parseFloat(document.getElementById('inpH').value) || 10;
-    const density = getDensity();
-    
-    // 1. Нужный объем самой фигуры (см3) = Вес / Плотность
-    const volSymbol = (weightKg * 1000) / density;
-    
-    // 2. Площадь фигуры (см2) = Объем / Высота
-    const areaSymbol = volSymbol / h;
-    
-    // 3. Площадь описывающего прямоугольника = Площадь фигуры / K-фактор
-    const areaBox = areaSymbol / shapeState.kFactor;
-    
-    // 4. Стороны (сохраняя родные пропорции фигуры)
-    // S = L * W, где W = L * ratio  -> S = L * L * ratio -> L = sqrt(S/ratio)
-    // ВНИМАНИЕ: Тут L - это высота картинки (длина торта), W - ширина картинки.
-    
-    const ratio = shapeState.nativeRatio; // W / L
-    const L = Math.sqrt(areaBox / ratio);
-    const W = L * ratio;
-    
-    // Обновляем поля L и W (не вызывая их oninput, чтобы не зациклить)
-    updateInputNoTrigger('inpL', L);
-    updateInputNoTrigger('inpW', W);
-    
-    finalizeCalc(L, W, h, weightKg);
-}
-
-// Сценарий Б: Изменили РАЗМЕР (L, W или H)
-function recalcFromDimensions(source) {
-    let L = parseFloat(document.getElementById('inpL').value) || 20;
-    let W = parseFloat(document.getElementById('inpW').value) || 15;
-    let H = parseFloat(document.getElementById('inpH').value) || 10;
-    const density = getDensity();
-    
-    // Проверяем состояние "Замка" и галочки "Пропорции"
-    const isLocked = document.getElementById('lockWeight').checked;
-    const linkAspect = document.getElementById('linkAspect').checked;
-    
-    // 1. Если меняем L или W и стоит галочка "Пропорции" -> подгоняем вторую сторону
-    if (linkAspect && (source === 'L' || source === 'W')) {
-        if (source === 'L') {
-            W = L * shapeState.nativeRatio;
-            updateInputNoTrigger('inpW', W);
-        } else {
-            L = W / shapeState.nativeRatio;
-            updateInputNoTrigger('inpL', L);
-        }
-    }
-    
-    // 2. ГЛАВНАЯ РАЗВИЛКА: Зафиксирован ли вес?
-    if (isLocked) {
-        // 🔒 ЗАМОК ЗАКРЫТ: Вес святой. Меняем геометрию, чтобы сохранить вес.
-        
-        const targetWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
-        const targetVol = (targetWeight * 1000) / density;
-        
-        if (source === 'H') {
-            // H изменилась -> Площадь должна измениться -> L и W меняются
-            const neededAreaSymbol = targetVol / H;
-            const neededAreaBox = neededAreaSymbol / shapeState.kFactor;
-            
-            // Пересчитываем L/W сохраняя текущие пропорции
-            const currentRatio = W / L; 
-            L = Math.sqrt(neededAreaBox / currentRatio);
-            W = L * currentRatio;
-            
-            updateInputNoTrigger('inpL', L);
-            updateInputNoTrigger('inpW', W);
-        } else {
-            // L или W изменились -> Площадь изменилась -> Подгоняем H (Высоту)
-            const areaBox = L * W;
-            const areaSymbol = areaBox * shapeState.kFactor;
-            H = targetVol / areaSymbol;
-            
-            updateInputNoTrigger('inpH', H);
-        }
-        
-        finalizeCalc(L, W, H, targetWeight);
-        
-    } else {
-        // 🔓 ЗАМОК ОТКРЫТ: Размеры святые. Меняем Вес.
-        const areaBox = L * W;
-        const areaSymbol = areaBox * shapeState.kFactor;
-        const newWeight = (areaSymbol * H * density) / 1000; // кг
-        
-        updateInputNoTrigger('inpWeight', newWeight);
-        finalizeCalc(L, W, H, newWeight);
-    }
-}
-
-// Общая функция финализации (вывод итогов и обновление картинки)
-function finalizeCalc(L, W, H, weight) {
-    const density = getDensity();
-    
-    // Полный вес противня (Общий параллелепипед)
-    const totalVol = L * W * H;
-    const totalWeight = (totalVol * density) / 1000;
-    const waste = totalWeight - weight;
-    const wastePct = totalWeight > 0 ? (waste / totalWeight) * 100 : 0;
-    
-    // Пишем в UI
-    document.getElementById('infoTotal').innerText = `${totalWeight.toFixed(2)} кг`;
-    document.getElementById('infoWaste').innerText = `${waste.toFixed(2)} кг (${Math.round(wastePct)}%)`;
-    
-    // Сохраняем в состояние для кнопки "Перенести"
-    shapeState.current = { l: L, w: W, h: H, weight: weight };
-
-    // Обновляем 3D-сцену
-    update3DScene(L, W, H);
-}
-
-// Обновление 3D
-function update3DScene(L, W, H) {
-    const box = document.getElementById('ghostBox');
-    const stack = document.getElementById('cakeStack');
-    
-    if (!box || !stack) return;
-
-    // Масштабирование для экрана
-    const maxDim = Math.max(L, W);
-    const scale = 160 / maxDim; 
-    
-    const pxL = L * scale; // Длина (вертикаль в CSS height)
-    const pxW = W * scale; // Ширина (горизонталь в CSS width)
-    const pxH = H * scale; // Высота (толщина)
-    
-    // Меняем размер контейнера
-    box.style.width = pxW + 'px';
-    box.style.height = pxL + 'px';
-    
-    // --- ИСПРАВЛЕНИЕ: ПРАВИЛЬНЫЕ ПОДПИСИ ---
-    // lblL находится снизу (горизонталь) -> туда пишем Ширину (W)
-    document.getElementById('lblL').innerText = Math.round(W) + ' (Ш)';
-    
-    // lblW находится слева (вертикаль) -> туда пишем Длину (L)
-    document.getElementById('lblW').innerText = Math.round(L) + ' (Д)';
-    
-    // H (высота/толщина)
-    document.getElementById('lblH').innerText = 'H' + Math.round(H);
-    
-    // Двигаем слои торта
-    const layers = document.querySelectorAll('.cake-layer');
-    const totalLayers = layers.length;
-    
-    layers.forEach(layer => {
-        const idx = parseInt(layer.dataset.layerIdx);
-        // Распределяем слои равномерно
-        const zPos = (idx / (totalLayers - 1)) * pxH;
-        
-        layer.style.width = pxW + 'px';
-        layer.style.height = pxL + 'px';
-        layer.style.transform = `translateZ(${zPos}px)`;
-    });
 }
 
 function toggleLockMode() {
@@ -12584,99 +12703,11 @@ function toggleLockMode() {
     document.getElementById('lockStatusText').style.color = isLocked ? "#2E7D32" : "#E65100";
 }
 
-// Хелпер, чтобы менять значения инпутов без вызова события oninput
 function updateInputNoTrigger(id, val) {
     const el = document.getElementById(id);
     if(el) el.value = val < 10 ? val.toFixed(1) : Math.round(val);
 }
-
-// Перенос в главный калькулятор
-function transferShapeToMain() {
-    const { l, w, h } = shapeState.current;
-    if (l === 0) { alert("Сначала сделайте расчет!"); return; }
-    
-    const recId = document.getElementById('shapeRecipeSelect').value;
-    
-    // Формируем новый ярус
-    const newTier = {
-        id: Date.now(),
-        weight: 0, 
-        recipeId: recId,
-        isGeometryMode: true,
-        // Округляем до 1 знака после запятой
-        fixedDiameter: parseFloat(l.toFixed(1)), // Длина
-        fixedWidth: parseFloat(w.toFixed(1)),    // Ширина
-        fixedHeight: parseFloat(h.toFixed(1))    // Высота
-    };
-
-    // Устанавливаем форму Прямоугольник
-    document.getElementById('globalShape').value = 'rectangle';
-    updateTierUI();
-    
-    // Заменяем ярусы на этот один
-    appState.tiers = [newTier];
-    
-    // Переходим на вкладку
-    switchTab('calc');
-    renderTierRows();
-    
-    // Запускаем расчет
-    setTimeout(() => {
-        calculateInitial(); 
-        alert(`✅ Перенесено!\nФорма: ${Math.round(l)}x${Math.round(w)} см. Высота: ${h} см.\nКалькулятор рассчитает полный вес выпечки.`);
-    }, 200);
-}
-
-     // --- ЛОГИКА КНОПОК +/- (REPEATER) ---
-let holdTimer = null;
-let holdInterval = null;
-
-// Функция старта (нажали палец)
-function startChange(inputId, delta, axis) {
-    // Чтобы не срабатывали мышь и тач одновременно
-    if (holdTimer) return;
-
-    // 1. Выполняем действие сразу один раз
-    doStep(inputId, delta, axis);
-
-    // 2. Ждем 400мс, если палец всё еще нажат -> запускаем пулемет
-    holdTimer = setTimeout(() => {
-        holdInterval = setInterval(() => {
-            doStep(inputId, delta, axis);
-        }, 100); // Скорость изменения (100мс)
-    }, 400);
-}
-
-// Функция стопа (убрали палец)
-function stopChange() {
-    clearTimeout(holdTimer);
-    clearInterval(holdInterval);
-    holdTimer = null;
-    holdInterval = null;
-}
-
-// Само действие изменения
-function doStep(inputId, delta, axis) {
-    const el = document.getElementById(inputId);
-    let val = parseFloat(el.value) || 0;
-    
-    // Прибавляем/убавляем
-    val += delta;
-    
-    // Защита от отрицательных чисел
-    if (val < 1) val = 1;
-
-    // Округляем (для высоты до 0.5, для остальных до целых, если хотите)
-    // Но так как delta может быть 0.5, используем toFixed
-    el.value = (val % 1 === 0) ? val : val.toFixed(1);
-
-    // ВИБРАЦИЯ (Тактильный отклик)
-    if (navigator.vibrate) navigator.vibrate(15); 
-
-    // Запускаем пересчет калькулятора
-    recalcFromDimensions(axis);
-}
-
+   
     </script>
 
 <script>
@@ -12690,6 +12721,7 @@ function doStep(inputId, delta, axis) {
   </body>
 
 </html>
+
 
 
 
