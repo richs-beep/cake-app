@@ -12260,16 +12260,22 @@ function autoAddPackaging(res) {
 }
 
 // ==========================================
-// 🔢 МОДУЛЬ ФИГУРНЫХ ТОРТОВ 3.3 (Stable)
+// 🔢 МОДУЛЬ ФИГУРНЫХ ТОРТОВ 3.4 (Pro Geometry + Coating)
 // ==========================================
 
 let shapeState = {
     cleanImgUrl: null, 
-    nativeRatio: 1,    // W / H
+    nativeRatio: 1,    
     kFactorRect: 1,    
     kFactorCircle: 1,  
     radiusToHeightRatio: 1, 
-    currentShape: 'rect', // 'rect' | 'circle'
+    
+    // 🔥 НОВОЕ: Периметр и Площадь (в условных единицах холста)
+    perimeterPixels: 0,
+    areaPixels: 0,
+    pixelScale: 1, // Сколько см в 1 пикселе анализа
+
+    currentShape: 'rect', 
     current: { l: 0, w: 0, h: 0, d: 0, weight: 0 }
 };
 
@@ -12286,8 +12292,9 @@ function handleSvgUpload(input) {
     reader.readAsDataURL(file);
 }
 
-// 2. АНАЛИЗ (Smart Crop + White Filter)
+// 2. АНАЛИЗ (Smart Crop + Perimeter)
 function cropAndAnalyze(img) {
+    saveToHistory();
     const MAX_SIDE = 1000;
     let w = img.width; let h = img.height;
     if (w > MAX_SIDE || h > MAX_SIDE) {
@@ -12305,41 +12312,53 @@ function cropAndAnalyze(img) {
     const data = imgData.data;
     
     let minX=w, minY=h, maxX=0, maxY=0, solidCount=0;
+    let perimeterCount = 0; // Считаем пиксели границы
     
+    // Вспомогательная функция проверки прозрачности пикселя
+    const isSolid = (x, y) => {
+        if (x<0 || x>=w || y<0 || y>=h) return false;
+        const alpha = data[(y*w + x)*4 + 3];
+        return alpha > 50;
+    };
+
     for(let y=0; y<h; y++) {
         for(let x=0; x<w; x++) {
             const i = (y*w+x)*4;
             const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
             
-            // Фильтр: прозрачный или белый
             const isTransparent = (a < 50);
             const isWhite = (r > 230 && g > 230 && b > 230);
             
             if (isTransparent || isWhite) {
-                data[i+3] = 0; 
+                data[i+3] = 0; // Чистим фон
             } else {
                 if(x < minX) minX = x;
                 if(x > maxX) maxX = x;
                 if(y < minY) minY = y;
                 if(y > maxY) maxY = y;
                 solidCount++;
+
+                // 🔥 АЛГОРИТМ ПЕРИМЕТРА:
+                // Если пиксель "твердый", но хотя бы один сосед "пустой" -> это граница
+                if (!isSolid(x+1, y) || !isSolid(x-1, y) || !isSolid(x, y+1) || !isSolid(x, y-1)) {
+                    perimeterCount++;
+                }
             }
         }
     }
     
-    if(solidCount === 0) { alert("Фигура не найдена (пустая или белая)!"); return; }
+    if(solidCount === 0) { alert("Фигура не найдена!"); return; }
     
     const realW = maxX - minX;
     const realH = maxY - minY;
     
-    // Круг
+    // Круг (для сравнения)
     const centerX = minX + realW / 2;
     const centerY = minY + realH / 2;
     let maxDistSq = 0;
     for(let y=minY; y<=maxY; y++) {
         for(let x=minX; x<=maxX; x++) {
-            const i = (y*w+x)*4;
-            if (data[i+3] > 0) { 
+            if (data[(y*w+x)*4 + 3] > 0) { 
                 const distSq = (x - centerX)**2 + (y - centerY)**2;
                 if (distSq > maxDistSq) maxDistSq = distSq;
             }
@@ -12347,7 +12366,7 @@ function cropAndAnalyze(img) {
     }
     const maxRadius = Math.sqrt(maxDistSq);
 
-    // Сохраняем
+    // Сохраняем картинку
     ctx.putImageData(imgData, 0, 0); 
     const pad = 2; 
     const cleanCvs = document.createElement('canvas');
@@ -12356,7 +12375,7 @@ function cropAndAnalyze(img) {
     cleanCvs.getContext('2d').drawImage(cvs, minX, minY, realW, realH, pad, pad, realW, realH);
     
     shapeState.cleanImgUrl = cleanCvs.toDataURL();
-    shapeState.nativeRatio = realW / realH; // Правильная пропорция
+    shapeState.nativeRatio = realW / realH; 
     
     const areaRect = realW * realH;
     const areaCircle = Math.PI * maxRadius * maxRadius;
@@ -12364,6 +12383,11 @@ function cropAndAnalyze(img) {
     shapeState.kFactorRect = solidCount / areaRect;
     shapeState.kFactorCircle = solidCount / areaCircle;
     shapeState.radiusToHeightRatio = (maxRadius * 2) / realH; 
+
+    // 🔥 Сохраняем геометрические данные для расчетов
+    shapeState.perimeterPixels = perimeterCount;
+    shapeState.areaPixels = solidCount;
+    shapeState.analysisHeight = realH; // Высота в пикселях анализа
 
     // Автовыбор
     let best = 'rect';
@@ -12376,7 +12400,7 @@ function cropAndAnalyze(img) {
     document.querySelector(`input[name="bakeShape"][value="${best}"]`).checked = true;
     toggleShapeType(); 
     
-    document.getElementById('svgStatusText').innerText = `✅ Анализ: Rect ${Math.round(shapeState.kFactorRect*100)}% / Circle ${Math.round(shapeState.kFactorCircle*100)}%. ${msg}`;
+    document.getElementById('svgStatusText').innerText = `✅ Анализ: Границы найдены. Заполнение ${Math.round(shapeState.kFactorRect*100)}%.`;
     document.getElementById('shapeCalcBlock').style.display = 'block';
     
     updateShapeRecipes();
@@ -12385,40 +12409,9 @@ function cropAndAnalyze(img) {
     recalcFromWeight();
 }
 
-function updateShapeRecipes() { 
-    const sel = document.getElementById('shapeRecipeSelect');
-    if (!sel) return;
-    sel.innerHTML = '';
-    const fillings = myRecipes.filter(r => r.type === 'filling');
-    fillings.forEach(r => {
-        const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
-        const density = r.outputWeight / vol; 
-        const opt = document.createElement('option');
-        opt.value = r.id; 
-        opt.dataset.density = density; 
-        opt.innerText = `${r.name} (~${density.toFixed(2)} г/см³)`;
-        sel.appendChild(opt);
-    });
-}
-
-function generate3DLayers() { 
-    const stack = document.getElementById('cakeStack');
-    if (!stack) return;
-    stack.innerHTML = '';
-    
-    const layerCount = 60; // Гладкий торт (60 слоев)
-    
-    for(let i=0; i<layerCount; i++) {
-        const div = document.createElement('div');
-        div.className = (i === layerCount - 1) ? 'cake-layer cake-top' : 'cake-layer cake-side';
-        div.style.backgroundImage = `url('${shapeState.cleanImgUrl}')`;
-        div.dataset.layerIdx = i; 
-        stack.appendChild(div);
-    }
-}
-
-// 3. UI ПЕРЕКЛЮЧЕНИЕ
+// 3. UI
 function toggleShapeType() {
+    saveToHistory();
     const shape = document.querySelector('input[name="bakeShape"]:checked').value;
     shapeState.currentShape = shape;
     
@@ -12438,7 +12431,7 @@ function toggleShapeType() {
     recalcFromWeight();
 }
 
-// 4. РАСЧЕТЫ
+// 4. ГЛАВНЫЕ РАСЧЕТЫ (С УЧЕТОМ ПОКРЫТИЯ)
 function getDensity() {
     const sel = document.getElementById('shapeRecipeSelect');
     if (!sel) return 0.8;
@@ -12451,6 +12444,7 @@ function recalcFromWeight() {
     const h = parseFloat(document.getElementById('inpH').value) || 10;
     const density = getDensity();
     
+    // V = m / p
     const volSymbol = (weightKg * 1000) / density;
     const areaSymbol = volSymbol / h;
     
@@ -12512,7 +12506,6 @@ function recalcFromDimensions(source) {
         finalizeCalc(L, W, H, 0, targetWeight);
 
     } else {
-        // КРУГ
         let D = parseFloat(document.getElementById('inpD').value) || 20;
         if (isLocked) {
             const targetVol = (targetWeight * 1000) / density;
@@ -12539,134 +12532,220 @@ function recalcFromDimensions(source) {
     }
 }
 
+// 🔥 ГЛАВНЫЙ ФИНАЛИЗАТОР (РАСЧЕТ ВЕСА И ПОКРЫТИЯ)
 function finalizeCalc(L, W, H, D, weight) {
     const density = getDensity();
-    let totalVol = 0;
+    let totalVolBox = 0;
     
+    // 1. Вычисляем масштаб (сколько см в одном пикселе анализа)
+    // Мы знаем реальную высоту H (см) и высоту анализа shapeState.analysisHeight (px)
+    // Но для масштаба лучше брать L (длина фигуры)
+    const scaleCmPerPx = (shapeState.currentShape === 'rect' ? L : (D / shapeState.radiusToHeightRatio)) / shapeState.analysisHeight;
+
+    // 2. Считаем реальный периметр в см
+    const realPerimeterCm = shapeState.perimeterPixels * scaleCmPerPx;
+    
+    // 3. Считаем площадь покрытия (Верх + Бока)
+    // S_верха (уже знаем из веса) = weight / density / H
+    // Но лучше через пиксели: shapeState.areaPixels * scaleCmPerPx^2
+    const realAreaTopCm2 = shapeState.areaPixels * (scaleCmPerPx ** 2);
+    const realAreaSideCm2 = realPerimeterCm * H;
+    
+    // 4. Вес покрытия (Толщина 0.5см, Плотность крема ~1.2)
+    // Вы можете вынести плотность крема в настройки, пока берем среднюю
+    const coatThickness = 0.5; 
+    const coatDensity = 1.2; 
+    const coatingWeight = (realAreaTopCm2 + realAreaSideCm2) * coatThickness * coatDensity;
+
+    // 5. Вес "Грязного" бисквита (Лист целиком)
     if (shapeState.currentShape === 'rect') {
-        totalVol = L * W * H;
+        totalVolBox = L * W * H;
     } else {
-        totalVol = Math.PI * Math.pow(D/2, 2) * H;
+        totalVolBox = Math.PI * Math.pow(D/2, 2) * H;
     }
+    const totalSheetWeight = (totalVolBox * density) / 1000; // в кг
     
-    const totalWeight = (totalVol * density) / 1000;
-    const waste = totalWeight - weight;
-    const wastePct = totalWeight > 0 ? (waste / totalWeight) * 100 : 0;
+    // Отходы (сколько выкинем)
+    const waste = totalSheetWeight - (weight/1000);
+    const wastePct = totalSheetWeight > 0 ? (waste / totalSheetWeight) * 100 : 0;
     
-    document.getElementById('infoTotal').innerText = `${totalWeight.toFixed(2)} кг`;
+    document.getElementById('infoTotal').innerText = `${totalSheetWeight.toFixed(2)} кг`;
     document.getElementById('infoWaste').innerText = `${waste.toFixed(2)} кг (${Math.round(wastePct)}%)`;
     
-    shapeState.current = { l: L, w: W, h: H, d: D, weight: weight };
+    // Сохраняем ВСЕ данные для переноса
+    shapeState.current = { 
+        l: L, w: W, h: H, d: D, 
+        weight: weight, // Вес "Фигуры" (Начинки)
+        sheetWeight: totalSheetWeight * 1000, // Вес Листа (Бисквита)
+        coatingWeight: coatingWeight, // Вес Крема
+        perimeter: realPerimeterCm 
+    };
     
     update3DScene(L, W, H, D);
 }
 
-// 5. ВИЗУАЛИЗАЦИЯ (ИСПРАВЛЕННАЯ ЦЕНТРОВКА)
+// 5. ВИЗУАЛИЗАЦИЯ
 function update3DScene(L, W, H, D) {
     const box = document.getElementById('ghostBox');
     const stack = document.getElementById('cakeStack');
     if (!box || !stack) return;
 
-    // Масштаб
     const maxDim = (shapeState.currentShape === 'circle') ? D : Math.max(L, W);
-    const scale = 140 / maxDim; // Чтобы влезало в экран 350px
+    const scale = 140 / maxDim; 
     const pxH = H * scale; 
     
     renderShapeControls(L, W, H, D || 0);
 
-    // 1. Настраиваем РАМКУ (Ghost) и ее размеры
-    // Мы НЕ используем transform: translate в CSS для рамки, делаем всё тут маргинами
     let pxW, pxL;
-
     if (shapeState.currentShape === 'circle') {
         const pxD = D * scale;
         pxW = pxD; pxL = pxD;
-        
-        box.style.width = pxD + 'px';
-        box.style.height = pxD + 'px';
-        box.style.borderRadius = '50%';
-        
+        box.style.width = pxD + 'px'; box.style.height = pxD + 'px'; box.style.borderRadius = '50%';
         document.getElementById('lblL').innerText = ''; 
-        const lblW = document.getElementById('lblW');
-        lblW.innerText = `D ${Math.round(D)}`;
+        const lblW = document.getElementById('lblW'); lblW.innerText = `D ${Math.round(D)}`;
         lblW.style.left = '-10px'; lblW.style.top = '50%';
         document.getElementById('lblH').innerText = 'H ' + Math.round(H);
-        
     } else {
         pxL = L * scale; pxW = W * scale;
-        
-        box.style.width = pxW + 'px';
-        box.style.height = pxL + 'px';
-        box.style.borderRadius = '0';
-        
-        const lblL = document.getElementById('lblL'); 
-        lblL.innerText = Math.round(W) + ' (Ш)';
+        box.style.width = pxW + 'px'; box.style.height = pxL + 'px'; box.style.borderRadius = '0';
+        const lblL = document.getElementById('lblL'); lblL.innerText = Math.round(W) + ' (Ш)';
         lblL.style.bottom = '-15px'; lblL.style.left = '50%';
-
-        const lblW = document.getElementById('lblW');
-        lblW.innerText = Math.round(L) + ' (Д)';
+        const lblW = document.getElementById('lblW'); lblW.innerText = Math.round(L) + ' (Д)';
         lblW.style.left = '-35px'; lblW.style.top = '50%';
         document.getElementById('lblH').innerText = 'H ' + Math.round(H);
     }
     
-    // ЦЕНТРОВКА РАМКИ (Ставим её в центр сцены 0,0)
-    box.style.top = '50%'; 
-    box.style.left = '50%';
-    box.style.marginTop = (-pxL/2) + 'px';
-    box.style.marginLeft = (-pxW/2) + 'px';
+    box.style.top = '50%'; box.style.left = '50%';
+    box.style.marginTop = (-pxL/2) + 'px'; box.style.marginLeft = (-pxW/2) + 'px';
 
-    // 2. Настраиваем ТОРТ (Размеры картинки)
-    // Если это круг, картинка внутри него должна быть вписана (visualL/visualW)
-    let imgL = pxL; 
-    let imgW = pxW;
-    
+    let imgL = pxL; let imgW = pxW;
     if (shapeState.currentShape === 'circle') {
-        // Восстанавливаем визуальные размеры картинки внутри круга
         imgL = (D / shapeState.radiusToHeightRatio) * scale;
         imgW = imgL * shapeState.nativeRatio;
     }
     
     const layers = document.querySelectorAll('.cake-layer');
     const totalLayers = layers.length;
-    
     layers.forEach(layer => {
         const idx = parseInt(layer.dataset.layerIdx);
         const zPos = (idx / (totalLayers - 1)) * pxH;
-        
-        layer.style.width = imgW + 'px';
-        layer.style.height = imgL + 'px';
-        
-        // ЦЕНТРОВКА ТОРТА (в ту же точку, что и рамка)
-        layer.style.top = '50%';
-        layer.style.left = '50%';
-        layer.style.marginTop = (-imgL/2) + 'px';
-        layer.style.marginLeft = (-imgW/2) + 'px';
-        
+        layer.style.width = imgW + 'px'; layer.style.height = imgL + 'px';
+        layer.style.top = '50%'; layer.style.left = '50%';
+        layer.style.marginTop = (-imgL/2) + 'px'; layer.style.marginLeft = (-imgW/2) + 'px';
         layer.style.transform = `translateZ(${zPos}px)`;
     });
 }
 
-// 6. УПРАВЛЕНИЕ
+// 6. ПЕРЕНОС В ГЛАВНЫЙ КАЛЬКУЛЯТОР (УМНАЯ ВЕРСИЯ)
+function transferShapeToMain() {
+    const { l, w, h, d, sheetWeight, coatingWeight } = shapeState.current;
+    if (h === 0) return;
+    
+    const recId = document.getElementById('shapeRecipeSelect').value;
+    const isCircle = (shapeState.currentShape === 'circle');
+    
+    // --- ХИТРОСТЬ 1: Уменьшаем размеры на 1 см (покрытие) ---
+    // Это даст правильный объем "голого" бисквита
+    const cleanL = l - 1;
+    const cleanW = w - 1;
+    const cleanD = d - 1;
+    const cleanH = h; // Высоту не трогаем, т.к. коржи печем на полную высоту
+
+    // Формируем ЯРУС 1: БИСКВИТ (Лист)
+    const tierBiscuit = {
+        id: Date.now(),
+        weight: 0, // Пусть считает сам по геометрии
+        recipeId: recId,
+        isGeometryMode: true, // ВКЛЮЧАЕМ РЕЖИМ ГЕОМЕТРИИ
+        
+        // Передаем размеры ЛИСТА (для выпечки)
+        fixedDiameter: isCircle ? parseFloat(cleanD.toFixed(1)) : parseFloat(cleanL.toFixed(1)), 
+        fixedWidth: isCircle ? null : parseFloat(cleanW.toFixed(1)),
+        fixedHeight: parseFloat(cleanH.toFixed(1)) 
+    };
+
+    // --- ХИТРОСТЬ 2: КРЕМ КАК ОТДЕЛЬНЫЙ ЯРУС ---
+    // Мы ищем рецепт "Ганаш" или "Крем". Если не находим - берем первый попавшийся крем.
+    let coatingRec = myRecipes.find(r => r.type === 'coating');
+    // Если нет спец. крема, берем тот же, что в торте
+    if (!coatingRec) coatingRec = myRecipes.find(r => r.id === recId);
+
+    const tierCoating = {
+        id: Date.now() + 1,
+        weight: coatingWeight / 1000, // Переводим граммы в кг
+        recipeId: coatingRec ? coatingRec.id : recId,
+        isGeometryMode: false, // ТУТ ВЕС ФИКСИРОВАН!
+        
+        // Маркируем, что это покрытие
+        isCoatingLayer: true 
+    };
+
+    document.getElementById('globalShape').value = isCircle ? 'cylinder' : 'rectangle';
+    
+    // Ставим "Голый" в глобальной настройке, чтобы калькулятор не накинул сверху лишнего
+    document.getElementById('coatingIdSelect').value = ""; 
+    
+    updateTierUI();
+    
+    // Заменяем ярусы на наши два
+    appState.tiers = [tierBiscuit, tierCoating];
+    
+    switchTab('calc');
+    renderTierRows();
+    
+    setTimeout(() => {
+        calculateInitial(); 
+        alert(`✅ Данные перенесены!\n\n1. Ярус: Бисквит (размер противня ${Math.round(cleanL)}x${Math.round(cleanW)}).\n2. Ярус: Крем на покрытие (${Math.round(coatingWeight)}г, точный расчет по периметру).`);
+    }, 200);
+}
+
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 function toggleLockMode() {
     const isLocked = document.getElementById('lockWeight').checked;
     document.getElementById('lockStatusText').innerText = isLocked ? "🔒 ВЕС ЗАФИКСИРОВАН" : "🔓 ВЕС МЕНЯЕТСЯ";
     document.getElementById('lockStatusText').style.color = isLocked ? "#2E7D32" : "#E65100";
 }
-
-function updateInputNoTrigger(id, val) {
-    const el = document.getElementById(id);
-    if(el) el.value = val < 10 ? val.toFixed(1) : Math.round(val);
+function updateInputNoTrigger(id, val) { const el = document.getElementById(id); if(el) el.value = val < 10 ? val.toFixed(1) : Math.round(val); }
+function updateShapeRecipes() { 
+    const sel = document.getElementById('shapeRecipeSelect'); if (!sel) return; sel.innerHTML = '';
+    const fillings = myRecipes.filter(r => r.type === 'filling');
+    fillings.forEach(r => {
+        const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
+        const density = r.outputWeight / vol; 
+        const opt = document.createElement('option');
+        opt.value = r.id; opt.dataset.density = density; 
+        opt.innerText = `${r.name} (~${density.toFixed(2)} г/см³)`;
+        sel.appendChild(opt);
+    });
 }
-
-// Степперы
+function generate3DLayers() { 
+    const stack = document.getElementById('cakeStack'); if (!stack) return; stack.innerHTML = '';
+    const layerCount = 60; 
+    for(let i=0; i<layerCount; i++) {
+        const div = document.createElement('div');
+        div.className = (i === layerCount - 1) ? 'cake-layer cake-top' : 'cake-layer cake-side';
+        div.style.backgroundImage = `url('${shapeState.cleanImgUrl}')`;
+        div.dataset.layerIdx = i; stack.appendChild(div);
+    }
+}
+function openShapeLightbox() {
+    const sceneHtml = document.getElementById('sceneStage').outerHTML;
+    const container = document.getElementById('lightboxSvgContainer');
+    container.innerHTML = '';
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = `width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; perspective: 1200px; overflow: visible;`;
+    wrapper.innerHTML = sceneHtml;
+    container.appendChild(wrapper);
+    const stage = wrapper.querySelector('.scene-stage');
+    if (stage) stage.style.transform = "scale(1.8) rotateX(60deg) rotateZ(-45deg)";
+    document.getElementById('cakeLightbox').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
 function renderShapeControls(L, W, H, D) {
-    const c = document.getElementById('shapeControls');
-    if (!c) return;
+    const c = document.getElementById('shapeControls'); if (!c) return;
     const isRect = (shapeState.currentShape === 'rect');
     let html = '';
-    
     const btn = (axis, dir, label) => `<button class="ctrl-btn" onmousedown="startChange(null, ${dir}, '${axis}')" ontouchstart="startChange(null, ${dir}, '${axis}')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">${label}</button>`;
-
     if (isRect) {
         html += `<div class="ctrl-row">${btn('L', -1, '-')} <span class="ctrl-label" style="width:auto; padding:0 5px;">Д: ${Math.round(L)}</span> ${btn('L', 1, '+')}</div>`;
         html += `<div class="ctrl-row">${btn('W', -1, '-')} <span class="ctrl-label" style="width:auto; padding:0 5px;">Ш: ${Math.round(W)}</span> ${btn('W', 1, '+')}</div>`;
@@ -12676,111 +12755,28 @@ function renderShapeControls(L, W, H, D) {
     html += `<div class="ctrl-row">${btn('H', -0.5, '-')} <span class="ctrl-label" style="width:auto; padding:0 5px;">H: ${Math.round(H)}</span> ${btn('H', 0.5, '+')}</div>`;
     c.innerHTML = html;
 }
-
 function stepShape(axis, delta) {
-    let inputId = '';
-    if (axis === 'L') inputId = 'inpL';
-    else if (axis === 'W') inputId = 'inpW';
-    else if (axis === 'H') inputId = 'inpH';
-    else if (axis === 'D') inputId = 'inpD';
-    
-    const el = document.getElementById(inputId);
-    if (!el) return;
-    
-    let val = parseFloat(el.value) || 0;
-    val += delta;
-    if (axis === 'H') val = Math.round(val * 2) / 2;
-    else val = Math.round(val);
-    
-    if (val < 1) val = 1;
-    el.value = val;
+    let inputId = ''; if (axis === 'L') inputId = 'inpL'; else if (axis === 'W') inputId = 'inpW'; else if (axis === 'H') inputId = 'inpH'; else if (axis === 'D') inputId = 'inpD';
+    const el = document.getElementById(inputId); if (!el) return;
+    let val = parseFloat(el.value) || 0; val += delta;
+    if (axis === 'H') val = Math.round(val * 2) / 2; else val = Math.round(val);
+    if (val < 1) val = 1; el.value = val;
     recalcFromDimensions(axis);
     if (navigator.vibrate) navigator.vibrate(5);
 }
-
 let holdTimer = null, holdInterval = null;
 function startChange(id, delta, axis) {
-    saveToHistory(); // <--- СОХРАНЯЕМ ПЕРЕД НАЧАЛОМ ИЗМЕНЕНИЯ
-    stepShape(axis, delta);
-    holdTimer = setTimeout(() => {
-        holdInterval = setInterval(() => stepShape(axis, delta), 100); 
-    }, 400); 
+    saveToHistory(); stepShape(axis, delta);
+    holdTimer = setTimeout(() => { holdInterval = setInterval(() => stepShape(axis, delta), 100); }, 400); 
 }
 function stopChange() { clearTimeout(holdTimer); clearInterval(holdInterval); }
-
 function stepWeight(delta) {
-  saveToHistory(); 
+    saveToHistory();
     const el = document.getElementById('inpWeight');
-    let val = parseFloat(el.value) || 0;
-    val += delta;
-    if (val < 0.1) val = 0.1;
-    el.value = val.toFixed(1);
+    let val = parseFloat(el.value) || 0; val += delta;
+    if (val < 0.1) val = 0.1; el.value = val.toFixed(1);
     recalcFromWeight();
 }
-
-function transferShapeToMain() {
-    const { l, w, h, d } = shapeState.current;
-    if (h === 0) return;
-    
-    const recId = document.getElementById('shapeRecipeSelect').value;
-    const isCircle = (shapeState.currentShape === 'circle');
-    
-    const newTier = {
-        id: Date.now(),
-        weight: 0, 
-        recipeId: recId,
-        isGeometryMode: true,
-        fixedDiameter: isCircle ? parseFloat(d.toFixed(1)) : parseFloat(l.toFixed(1)), 
-        fixedWidth: isCircle ? null : parseFloat(w.toFixed(1)),
-        fixedHeight: parseFloat(h.toFixed(1)) 
-    };
-
-    document.getElementById('globalShape').value = isCircle ? 'cylinder' : 'rectangle';
-    updateTierUI();
-    
-    appState.tiers = [newTier];
-    switchTab('calc');
-    renderTierRows();
-    
-    setTimeout(() => {
-        calculateInitial(); 
-        const shapeName = isCircle ? `Круг D${Math.round(d)}` : `Прямоугольник ${Math.round(l)}x${Math.round(w)}`;
-        alert(`✅ Перенесено!\nФорма: ${shapeName} см.\nВысота: ${h} см.`);
-    }, 200);
-}
-
-     // --- ФУНКЦИЯ ЛУПЫ ДЛЯ ФИГУР ---
-function openShapeLightbox() {
-    const sceneHtml = document.getElementById('sceneStage').outerHTML;
-    const container = document.getElementById('lightboxSvgContainer');
-    
-    // Очищаем и вставляем клонированную сцену
-    container.innerHTML = '';
-    
-    // Создаем обертку, чтобы сохранить перспективу и центровку
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = `
-        width: 100%; height: 100%; 
-        display: flex; align-items: center; justify-content: center; 
-        perspective: 1200px; overflow: visible;
-    `;
-    
-    // Вставляем сцену внутрь
-    wrapper.innerHTML = sceneHtml;
-    container.appendChild(wrapper);
-    
-    // Находим вставленную сцену и увеличиваем её (Zoom)
-    const stage = wrapper.querySelector('.scene-stage');
-    if (stage) {
-        // Увеличиваем масштаб в 1.5 раза для детального просмотра
-        stage.style.transform = "scale(1.8) rotateX(60deg) rotateZ(-45deg)";
-    }
-    
-    // Показываем лайтбокс
-    document.getElementById('cakeLightbox').style.display = 'flex';
-    document.body.style.overflow = 'hidden';
-}
-
 
     </script>
 
@@ -12795,6 +12791,7 @@ function openShapeLightbox() {
   </body>
 
 </html>
+
 
 
 
