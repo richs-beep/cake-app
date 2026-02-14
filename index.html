@@ -2562,8 +2562,7 @@ body {
     font-size: 20px !important;
 }
 
-/* Стили для 3D сцены фигур */
-/* --- НОВЫЙ 3D ВИЗУАЛ --- */
+/* --- НОВЫЙ 3D ВИЗУАЛ (ИСПРАВЛЕННЫЙ) --- */
 .scene-container {
     width: 100%;
     height: 350px;
@@ -2573,7 +2572,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    perspective: 1200px;
+    perspective: 1000px; /* Глубина перспективы */
     overflow: hidden;
 }
 
@@ -2581,10 +2580,19 @@ body {
     position: relative;
     width: 200px; 
     height: 200px;
-    transform-style: preserve-3d;
-    /* Изометрия: Вид сверху-справа */
-    transform: rotateX(55deg) rotateZ(-35deg); 
+    transform-style: preserve-3d; /* Важно! */
+    /* Угол обзора: Изометрия */
+    transform: rotateX(60deg) rotateZ(-45deg); 
     transition: transform 0.3s ease;
+}
+
+/* Контейнер для слоев торта - ВОТ ЧЕГО НЕ ХВАТАЛО */
+#cakeStack {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    transform-style: preserve-3d; /* Критически важно для объема */
+    pointer-events: none;
 }
 
 /* Фантом (Габаритный контейнер) */
@@ -2596,12 +2604,12 @@ body {
     box-shadow: 0 0 20px rgba(33, 150, 243, 0.1) inset;
     transform-style: preserve-3d;
     transition: all 0.2s;
+    z-index: 1; /* Чтобы рамка была вокруг */
 }
 
-/* Размеры (Выноски) */
 .dim-label {
     position: absolute;
-    background: rgba(255,255,255,0.9);
+    background: rgba(255,255,255,0.95);
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 11px;
@@ -2609,9 +2617,11 @@ body {
     color: #1565C0;
     pointer-events: none;
     border: 1px solid #bbdefb;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transform: rotateZ(45deg) rotateX(-60deg); /* Разворачиваем текст к зрителю */
 }
 
-/* Торт (Слои для объема) */
+/* Слои торта */
 .cake-layer {
     position: absolute;
     top: 0; left: 0;
@@ -2619,17 +2629,18 @@ body {
     background-size: 100% 100%;
     background-repeat: no-repeat;
     pointer-events: none;
+    backface-visibility: hidden; /* Оптимизация */
 }
-/* Верхняя грань (яркая) */
+
+/* Верхний слой (яркий) */
 .cake-top {
-    transform: translateZ(0px); /* Будет двигаться JS-ом на высоту */
-    filter: drop-shadow(5px 5px 10px rgba(0,0,0,0.3));
-    z-index: 10;
+    filter: drop-shadow(0px 10px 10px rgba(0,0,0,0.2));
+    z-index: 2;
 }
-/* Средние грани (для имитации толщины) */
+
+/* Боковые слои (темные, имитация теста) */
 .cake-side {
-    opacity: 0.8;
-    filter: brightness(0.7); /* Чуть темнее бока */
+    filter: brightness(0.6) sepia(0.2); /* Делаем бока темнее и чуть "вкуснее" по цвету */
 }
       
     </style>
@@ -12242,16 +12253,19 @@ function updateShapeRecipes() {
 }
 
 // Создаем "стопку" картинок для объема (псевдо 3D)
+// Создаем "стопку" картинок для объема (псевдо 3D)
 function generate3DLayers() {
     const stack = document.getElementById('cakeStack');
     if (!stack) return;
     stack.innerHTML = '';
     
-    // 10 слоев достаточно для иллюзии
-    for(let i=0; i<10; i++) {
+    // Увеличиваем число слоев для плотности (было 10, стало 30)
+    const layerCount = 30; 
+    
+    for(let i=0; i<layerCount; i++) {
         const div = document.createElement('div');
-        // Верхний слой яркий, боковые - затемненные
-        div.className = (i === 9) ? 'cake-layer cake-top' : 'cake-layer cake-side';
+        // Самый последний слой (i === layerCount - 1) — это крышка
+        div.className = (i === layerCount - 1) ? 'cake-layer cake-top' : 'cake-layer cake-side';
         div.style.backgroundImage = `url('${shapeState.cleanImgUrl}')`;
         div.dataset.layerIdx = i; 
         stack.appendChild(div);
@@ -12383,42 +12397,43 @@ function finalizeCalc(L, W, H, weight) {
 }
 
 // Обновление 3D
+// Обновление 3D
 function update3DScene(L, W, H) {
     const box = document.getElementById('ghostBox');
     const stack = document.getElementById('cakeStack');
     
     if (!box || !stack) return;
 
-    // Масштабирование для экрана (чтобы влезало в окошко 200px)
+    // Масштабирование
     const maxDim = Math.max(L, W);
-    const scale = 160 / maxDim; // пикселей в 1 см
+    const scale = 160 / maxDim; 
     
-    const pxL = L * scale; // Длина (вертикаль в 3D)
-    const pxW = W * scale; // Ширина
-    const pxH = H * scale; // Высота (толщина)
+    const pxL = L * scale; 
+    const pxW = W * scale; 
+    const pxH = H * scale; 
     
-    // Меняем размер контейнера
+    // Размер контейнера (Призрак)
     box.style.width = pxW + 'px';
     box.style.height = pxL + 'px';
     
-    // Обновляем подписи размеров
+    // Подписи
     document.getElementById('lblL').innerText = Math.round(L);
     document.getElementById('lblW').innerText = Math.round(W);
     document.getElementById('lblH').innerText = 'H' + Math.round(H);
     
-    // Двигаем слои торта (создаем объем)
+    // Двигаем слои торта
     const layers = document.querySelectorAll('.cake-layer');
+    const totalLayers = layers.length;
+    
     layers.forEach(layer => {
         const idx = parseInt(layer.dataset.layerIdx);
-        // Распределяем 10 слоев по высоте pxH
-        const zPos = (idx / 9) * pxH;
+        
+        // Распределяем слои равномерно от 0 до pxH
+        const zPos = (idx / (totalLayers - 1)) * pxH;
         
         layer.style.width = pxW + 'px';
         layer.style.height = pxL + 'px';
         layer.style.transform = `translateZ(${zPos}px)`;
-        
-        // Меняем яркость для верхнего слоя (для красоты)
-        if(idx===9) layer.style.filter = "brightness(1.1) drop-shadow(2px 5px 5px rgba(0,0,0,0.4))";
     });
 }
 
@@ -12484,6 +12499,7 @@ function transferShapeToMain() {
   </body>
 
 </html>
+
 
 
 
