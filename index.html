@@ -12132,7 +12132,7 @@ function autoAddPackaging(res) {
     }
 }
 
-    // ==========================================
+ // ==========================================
 // 🔢 МОДУЛЬ ФИГУРНЫХ ТОРТОВ 2.0 (Smart SVG)
 // ==========================================
 
@@ -12177,6 +12177,7 @@ function cropAndAnalyze(img) {
     // Проход по пикселям: ищем границы контента
     for(let y=0; y<H; y++) {
         for(let x=0; x<W; x++) {
+            // 4-й байт - это Альфа канал (прозрачность)
             if(pixels[(y*W+x)*4 + 3] > 20) { // Если не прозрачный
                 if(x < minX) minX = x;
                 if(x > maxX) maxX = x;
@@ -12189,7 +12190,7 @@ function cropAndAnalyze(img) {
     
     if(solidCount === 0) { alert("Картинка пустая!"); return; }
     
-    // Реальные размеры фигуры
+    // Реальные размеры фигуры (Tight Bounding Box)
     const realW = maxX - minX;
     const realH = maxY - minY;
     
@@ -12208,62 +12209,89 @@ function cropAndAnalyze(img) {
     document.getElementById('svgStatusText').innerText = `✅ Фигура вырезана. Заполнение: ${Math.round(shapeState.kFactor*100)}%`;
     document.getElementById('shapeCalcBlock').style.display = 'block';
     
-    updateShapeRecipes(); // Заполняем список начинок
-    
-    // Первичный расчет (под дефолтный вес 2кг)
-    recalcFromWeight();
+    // ! ВАЖНО: Сначала заполняем список, потом считаем !
+    updateShapeRecipes(); 
     
     // Генерируем слои для 3D
     generate3DLayers();
+
+    // Первичный расчет (под дефолтный вес 2кг)
+    recalcFromWeight();
 }
 
-// Создаем "стопку" картинок для объема
+// ВОТ ОНА, ПОТЕРЯННАЯ ФУНКЦИЯ!
+function updateShapeRecipes() {
+    const sel = document.getElementById('shapeRecipeSelect');
+    if (!sel) return;
+    sel.innerHTML = '';
+    
+    // Фильтруем только начинки
+    const fillings = myRecipes.filter(r => r.type === 'filling');
+    
+    fillings.forEach(r => {
+        // Считаем плотность на лету (Вес / Объем эталона)
+        const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
+        const density = r.outputWeight / vol; // г/см3
+        
+        const opt = document.createElement('option');
+        opt.value = r.id; 
+        opt.dataset.density = density; 
+        opt.innerText = `${r.name} (~${density.toFixed(2)} г/см³)`;
+        sel.appendChild(opt);
+    });
+}
+
+// Создаем "стопку" картинок для объема (псевдо 3D)
 function generate3DLayers() {
     const stack = document.getElementById('cakeStack');
+    if (!stack) return;
     stack.innerHTML = '';
+    
     // 10 слоев достаточно для иллюзии
     for(let i=0; i<10; i++) {
         const div = document.createElement('div');
+        // Верхний слой яркий, боковые - затемненные
         div.className = (i === 9) ? 'cake-layer cake-top' : 'cake-layer cake-side';
         div.style.backgroundImage = `url('${shapeState.cleanImgUrl}')`;
-        // Смещение по Z будет задаваться динамически в visual update
         div.dataset.layerIdx = i; 
         stack.appendChild(div);
     }
 }
 
-// --- ЛОГИКА РАСЧЕТА (САМОЕ ВКУСНОЕ) ---
+// --- ЛОГИКА РАСЧЕТА ---
 
 function getDensity() {
     const sel = document.getElementById('shapeRecipeSelect');
-    return parseFloat(sel.options[sel.selectedIndex]?.dataset.density) || 0.8; 
+    if (!sel) return 0.8;
+    // Берем плотность из data-атрибута выбранной опции
+    const selectedOpt = sel.options[sel.selectedIndex];
+    return selectedOpt ? parseFloat(selectedOpt.dataset.density) : 0.8; 
 }
 
-// Сценарий А: Изменили ВЕС -> Считаем размеры
+// Сценарий А: Изменили ВЕС (или сменили начинку) -> Считаем размеры
 function recalcFromWeight() {
     const weightKg = parseFloat(document.getElementById('inpWeight').value) || 2;
     const h = parseFloat(document.getElementById('inpH').value) || 10;
     const density = getDensity();
     
-    // 1. Нужный объем самой фигуры (см3)
+    // 1. Нужный объем самой фигуры (см3) = Вес / Плотность
     const volSymbol = (weightKg * 1000) / density;
     
-    // 2. Площадь фигуры (см2)
+    // 2. Площадь фигуры (см2) = Объем / Высота
     const areaSymbol = volSymbol / h;
     
-    // 3. Площадь описывающего прямоугольника
+    // 3. Площадь описывающего прямоугольника = Площадь фигуры / K-фактор
     const areaBox = areaSymbol / shapeState.kFactor;
     
     // 4. Стороны (сохраняя родные пропорции фигуры)
     // S = L * W, где W = L * ratio  -> S = L * L * ratio -> L = sqrt(S/ratio)
     // ВНИМАНИЕ: Тут L - это высота картинки (длина торта), W - ширина картинки.
-    // ratio = W / L
     
     const ratio = shapeState.nativeRatio; // W / L
     const L = Math.sqrt(areaBox / ratio);
     const W = L * ratio;
     
-    // Обновляем поля (не вызывая их oninput)
+    // Обновляем поля L и W (не вызывая их oninput, чтобы не зациклить)
     updateInputNoTrigger('inpL', L);
     updateInputNoTrigger('inpW', W);
     
@@ -12276,10 +12304,12 @@ function recalcFromDimensions(source) {
     let W = parseFloat(document.getElementById('inpW').value) || 15;
     let H = parseFloat(document.getElementById('inpH').value) || 10;
     const density = getDensity();
+    
+    // Проверяем состояние "Замка" и галочки "Пропорции"
     const isLocked = document.getElementById('lockWeight').checked;
     const linkAspect = document.getElementById('linkAspect').checked;
     
-    // Если меняем L или W и стоит галочка "Пропорции" -> подгоняем вторую сторону
+    // 1. Если меняем L или W и стоит галочка "Пропорции" -> подгоняем вторую сторону
     if (linkAspect && (source === 'L' || source === 'W')) {
         if (source === 'L') {
             W = L * shapeState.nativeRatio;
@@ -12290,11 +12320,9 @@ function recalcFromDimensions(source) {
         }
     }
     
-    // ГЛАВНАЯ РАЗВИЛКА
+    // 2. ГЛАВНАЯ РАЗВИЛКА: Зафиксирован ли вес?
     if (isLocked) {
-        // ЗАМОК ЗАКРЫТ: Вес святой. Меняем геометрию.
-        // Если изменили L/W -> Меняем H
-        // Если изменили H -> Меняем L/W (масштабируем)
+        // 🔒 ЗАМОК ЗАКРЫТ: Вес святой. Меняем геометрию, чтобы сохранить вес.
         
         const targetWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
         const targetVol = (targetWeight * 1000) / density;
@@ -12303,7 +12331,8 @@ function recalcFromDimensions(source) {
             // H изменилась -> Площадь должна измениться -> L и W меняются
             const neededAreaSymbol = targetVol / H;
             const neededAreaBox = neededAreaSymbol / shapeState.kFactor;
-            // Пересчитываем L/W сохраняя текущие пропорции искажения
+            
+            // Пересчитываем L/W сохраняя текущие пропорции
             const currentRatio = W / L; 
             L = Math.sqrt(neededAreaBox / currentRatio);
             W = L * currentRatio;
@@ -12311,7 +12340,7 @@ function recalcFromDimensions(source) {
             updateInputNoTrigger('inpL', L);
             updateInputNoTrigger('inpW', W);
         } else {
-            // L или W изменились -> Площадь изменилась -> Подгоняем H
+            // L или W изменились -> Площадь изменилась -> Подгоняем H (Высоту)
             const areaBox = L * W;
             const areaSymbol = areaBox * shapeState.kFactor;
             H = targetVol / areaSymbol;
@@ -12322,7 +12351,7 @@ function recalcFromDimensions(source) {
         finalizeCalc(L, W, H, targetWeight);
         
     } else {
-        // ЗАМОК ОТКРЫТ: Размеры святые. Меняем Вес.
+        // 🔓 ЗАМОК ОТКРЫТ: Размеры святые. Меняем Вес.
         const areaBox = L * W;
         const areaSymbol = areaBox * shapeState.kFactor;
         const newWeight = (areaSymbol * H * density) / 1000; // кг
@@ -12332,25 +12361,25 @@ function recalcFromDimensions(source) {
     }
 }
 
-// Общая функция финализации
+// Общая функция финализации (вывод итогов и обновление картинки)
 function finalizeCalc(L, W, H, weight) {
     const density = getDensity();
     
-    // Полный вес противня
+    // Полный вес противня (Общий параллелепипед)
     const totalVol = L * W * H;
     const totalWeight = (totalVol * density) / 1000;
     const waste = totalWeight - weight;
-    const wastePct = (waste / totalWeight) * 100;
+    const wastePct = totalWeight > 0 ? (waste / totalWeight) * 100 : 0;
     
     // Пишем в UI
     document.getElementById('infoTotal').innerText = `${totalWeight.toFixed(2)} кг`;
     document.getElementById('infoWaste').innerText = `${waste.toFixed(2)} кг (${Math.round(wastePct)}%)`;
     
-    // Обновляем визуализацию
-    update3DScene(L, W, H);
-    
-    // Сохраняем в состояние
+    // Сохраняем в состояние для кнопки "Перенести"
     shapeState.current = { l: L, w: W, h: H, weight: weight };
+
+    // Обновляем 3D-сцену
+    update3DScene(L, W, H);
 }
 
 // Обновление 3D
@@ -12358,11 +12387,13 @@ function update3DScene(L, W, H) {
     const box = document.getElementById('ghostBox');
     const stack = document.getElementById('cakeStack');
     
-    // Масштабирование для экрана (чтобы влезало в 200px)
+    if (!box || !stack) return;
+
+    // Масштабирование для экрана (чтобы влезало в окошко 200px)
     const maxDim = Math.max(L, W);
-    const scale = 180 / maxDim; 
+    const scale = 160 / maxDim; // пикселей в 1 см
     
-    const pxL = L * scale; // Длина (по вертикали экрана в 3D)
+    const pxL = L * scale; // Длина (вертикаль в 3D)
     const pxW = W * scale; // Ширина
     const pxH = H * scale; // Высота (толщина)
     
@@ -12370,22 +12401,23 @@ function update3DScene(L, W, H) {
     box.style.width = pxW + 'px';
     box.style.height = pxL + 'px';
     
-    // Обновляем подписи
+    // Обновляем подписи размеров
     document.getElementById('lblL').innerText = Math.round(L);
     document.getElementById('lblW').innerText = Math.round(W);
     document.getElementById('lblH').innerText = 'H' + Math.round(H);
     
-    // Двигаем слои торта
+    // Двигаем слои торта (создаем объем)
     const layers = document.querySelectorAll('.cake-layer');
     layers.forEach(layer => {
         const idx = parseInt(layer.dataset.layerIdx);
         // Распределяем 10 слоев по высоте pxH
         const zPos = (idx / 9) * pxH;
+        
         layer.style.width = pxW + 'px';
         layer.style.height = pxL + 'px';
         layer.style.transform = `translateZ(${zPos}px)`;
         
-        // Меняем яркость для верхнего слоя
+        // Меняем яркость для верхнего слоя (для красоты)
         if(idx===9) layer.style.filter = "brightness(1.1) drop-shadow(2px 5px 5px rgba(0,0,0,0.4))";
     });
 }
@@ -12396,39 +12428,46 @@ function toggleLockMode() {
     document.getElementById('lockStatusText').style.color = isLocked ? "#2E7D32" : "#E65100";
 }
 
-// Хелпер, чтобы менять значения инпутов без вызова события oninput (бесконечный цикл)
+// Хелпер, чтобы менять значения инпутов без вызова события oninput
 function updateInputNoTrigger(id, val) {
     const el = document.getElementById(id);
-    el.value = val < 10 ? val.toFixed(1) : Math.round(val);
+    if(el) el.value = val < 10 ? val.toFixed(1) : Math.round(val);
 }
 
 // Перенос в главный калькулятор
 function transferShapeToMain() {
     const { l, w, h } = shapeState.current;
-    if (l === 0) return;
+    if (l === 0) { alert("Сначала сделайте расчет!"); return; }
     
     const recId = document.getElementById('shapeRecipeSelect').value;
     
+    // Формируем новый ярус
     const newTier = {
         id: Date.now(),
         weight: 0, 
         recipeId: recId,
         isGeometryMode: true,
+        // Округляем до 1 знака после запятой
         fixedDiameter: parseFloat(l.toFixed(1)), // Длина
         fixedWidth: parseFloat(w.toFixed(1)),    // Ширина
         fixedHeight: parseFloat(h.toFixed(1))    // Высота
     };
 
+    // Устанавливаем форму Прямоугольник
     document.getElementById('globalShape').value = 'rectangle';
     updateTierUI();
     
+    // Заменяем ярусы на этот один
     appState.tiers = [newTier];
+    
+    // Переходим на вкладку
     switchTab('calc');
     renderTierRows();
     
+    // Запускаем расчет
     setTimeout(() => {
-        calculateInitial();
-        alert(`✅ Перенесено!\nФорма: ${Math.round(l)}x${Math.round(w)} см`);
+        calculateInitial(); 
+        alert(`✅ Перенесено!\nФорма: ${Math.round(l)}x${Math.round(w)} см. Высота: ${h} см.\nКалькулятор рассчитает полный вес выпечки.`);
     }, 200);
 }
 
@@ -12445,6 +12484,7 @@ function transferShapeToMain() {
   </body>
 
 </html>
+
 
 
 
