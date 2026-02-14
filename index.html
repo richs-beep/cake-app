@@ -3765,9 +3765,9 @@ body {
         <div class="form-row" style="background:#f9fbe7; padding:15px; border-radius:8px; border:1px solid #dce775; align-items:center;">
             <div style="flex:1;">
                 <label class="main-btn" style="background:#827717; padding:10px 15px; width:auto; display:inline-block;">
-                    📂 Загрузить SVG
-                    <input type="file" id="svgInput" accept=".svg" style="display:none;" onchange="handleSvgUpload(this)">
-                </label>
+    📂 Загрузить Картинку (прозрачный или белый фон)
+    <input type="file" id="svgInput" accept="image/*" style="display:none;" onchange="handleSvgUpload(this)">
+</label>
             </div>
             <div style="flex:2.5; font-size:12px; color:#555;" id="svgStatusText">
                 ℹ️ Загрузите картинку. Программа сама обрежет лишние поля.
@@ -12185,22 +12185,46 @@ function handleSvgUpload(input) {
 }
 
 function cropAndAnalyze(img) {
-    // Рисуем на холсте для анализа
+    // Рисуем на большом холсте для анализа
     const cvs = document.createElement('canvas');
     const ctx = cvs.getContext('2d');
     const W = 1000; 
     const H = 1000;
     cvs.width = W; cvs.height = H;
+    
+    // Рисуем исходную картинку (растягиваем для четкости анализа)
     ctx.drawImage(img, 0, 0, W, H);
     
-    const pixels = ctx.getImageData(0,0,W,H).data;
+    // Получаем массив всех пикселей [R, G, B, Alpha, R, G, B, Alpha...]
+    const imgData = ctx.getImageData(0,0,W,H);
+    const data = imgData.data;
+    
     let minX=W, minY=H, maxX=0, maxY=0, solidCount=0;
     
-    // Проход по пикселям: ищем границы контента
+    // ПРОХОДИМ ПО КАЖДОМУ ПИКСЕЛЮ
     for(let y=0; y<H; y++) {
         for(let x=0; x<W; x++) {
-            // 4-й байт - это Альфа канал (прозрачность)
-            if(pixels[(y*W+x)*4 + 3] > 20) { // Если не прозрачный
+            const i = (y * W + x) * 4;
+            
+            const r = data[i];
+            const g = data[i+1];
+            const b = data[i+2];
+            const a = data[i+3]; // Прозрачность (0-255)
+
+            // --- МАГИЯ: ОПРЕДЕЛЯЕМ "ПУСТОТУ" ---
+            // 1. Если пиксель полностью прозрачный (как в PNG/SVG)
+            const isTransparent = (a < 50);
+            
+            // 2. Если пиксель БЕЛЫЙ или очень светлый (как фон в JPEG)
+            // (R, G и B больше 230 из 255)
+            const isWhite = (r > 230 && g > 230 && b > 230);
+            
+            if (isTransparent || isWhite) {
+                // Если это фон - ДЕЛАЕМ ЕГО ПРОЗРАЧНЫМ ФИЗИЧЕСКИ
+                // (Это нужно, чтобы убрать белый квадрат вокруг JPEG)
+                data[i+3] = 0; 
+            } else {
+                // ЭТО ТОРТ! (Темный или цветной пиксель)
                 if(x < minX) minX = x;
                 if(x > maxX) maxX = x;
                 if(y < minY) minY = y;
@@ -12210,34 +12234,46 @@ function cropAndAnalyze(img) {
         }
     }
     
-    if(solidCount === 0) { alert("Картинка пустая!"); return; }
+    if(solidCount === 0) { 
+        alert("Не вижу фигуру! \nПопробуйте картинку с более темным, контрастным силуэтом."); 
+        return; 
+    }
     
-    // Реальные размеры фигуры (Tight Bounding Box)
+    // Обновляем данные на холсте (теперь там прозрачный фон вместо белого)
+    ctx.putImageData(imgData, 0, 0);
+    
+    // Реальные размеры фигуры
     const realW = maxX - minX;
     const realH = maxY - minY;
     
-    // 2. Создаем ЧИСТУЮ картинку (без полей)
+    // Добавим микро-отступ (padding), чтобы края не резались резко
+    const pad = 2;
+    
+    // 2. Создаем ЧИСТУЮ картинку (кропнутую)
     const cleanCvs = document.createElement('canvas');
-    cleanCvs.width = realW;
-    cleanCvs.height = realH;
-    cleanCvs.getContext('2d').drawImage(cvs, minX, minY, realW, realH, 0, 0, realW, realH);
+    cleanCvs.width = realW + (pad*2);
+    cleanCvs.height = realH + (pad*2);
+    
+    // Вырезаем кусок с большого холста (где мы уже стерли белый фон)
+    cleanCvs.getContext('2d').drawImage(
+        cvs, 
+        minX, minY, realW, realH, // Откуда берем
+        pad, pad, realW, realH    // Куда кладем
+    );
     
     // Сохраняем данные
     shapeState.cleanImgUrl = cleanCvs.toDataURL();
-    shapeState.nativeRatio = realW / realH; // Отношение Ширина/Длина
-    shapeState.kFactor = solidCount / (realW * realH); // Плотность заполнения
+    shapeState.nativeRatio = realW / realH; 
+    
+    // Считаем площадь: заполненные пиксели / площадь прямоугольника
+    shapeState.kFactor = solidCount / (realW * realH); 
     
     // Обновляем UI
-    document.getElementById('svgStatusText').innerText = `✅ Фигура вырезана. Заполнение: ${Math.round(shapeState.kFactor*100)}%`;
+    document.getElementById('svgStatusText').innerText = `✅ Обработано. Заполнение: ${Math.round(shapeState.kFactor*100)}%`;
     document.getElementById('shapeCalcBlock').style.display = 'block';
     
-    // ! ВАЖНО: Сначала заполняем список, потом считаем !
     updateShapeRecipes(); 
-    
-    // Генерируем слои для 3D
     generate3DLayers();
-
-    // Первичный расчет (под дефолтный вес 2кг)
     recalcFromWeight();
 }
 
@@ -12510,6 +12546,7 @@ function transferShapeToMain() {
   </body>
 
 </html>
+
 
 
 
