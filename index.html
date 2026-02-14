@@ -2562,6 +2562,12 @@ body {
     font-size: 20px !important;
 }
 
+/* Стили для 3D сцены фигур */
+.visual-container {
+    overflow: hidden; 
+    touch-action: none; /* Чтобы можно было вращать пальцем, если захотим допилить */
+}
+      
     </style>
     
 
@@ -2638,6 +2644,8 @@ body {
         <button class="tab-btn" onclick="switchTab('production')">🏭 План <span id="badgeQueue" style="background:red; color:white; border-radius:10px; padding:2px 6px; font-size:10px; display:none;">0</span></button>
         <button class="tab-btn" onclick="switchTab('clients')">👥 Клиенты</button>
         <button class="tab-btn" onclick="switchTab('colors')">🎨 Лаборатория цвета</button>
+        <button class="tab-btn" onclick="switchTab('shapes')">🔢 Фигуры (SVG)</button>
+      
         
         <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div>
         <button class="tab-btn settings-btn" onclick="openSettingsModal()">⚙️ Настройки</button>
@@ -3369,7 +3377,131 @@ body {
            </div>
          </div>
       </div>
-      
+      <div id="tab-shapes" class="tab-content" style="display:none;">
+    <div class="card">
+        <h2>🔢 Калькулятор Фигурных Тортов</h2>
+        <div style="font-size:12px; color:#666; margin-bottom:15px;">
+            Загрузите SVG-картинку (цифру или символ). Программа рассчитает идеальную форму для выпечки под нужный вес.
+        </div>
+
+        <div class="form-row" style="align-items: center; background:#f0f4c3; padding:15px; border-radius:8px; border:1px solid #dce775;">
+            <div style="flex:1;">
+                <label class="main-btn" style="background:#827717; width:auto; display:inline-block; padding:10px 20px; cursor:pointer;">
+                    📂 Загрузить SVG
+                    <input type="file" id="svgInput" accept=".svg" style="display:none;" onchange="handleSvgUpload(this)">
+                </label>
+            </div>
+            <div style="flex:2; font-size:13px; color:#333;" id="svgStatusText">
+                ⬅️ Выберите файл (.svg) без фона
+            </div>
+        </div>
+
+        <div id="shapeCalcBlock" style="display:none; margin-top:20px;">
+            <div class="form-row">
+                <div class="form-group">
+                    <span class="form-label">🍰 Начинка (Плотность)</span>
+                    <select id="shapeRecipeSelect" onchange="recalcShape()">
+                        </select>
+                </div>
+                <div class="form-group">
+                    <span class="form-label">Желаемая высота (см)</span>
+                    <input type="number" id="shapeHeight" value="10" oninput="recalcShape()">
+                </div>
+            </div>
+
+            <div style="display:flex; background:#eee; padding:4px; border-radius:6px; margin-bottom:15px;">
+                <button class="tab-btn active" id="btnModeWeight" onclick="setShapeMode('weight')" style="flex:1;">🎯 Хочу вес (кг)</button>
+                <button class="tab-btn" id="btnModeSize" onclick="setShapeMode('size')" style="flex:1;">📏 Есть форма (см)</button>
+            </div>
+
+            <div id="inputWeightBlock" class="form-row">
+                <div class="form-group">
+                    <span class="form-label">Целевой ЧИСТЫЙ вес (кг)</span>
+                    <input type="number" id="shapeTargetWeight" value="2" step="0.1" style="font-size:18px; font-weight:bold; color:#2E7D32;" oninput="recalcShape()">
+                </div>
+                <div class="form-group">
+                    <span class="form-label">Искажение (Пропорции)</span>
+                    <input type="range" id="shapeRatioSlider" min="0.5" max="2.0" step="0.01" value="1" oninput="recalcShape()">
+                    <div style="font-size:10px; text-align:center; color:#666;">← Уже | Шире →</div>
+                </div>
+            </div>
+
+            <div id="inputSizeBlock" class="form-row" style="display:none;">
+                <div class="form-group">
+                    <span class="form-label">Длина формы (см)</span>
+                    <input type="number" id="shapeFormL" value="30" oninput="recalcShape()">
+                </div>
+                <div class="form-group">
+                    <span class="form-label">Ширина формы (см)</span>
+                    <input type="number" id="shapeFormW" value="20" oninput="recalcShape()">
+                </div>
+            </div>
+
+            <div class="visual-container" style="height: 300px; background: #fff; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; perspective: 800px; overflow: hidden;">
+                
+                <div id="shapeScene" style="transform-style: preserve-3d; transform: rotateX(30deg) rotateY(0deg); transition: transform 0.1s;">
+                    <div id="moldBox" style="
+                        position: relative;
+                        width: 200px; height: 300px; 
+                        background: rgba(33, 150, 243, 0.1); 
+                        border: 2px solid rgba(33, 150, 243, 0.5);
+                        transform-style: preserve-3d;
+                        display: flex; align-items: center; justify-content: center;
+                    ">
+                        <div id="dimL" style="position:absolute; top:-25px; width:100%; text-align:center; font-size:12px; font-weight:bold; color:#1565C0;">L</div>
+                        <div id="dimW" style="position:absolute; left:-25px; top:50%; transform:translateY(-50%) rotate(-90deg); font-size:12px; font-weight:bold; color:#1565C0;">W</div>
+                        <div id="dimH" style="position:absolute; right:-25px; bottom:0; font-size:12px; font-weight:bold; color:#1565C0;">H</div>
+
+                        <div id="cakeShape" style="
+                            width: 100%; height: 100%;
+                            background-size: 100% 100%;
+                            background-repeat: no-repeat;
+                            background-position: center;
+                            opacity: 0.9;
+                            filter: drop-shadow(0 5px 5px rgba(0,0,0,0.2));
+                        "></div>
+                        
+                        <div id="moldSide" style="
+                            position: absolute; bottom: 0; left: 0; width: 100%; height: 20px;
+                            background: rgba(33, 150, 243, 0.2);
+                            transform-origin: bottom;
+                            transform: rotateX(-90deg);
+                            border: 1px solid rgba(33, 150, 243, 0.3);
+                        "></div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:20px; background:#E0F2F1; padding:15px; border-radius:8px; border:1px solid #80CBC4;">
+                <h3 style="margin:0 0 10px 0; color:#00695C;">📊 Результат расчета</h3>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span>📐 Размер формы (Внутр):</span>
+                    <b id="resDimensions" style="font-size:16px;">—</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span>⚖️ Чистый вес фигуры:</span>
+                    <b id="resCleanWeight" style="color:#2E7D32; font-size:18px;">—</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px; border-top:1px dashed #ccc; padding-top:5px;">
+                    <span>📦 Общий вес выпечки:</span>
+                    <b id="resTotalWeight">—</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; color:#d32f2f;">
+                    <span>✂️ Обрезки (Отходы):</span>
+                    <b id="resWaste">—</b>
+                </div>
+              <div style="margin-top:15px; text-align:center;">
+    <button class="main-btn" onclick="transferShapeToMain()" style="background: linear-gradient(135deg, #FF5722 0%, #E64A19 100%); box-shadow: 0 4px 15px rgba(233, 30, 99, 0.3);">
+        🚀 Рассчитать продукты для кухни
+    </button>
+    <div style="font-size:11px; color:#666; margin-top:5px;">
+        Создаст прямоугольный торт в главном калькуляторе с учетом веса для выпечки
+    </div>
+</div>
+            </div>
+        </div>
+    </div>
+</div>
      
     </div>
 
@@ -11954,6 +12086,311 @@ function autoAddPackaging(res) {
     }
 }
 
+     // ==========================================
+// 🔢 МОДУЛЬ ФИГУРНЫХ ТОРТОВ (SVG ENGINE)
+// ==========================================
+
+let shapeState = {
+    mode: 'weight', // 'weight' | 'size'
+    imgData: null,  // DataURL картинки
+    aspectRatio: 1, // Родное соотношение сторон картинки (W / H)
+    fillFactor: 1,  // Коэффициент заполнения (Площадь фигуры / Площадь Box)
+    tightBox: null  // {x, y, w, h} - обрезка пустоты
+};
+
+// 1. Загрузка и анализ SVG
+function handleSvgUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            analyzeSvgShape(img);
+        };
+        img.src = e.target.result;
+        shapeState.imgData = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+// 2. Математический анализ (Поиск границ и площади)
+function analyzeSvgShape(img) {
+    // Создаем невидимый холст
+    const cvs = document.createElement('canvas');
+    const ctx = cvs.getContext('2d');
+    
+    // Задаем размер (достаточный для точности, но не тормозящий)
+    const W = 1000;
+    const H = 1000;
+    cvs.width = W;
+    cvs.height = H;
+    
+    // Рисуем
+    ctx.drawImage(img, 0, 0, W, H);
+    
+    // Получаем пиксели
+    const imgData = ctx.getImageData(0, 0, W, H);
+    const data = imgData.data;
+    
+    let minX = W, minY = H, maxX = 0, maxY = 0;
+    let solidPixels = 0;
+    
+    // Сканируем (ищем границы и считаем заполненные пиксели)
+    for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+            const alpha = data[(y * W + x) * 4 + 3];
+            if (alpha > 20) { // Если пиксель не прозрачный
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+                solidPixels++;
+            }
+        }
+    }
+    
+    // Если картинка пустая
+    if (solidPixels === 0) {
+        alert("Ошибка: Пустая картинка или прозрачный SVG!");
+        return;
+    }
+    
+    // Размеры "полезного" прямоугольника
+    const boxW = maxX - minX;
+    const boxH = maxY - minY;
+    
+    shapeState.tightBox = { x: minX, y: minY, w: boxW, h: boxH };
+    shapeState.aspectRatio = boxW / boxH;
+    shapeState.fillFactor = solidPixels / (boxW * boxH);
+    
+    // Обновляем UI
+    document.getElementById('svgStatusText').innerText = `✅ Файл проанализирован. K-фактор: ${shapeState.fillFactor.toFixed(2)}`;
+    document.getElementById('shapeCalcBlock').style.display = 'block';
+    
+    // Устанавливаем картинку в визуализатор (используем CSS mask или background)
+    const cakeShape = document.getElementById('cakeShape');
+    // Чтобы показать именно обрезанную часть, используем хитрый background-position/size
+    // Но для простоты пока покажем весь SVG, но "растянем" его
+    cakeShape.style.backgroundImage = `url('${shapeState.imgData}')`;
+    
+    // Заполняем список начинок (берем из основного калькулятора)
+    updateShapeRecipes();
+    
+    recalcShape();
+}
+
+function updateShapeRecipes() {
+    const sel = document.getElementById('shapeRecipeSelect');
+    sel.innerHTML = '';
+    
+    // Фильтруем только начинки
+    const fillings = myRecipes.filter(r => r.type === 'filling');
+    
+    fillings.forEach(r => {
+        // Считаем плотность на лету
+        const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
+        const density = r.outputWeight / vol; // г/см3
+        
+        const opt = document.createElement('option');
+        // ВАЖНО: Теперь value хранит ID рецепта, а плотность сохраним в dataset
+        opt.value = r.id; 
+        opt.dataset.density = density; 
+        opt.innerText = `${r.name} (~${density.toFixed(2)} г/см³)`;
+        sel.appendChild(opt);
+    });
+}
+
+// 3. Переключение режимов
+function setShapeMode(mode) {
+    shapeState.mode = mode;
+    document.getElementById('btnModeWeight').className = (mode === 'weight' ? 'tab-btn active' : 'tab-btn');
+    document.getElementById('btnModeSize').className = (mode === 'size' ? 'tab-btn active' : 'tab-btn');
+    
+    document.getElementById('inputWeightBlock').style.display = (mode === 'weight' ? 'flex' : 'none');
+    document.getElementById('inputSizeBlock').style.display = (mode === 'size' ? 'flex' : 'none');
+    
+    recalcShape();
+}
+
+// 4. ГЛАВНЫЙ РАСЧЕТ
+function recalcShape() {
+   if (!shapeState.tightBox) return;
+
+    // --- ИЗМЕНЕНИЕ НАЧАЛО ---
+    const sel = document.getElementById('shapeRecipeSelect');
+    const selectedOpt = sel.options[sel.selectedIndex];
+    // Если ничего не выбрано, берем дефолт 0.8, иначе читаем из data-density
+    const density = selectedOpt ? parseFloat(selectedOpt.dataset.density) : 0.8;
+    const height = parseFloat(document.getElementById('shapeHeight').value) || 10;
+    
+    let finalL, finalW, finalWeight, totalWeight;
+    
+    // --- ВАРИАНТ А: ЦЕЛЬ - ВЕС ---
+    if (shapeState.mode === 'weight') {
+        const targetKg = parseFloat(document.getElementById('shapeTargetWeight').value) || 2;
+        const targetGrams = targetKg * 1000;
+        const userRatio = parseFloat(document.getElementById('shapeRatioSlider').value) || 1; // Коэф искажения
+        
+        // 1. Необходимый объем фигуры (см3) = Вес / Плотность
+        const volSymbol = targetGrams / density;
+        
+        // 2. Площадь фигуры (см2) = Объем / Высота
+        const areaSymbol = volSymbol / height;
+        
+        // 3. Площадь описывающего прямоугольника = Площадь фигуры / K-фактор
+        const areaBox = areaSymbol / shapeState.fillFactor;
+        
+        // 4. Стороны. Зная площадь и соотношение сторон.
+        // Ratio = W / H. Мы меняем Ratio с помощью слайдера (умножаем родное на пользовательское)
+        const effectiveRatio = shapeState.aspectRatio * userRatio;
+        
+        // S = w * h; ratio = w / h  => w = h * ratio => S = h^2 * ratio => h = sqrt(S/ratio)
+        // В нашем контексте: L (высота картинки) и W (ширина картинки)
+        // Пусть L - это длинная сторона, W - короткая.
+        // boxH (высота SVG) -> это Глубина формы (Length)
+        // boxW (ширина SVG) -> это Ширина формы (Width)
+        
+        finalL = Math.sqrt(areaBox / effectiveRatio); // Высота SVG
+        finalW = areaBox / finalL; // Ширина SVG
+        
+        finalWeight = targetGrams;
+        totalWeight = (areaBox * height * density);
+    } 
+    // --- ВАРИАНТ Б: ЦЕЛЬ - РАЗМЕР ---
+    else {
+        finalL = parseFloat(document.getElementById('shapeFormL').value) || 30;
+        finalW = parseFloat(document.getElementById('shapeFormW').value) || 20;
+        
+        const areaBox = finalL * finalW;
+        const areaSymbol = areaBox * shapeState.fillFactor;
+        
+        totalWeight = areaBox * height * density;
+        finalWeight = areaSymbol * height * density;
+    }
+    
+    // 5. Вывод результатов
+    const waste = totalWeight - finalWeight;
+    const wastePercent = (waste / totalWeight) * 100;
+    
+    document.getElementById('resDimensions').innerText = `${Math.round(finalW)} x ${Math.round(finalL)} x ${height} см`;
+    document.getElementById('resCleanWeight').innerText = `${(finalWeight/1000).toFixed(2)} кг`;
+    document.getElementById('resTotalWeight').innerText = `${(totalWeight/1000).toFixed(2)} кг`;
+    document.getElementById('resWaste').innerText = `${(waste/1000).toFixed(2)} кг (${Math.round(wastePercent)}%)`;
+    shapeState.calculated = {
+        l: finalL,
+        w: finalW,
+        h: height,
+        recId: document.getElementById('shapeRecipeSelect').value
+    };
+    // 6. Обновление 3D-сцены
+    updateVisuals(finalW, finalL, height);
+}
+
+function transferShapeToMain() {
+    // 1. Берем рассчитанные размеры из текста (или лучше сохранить их в переменные при расчете)
+    // Чтобы было надежно, вызовем пересчет еще раз и возьмем данные оттуда, 
+    // но проще распарсить то, что видит пользователь, или сохранить в shapeState.
+    
+    // Давайте лучше сохраним итоги в shapeState внутри recalcShape (добавьте это в конец recalcShape):
+    /* shapeState.lastResult = { 
+           l: finalL, 
+           w: finalW, 
+           h: height, 
+           recipeId: sel.value 
+       }; 
+    */
+    
+    // А если лень править recalcShape, пересчитаем тут быстро:
+    const sel = document.getElementById('shapeRecipeSelect');
+    if(!sel.value) return;
+    
+    // Вызываем расчет, чтобы обновить UI и убедиться что данные свежие
+    recalcShape(); 
+    
+    // Парсим размеры из HTML (это грязный хак, но работает, если лень глобальные переменные плодить)
+    // Лучше в recalcShape в конце добавить: 
+    // document.getElementById('shapeCalcBlock').dataset.resL = finalL;
+    // document.getElementById('shapeCalcBlock').dataset.resW = finalW;
+    
+    // ДАВАЙТЕ СДЕЛАЕМ ПРАВИЛЬНО:
+    // Добавьте в конец функции recalcShape (перед updateVisuals) эти строки:
+    /*
+    shapeState.calculated = {
+        l: finalL,
+        w: finalW,
+        h: height,
+        recId: document.getElementById('shapeRecipeSelect').value
+    };
+    */
+   
+    if (!shapeState.calculated) {
+        alert("Сначала сделайте расчет!");
+        return;
+    }
+
+    const { l, w, h, recId } = shapeState.calculated;
+
+    // 2. Формируем ярус для Главного Калькулятора
+    const newTier = {
+        id: Date.now(),
+        weight: 0, // Вес сбросится, так как мы ставим режим "По размеру"
+        recipeId: recId,
+        
+        // Включаем режим геометрии
+        isGeometryMode: true,
+        
+        // Задаем размеры ПРЯМОУГОЛЬНИКА (Противня)
+        fixedDiameter: parseFloat(l.toFixed(1)), // Длина
+        fixedWidth: parseFloat(w.toFixed(1)),    // Ширина
+        fixedHeight: parseFloat(h.toFixed(1))    // Высота
+    };
+
+    // 3. Настраиваем Главный Калькулятор
+    document.getElementById('globalShape').value = 'rectangle'; // Ставим форму Прямоугольник
+    updateTierUI(); // Обновляем UI, чтобы появились поля L/W
+
+    // 4. Записываем данные
+    appState.tiers = [newTier]; // Стираем старые ярусы, ставим этот один
+    
+    // 5. Переходим и запускаем расчет
+    switchTab('calc');
+    renderTierRows(); // Отрисовываем ярус
+    
+    // Небольшая задержка для красоты
+    setTimeout(() => {
+        calculateInitial(); // Жмем кнопку "Рассчитать" программно
+        alert(`✅ Данные перенесены!\n\nФорма для выпечки: ${Math.round(l)} x ${Math.round(w)} см.\nВысота: ${h} см.\n\nКалькулятор посчитал полный список продуктов для этого противня.`);
+    }, 300);
+}
+     
+function updateVisuals(w, l, h) {
+    const mold = document.getElementById('moldBox');
+    const side = document.getElementById('moldSide');
+    
+    // Максимальный размер в пикселях на экране
+    const MAX_PX = 280; 
+    const maxDim = Math.max(w, l);
+    const scale = MAX_PX / maxDim; // пикселей в 1 см
+    
+    const pxW = w * scale;
+    const pxL = l * scale;
+    const pxH = h * scale; // Высота визуально
+    
+    mold.style.width = pxW + 'px';
+    mold.style.height = pxL + 'px'; // В CSS height это вертикаль, т.е. "Глубина/Длина" формы
+    
+    // Боковушка (показывает высоту)
+    side.style.height = pxH + 'px';
+    side.style.transform = `rotateX(-90deg) translateY(${pxH/2}px) translateZ(${pxH/2}px)`; // Грубая подгонка 3D
+    
+    // Подписи
+    document.getElementById('dimL').innerText = `${Math.round(l)} см`;
+    document.getElementById('dimW').innerText = `${Math.round(w)} см`;
+    document.getElementById('dimH').innerText = `H ${Math.round(h)}`;
+}
+
     </script>
 
 <script>
@@ -11967,6 +12404,7 @@ function autoAddPackaging(res) {
   </body>
 
 </html>
+
 
 
 
