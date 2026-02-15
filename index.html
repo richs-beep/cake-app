@@ -3525,7 +3525,7 @@ body {
                    <span style="font-weight:bold; color:#00695c;">🛠️ Виды работ (Справочник)</span>
                </label>
            </div>
-           <div class="stock-toolbar" style="margin-bottom:15px; display:flex; gap:10px; align-items:center; background:#f5f5f5; padding:10px; border-radius:8px; flex-wrap:wrap;">
+           <div class="stock-toolbar" style="margin-bottom:15px; display:flex; gap:8px; align-items:center; background:#f5f5f5; padding:8px; border-radius:8px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch;">
     <div style="background:white; padding:4px; border-radius:6px; border:1px solid #ddd; display:flex; gap:5px;">
         <button class="shelf-btn active" onclick="setStockShelf('all', this)" style="border:none; background:#eee; border-radius:4px; padding:5px 10px; cursor:pointer; font-weight:bold;">Все</button>
         <button class="shelf-btn" onclick="setStockShelf('food', this)" style="border:none; background:white; border-radius:4px; padding:5px 10px; cursor:pointer;">🍎 Продукты</button>
@@ -3542,8 +3542,11 @@ body {
         <span style="font-size:11px;">КБЖУ</span>
     </label>
     
-    <button class="tab-btn" onclick="openReportsModal()" style="background:#E3F2FD; color:#1565C0; border:1px solid #BBDEFB;">📊</button>
-    <button class="tab-btn" onclick="openStockHistory()" style="margin-left:auto; background:#E0E0E0;">📜</button>
+    // Код для кнопки Отчет
+<button class="tab-btn" onclick="openReportsModal()" style="background:#E3F2FD; color:#1565C0; border:1px solid #BBDEFB; padding: 6px 10px; flex-shrink: 0;">📊</button>
+
+// Код для кнопки Журнал
+<button class="tab-btn" onclick="openStockHistory()" style="background:#E0E0E0; border: 1px solid #ccc; padding: 6px 10px; flex-shrink: 0;">📜</button>
 </div>
            <div id="ingredientsStockBlock" style="overflow-x: auto;"> <table class="stock-table" style="min-width: 1200px;">
                 <thead>
@@ -14232,6 +14235,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
