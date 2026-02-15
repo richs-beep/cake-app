@@ -13314,83 +13314,87 @@ async function editOrderFromQueue(id) {
 
 
 // ==========================================
-// 🔙 УПРАВЛЕНИЕ КНОПКОЙ "НАЗАД" (AGRESSIVE FIX)
+// 🔙 КНОПКА "НАЗАД" (FIX: ЗАЩИТА ОТ ВЫЛЕТА)
 // ==========================================
 
-// 1. При запуске ставим "ловушку"
 window.addEventListener('load', function() {
-    window.history.pushState({ page: 'app_root' }, '', '');
+    // Ставим первую "стену" при запуске
+    window.history.pushState({ page: 'app_root' }, '', window.location.href);
 });
 
-// 2. Слушаем нажатие
 window.addEventListener('popstate', function(event) {
-    
-    // ШАГ 1: Сразу же восстанавливаем ловушку!
-    // Мы не ждем ответа пользователя. Мы сначала "запираем", потом спрашиваем.
-    window.history.pushState({ page: 'app_root' }, '', '');
+    // 1. САМОЕ ВАЖНОЕ:
+    // Как только нажали "Назад" — мы МГНОВЕННО ставим новую "стену".
+    // Мы не ждем проверки условий. Мы сначала запираем дверь, потом разбираемся.
+    window.history.pushState({ page: 'app_root' }, '', window.location.href);
 
-    // ШАГ 2: Пробуем закрыть внутренние окна
-    const handledInternally = closeAnyOpenWindow();
-    
-    if (handledInternally) {
-        // Если мы закрыли модалку/фото - отлично. 
-        // Ловушка уже восстановлена в Шаге 1. Мы остаемся в приложении.
-        return;
+    // 2. ПРОВЕРКА: Закрываем окна (Модалки, Фото)
+    if (closeAnyOpenWindow()) {
+        return; // Остаемся на месте
     }
 
-    // ШАГ 3: Если закрывать нечего - спрашиваем выход
-    // Важно: Ловушка УЖЕ стоит. Если сейчас нажать "Отмена", мы уже защищены.
-    const shouldExit = confirm("🚪 Выйти из приложения?");
-    
-    if (shouldExit) {
-        // Если пользователь реально хочет выйти:
-        // Нам нужно "пробить" ту ловушку, которую мы поставили в Шаге 1,
-        // и еще ту, что была до этого.
-        // Поэтому делаем шаг назад на -2.
-        window.history.go(-2);
+    // 3. ПРОВЕРКА: Если не Калькулятор — идем в Калькулятор
+    const currentTab = document.querySelector('.nav-btn.active');
+    if (currentTab && currentTab.id !== 'nav-tab1') {
+        const calcBtn = document.getElementById('nav-tab1');
+        if (calcBtn) calcBtn.click();
+        return; // Остаемся на месте (переключили вкладку)
     }
+
+    // 4. ВЫХОД (с задержкой для надежности)
+    // Если мы дошли сюда, значит окон нет и мы на главной.
+    setTimeout(() => {
+        const shouldExit = confirm("🚪 Выйти из приложения?");
+        
+        if (shouldExit) {
+            // Если "ДА": Нам нужно отменить ту "стену", что мы поставили в шаге 1,
+            // и выйти реально. Поэтому отматываем историю на 2 шага назад.
+            window.history.go(-2); 
+        }
+        // Если "ОТМЕНА": Делать ничего не нужно. 
+        // "Стена" уже поставлена в шаге 1, поэтому следующее нажатие "Назад"
+        // снова попадет в эту же функцию.
+    }, 100);
 });
 
-// Вспомогательная функция (оставляем ту же, но убедитесь, что она есть)
+// Вспомогательная функция (без изменений)
 function closeAnyOpenWindow() {
-    // А. Лайтбокс (Фото)
+    // 1. Лайтбокс
     const lightbox = document.getElementById('cakeLightbox');
-    if (lightbox && lightbox.style.display === 'flex') {
+    if (lightbox && getComputedStyle(lightbox).display === 'flex') {
         closeLightbox();
         return true;
     }
-
-    // Б. Модальные окна
-    const openModal = Array.from(document.querySelectorAll('.modal-overlay')).find(el => {
-        const style = window.getComputedStyle(el);
-        return el.id !== 'loadingOverlay' && (style.display === 'flex' || style.display === 'block');
+    // 2. Модалки
+    const visibleModal = Array.from(document.querySelectorAll('.modal-overlay')).find(el => {
+        const style = getComputedStyle(el);
+        return el.id !== 'loadingOverlay' && 
+               (style.display === 'flex' || style.display === 'block') &&
+               style.opacity !== '0' && style.visibility !== 'hidden';
     });
-
-    if (openModal) {
-        openModal.style.display = 'none';
-        if (openModal.id === 'orderFinalizeModal' && typeof clearOrderImage === 'function') {
-            clearOrderImage();
+    if (visibleModal) {
+        visibleModal.style.display = 'none';
+        if (visibleModal.id === 'orderFinalizeModal') {
+            if (typeof clearOrderImage === 'function') clearOrderImage();
             editingOrderId = null;
         }
         return true;
     }
-
-    // В. Мобильный редактор
+    // 3. Рецепт (моб)
     const recipeLayout = document.querySelector('.recipe-layout.mobile-view-active');
     if (recipeLayout) {
         closeRecipeMobile();
         return true;
     }
-
-    // Г. Панель уведомлений
+    // 4. Уведомления
     const notifPanel = document.getElementById('notifPanel');
-    if (notifPanel && notifPanel.style.display === 'flex') {
+    if (notifPanel && getComputedStyle(notifPanel).display === 'flex') {
         notifPanel.style.display = 'none';
         return true;
     }
-
     return false;
 }
+
 
     </script>
 
@@ -13405,6 +13409,7 @@ function closeAnyOpenWindow() {
   </body>
 
 </html>
+
 
 
 
