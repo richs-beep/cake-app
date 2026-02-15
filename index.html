@@ -2117,6 +2117,21 @@ class CakeVisualizer {
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     min-height: 40px;
 }
+
+      /* --- СТИЛЬ ДЛЯ БЛОКА ОФОРМЛЕНИЯ В ПЛАНЕ --- */
+.pc-decor {
+    margin-top: 6px;
+    padding: 4px 6px;
+    background: #fdfbf7; /* Очень легкий теплый оттенок */
+    border: 1px solid #efebe9;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #555;
+    line-height: 1.3;
+    font-style: italic;
+    /* Если текст очень длинный, он будет переноситься, но карточка растянется.
+       Это нормально, чтобы видеть всё описание. */
+}
 /* Чекбокс - фиксированный размер, не сжимается */
 .plan-card .batch-checkbox {
     width: 18px; height: 18px;
@@ -6049,6 +6064,7 @@ function renderQueue() {
         html += `<div class="plan-grid">`; // ОТКРЫВАЕМ СЕТКУ
 
         // Карточки внутри сетки
+        // Карточки внутри сетки
         items.forEach(item => {
             const isBooking = (item.type === 'booking');
             const borderCol = isBooking ? '#FF9800' : '#4CAF50'; 
@@ -6059,17 +6075,26 @@ function renderQueue() {
             let mainTitle = "Заказ";
             let specsHtml = "";
             let colorHtml = "";
+            let decorHtml = ""; // <--- НОВАЯ ПЕРЕМЕННАЯ
+
+            // --- ПОДГОТОВКА ТЕКСТА ОФОРМЛЕНИЯ ---
+            if (item.comment && item.comment.trim() !== "") {
+                decorHtml = `<div class="pc-decor">📝 ${item.comment}</div>`;
+            }
 
             if (isBooking) {
                 mainTitle = "⏳ Бронь даты";
-                specsHtml = `<div style="font-style:italic; font-size:12px; color:#666; margin-top:5px;">${item.comment || 'Нет деталей'}</div>`;
+                // Для брони комментарий - это и есть суть, поэтому показываем его крупнее или оставляем в decorHtml
+                if (!decorHtml) { // Если комментария нет в переменной, пишем заглушку
+                     specsHtml = `<div style="font-style:italic; font-size:12px; color:#999; margin-top:5px;">Нет деталей</div>`;
+                }
             } else {
                 if (item.data && item.data.tiers) {
                     const recipes = [...new Set(item.data.tiers.map(t => t.recipeName))].join(' + ');
                     const sizes = item.data.tiers.map(t => {
                         const shape = item.data.geometry.shape;
                         const d = Math.round(t.d);
-                        const h = Math.round(t.h); // <--- Вот она, высота!
+                        const h = Math.round(t.h);
                         
                         if (shape === 'rectangle') {
                             return `${d}x${Math.round(t.w)} <small>H${h}</small>`; 
@@ -6079,14 +6104,15 @@ function renderQueue() {
                             return `D${d} <small>H${h}</small>`;
                         }
                     }).join(' + ');
+                    
                     mainTitle = recipes || item.desc;
-                    specsHtml = `<div style="margin-top:5px;">
-                                    <span class="pc-badge">${sizes} см</span> 
-                                    <span class="pc-badge">${item.weight} кг</span>
+                    specsHtml = `<div style="margin-top:4px; display:flex; gap:5px; flex-wrap:wrap;">
+                                     <span class="pc-badge">${sizes} см</span> 
+                                     <span class="pc-badge">${item.weight} кг</span>
                                  </div>`;
                 } else {
                     mainTitle = item.desc; 
-                    specsHtml = `<div style="margin-top:5px;"><span class="pc-badge">${item.weight} кг</span></div>`;
+                    specsHtml = `<div style="margin-top:4px;"><span class="pc-badge">${item.weight} кг</span></div>`;
                 }
 
                 if (item.color) {
@@ -6096,7 +6122,10 @@ function renderQueue() {
                     else if(cL.includes('зелен')) dotColor='green'; else if(cL.includes('розов')) dotColor='pink';
                     else if(cL.includes('черн')) dotColor='black'; else if(cL.includes('бел')) dotColor='white';
                     else if(cL.includes('желт')) dotColor='gold';
-                    colorHtml = `<span class="pc-badge" style="display:inline-flex; align-items:center; gap:3px; margin-top:3px;"><span class="pc-color-dot" style="background:${dotColor}"></span>${item.color}</span>`;
+                    
+                    colorHtml = `<span class="pc-badge" style="display:inline-flex; align-items:center; gap:3px; margin-top:4px;">
+                                    <span class="pc-color-dot" style="background:${dotColor}"></span>${item.color}
+                                 </span>`;
                 }
             }
 
@@ -6105,41 +6134,41 @@ function renderQueue() {
             // HTML КАРТОЧКИ
             html += `
             <div class="plan-card" style="border-left-color: ${borderCol}; background: ${bgCol};">
-                <div class="pc-top">
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <input type="checkbox" class="batch-checkbox" value="${item.id}" checked>
-                        <span class="pc-client" style="font-size:12px;">👤 ${item.name}</span>
-                    </div>
-                    <div style="font-weight:bold; font-size:12px; color:${isBooking?'#E65100':'#2E7D32'};">${priceDisplay} ${SYMBOLS[currentCurrency]}</div>
-                </div>
+               <div class="pc-top">
+                   <div style="display:flex; align-items:center; gap:8px;">
+                       <input type="checkbox" class="batch-checkbox" value="${item.id}" checked>
+                       <span class="pc-client" style="font-size:12px;">👤 ${item.name}</span>
+                   </div>
+                   <div style="font-weight:bold; font-size:12px; color:${isBooking?'#E65100':'#2E7D32'}; white-space:nowrap;">${priceDisplay} ${SYMBOLS[currentCurrency]}</div>
+               </div>
 
-                <div class="pc-body">
-                    <div class="pc-main" style="white-space:normal; line-height:1.3;">${mainTitle}</div>
-                    ${specsHtml}
-                    ${colorHtml}
-                </div>
+               <div class="pc-body">
+                   <div class="pc-main" style="white-space:normal; line-height:1.25; margin-bottom:2px;">${mainTitle}</div>
+                   ${specsHtml}
+                   ${colorHtml}
+                   ${decorHtml} </div>
 
-                <div class="pc-footer">
-                    ${!isBooking ? `
-                    <div style="display:flex; align-items:center; gap:5px;" title="Кол-во замесов">
-                        <span style="font-size:10px; color:#999; font-weight:bold;">ЗАМЕСЫ:</span>
-                        <input type="number" min="1" value="${batches}" 
-                            onchange="updateBatchCount('${item.id}', this.value)"
-                            style="width:35px; text-align:center; border:1px solid #ddd; border-radius:4px; font-weight:bold; font-size:12px; padding:2px;">
-                    </div>` : '<div></div>'}
-                    
-                    <div class="btn-action-group">
-        ${item.refImage ? `<button class="btn-done" style="background:#FCE4EC; color:#C2185B; border-color:#F8BBD0;" onclick="viewOrderRef('${item.id}')">📷 Фото</button>` : ''}
-        
-        ${isBooking ? 
-            `<button class="btn-done" ...>🎂 Собрать</button>` 
-            : 
-            `<button class="btn-done" onclick="finishOrder('${item.id}', '${item.name}')">✅ Сделано</button>`
-        }
-        <button class="btn-icon" onclick="removeFromQueue('${item.id}')">🗑️</button>
-    </div>
-                </div>
-            </div>`;
+               <div class="pc-footer">
+                   ${!isBooking ? `
+                   <div style="display:flex; align-items:center; gap:5px;" title="Кол-во замесов">
+                       <span style="font-size:10px; color:#999; font-weight:bold;">ЗАМЕСЫ:</span>
+                       <input type="number" min="1" value="${batches}" 
+                           onchange="updateBatchCount('${item.id}', this.value)"
+                           style="width:35px; text-align:center; border:1px solid #ddd; border-radius:4px; font-weight:bold; font-size:12px; padding:2px;">
+                   </div>` : '<div></div>'}
+                   
+                   <div class="btn-action-group">
+                       ${item.refImage ? `<button class="btn-done" style="background:#FCE4EC; color:#C2185B; border-color:#F8BBD0;" onclick="viewOrderRef('${item.id}')">📷 Фото</button>` : ''}
+                       
+                       ${isBooking ? 
+                           `<button class="btn-done" style="background:#FFF3E0; color:#E65100; border-color:#FFE0B2;" onclick="startConvertingBooking('${item.id}')">🎂 Собрать</button>` 
+                           : 
+                           `<button class="btn-done" onclick="finishOrder('${item.id}', '${item.name}')">✅ Готово</button>`
+                       }
+                       <button class="btn-icon" onclick="removeFromQueue('${item.id}')">🗑️</button>
+                   </div>
+               </div>
+           </div>`;
         });
 
         html += `</div>`; // ЗАКРЫВАЕМ СЕТКУ
@@ -6478,9 +6507,13 @@ function handleClientSelection() {
 }
 
 // 3. Сохранение заказа и пересчет суммы
+// 3. Сохранение заказа и пересчет суммы (ИСПРАВЛЕНО: ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ)
 async function confirmAddToQueueWithClient() {
     const res = appState.results[appState.activeSide];
-    if (!res) { alert("Сначала рассчитайте торт!"); return; }
+    if (!res || !res.costs || res.costs.totalProductionCost === 0) {
+        alert("⚠️ Сначала рассчитайте торт!");
+        return;
+    }
 
     let clientName = document.getElementById('orderClientSearch').value.trim();
     let clientId = document.getElementById('orderClientId').value;
@@ -6489,7 +6522,7 @@ async function confirmAddToQueueWithClient() {
     
     if (!clientName) { alert("Укажите имя клиента!"); return; }
 
-    // Авто-создание клиента
+    // Авто-создание клиента (если новый)
     if (!clientId) {
         clientId = 'c' + Date.now();
         const newClientObj = {
@@ -6497,9 +6530,10 @@ async function confirmAddToQueueWithClient() {
             phone: clientPhone,
             social: clientSocial,
             created: new Date().toISOString(),
-            totalSpend: 0
+            totalSpend: 0,
+            history: {}
         };
-        await db.ref('clients/' + clientId).set(newClientObj);
+        // Сохраняем локально
         clientsDataLocal[clientId] = newClientObj;
     }
 
@@ -6536,28 +6570,38 @@ async function confirmAddToQueueWithClient() {
         data: res,
         labor: JSON.parse(JSON.stringify(currentLaborList || [])),
         extras: JSON.parse(JSON.stringify(extrasList || [])),
-        
-        // --- СОХРАНЯЕМ ФОТО ---
         refImage: currentOrderImageBase64 
     };
 
+    // Логика превращения Брони в Заказ
     if (activeBookingId) {
         const idx = productionQueue.findIndex(b => b.id === activeBookingId);
         if (idx !== -1) {
-            productionQueue[idx] = orderData;
-            db.ref(`clients/${clientId}/history/${activeBookingId}`).remove();
+            productionQueue[idx] = orderData; // Заменяем в очереди
         } else {
             productionQueue.push(orderData);
+        }
+        
+        // УДАЛЯЕМ БРОНЬ ИЗ ИСТОРИИ КЛИЕНТА (ИСПРАВЛЕНО)
+        if (clientsDataLocal[clientId] && clientsDataLocal[clientId].history) {
+            delete clientsDataLocal[clientId].history[activeBookingId];
         }
         activeBookingId = null;
     } else {
         productionQueue.push(orderData);
     }
-    saveQueue();
 
-    // Закрываем окно
-   // ... (код сохранения заказа выше остается тем же) ...
+    // --- БЛОК ПРИНУДИТЕЛЬНОЙ СИНХРОНИЗАЦИИ ---
+    saveQueue(); // Сохраняет очередь в LocalStorage и запускает saveToCloud('queue')
     
+    // Принудительно сохраняем клиентов, так как мы могли создать нового или изменить историю
+    localStorage.setItem('cachedClients', JSON.stringify(clientsDataLocal));
+    saveToCloud('clients', clientsDataLocal);
+    
+    // Принудительный автосейв всего состояния
+    performAutoSave();
+    // ----------------------------------------
+
     // Закрываем окно оформления
     document.getElementById('orderFinalizeModal').style.display = 'none';
     
@@ -6583,7 +6627,6 @@ async function confirmAddToQueueWithClient() {
             `Всё верно?`;
 
         waBtn.style.display = 'flex';
-        // При клике открываем WhatsApp в новой вкладке
         waBtn.onclick = () => window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(waText)}`, '_blank');
     } else {
         waBtn.style.display = 'none';
@@ -6591,13 +6634,11 @@ async function confirmAddToQueueWithClient() {
 
     // 2. Настройка кнопки Календаря
     const links = createCalendarLinks(orderData);
-    // При клике открываем Календарь
     calBtn.onclick = () => window.open(links.googleUrl, '_blank');
 
     // 3. Открываем окно успеха
     document.getElementById('successModal').style.display = 'flex';
 }
-
      // --- 1. ОБРАБОТКА ФОТО (СЖАТИЕ) ---
 let currentOrderImageBase64 = null; // Глобальная переменная для текущего фото
 
@@ -7881,19 +7922,24 @@ function checkAndRestoreAutoSave() {
                 }
             }, 50); // Пауза для рендеринга
             
-        } else  {
-            // Очистка при отказе (моментальная, лоадер не нужен)
-            productionQueue = [];
+        
+
+        } else {
+            // БЫЛО (ОПАСНО):
+            // productionQueue = [];
+            // db.ref('queue').set([]); 
+            // localStorage.removeItem('cakeProductionQueue');           
+            // renderQueue();            
             
-            // --- ИСПРАВЛЕНИЕ: Очищаем очередь и в Облаке, иначе она вернется ---
-            db.ref('queue').set([]); 
-            // ------------------------------------------------------------------
+            // СТАЛО (БЕЗОПАСНО):
+            console.log("Автосохранение отклонено. Используем текущие данные из Облака/Памяти.");
             
-            localStorage.removeItem('cakeProductionQueue');          
-            renderQueue();          
-            updateQueueBadge();    
-            const batchBlock = document.getElementById('batchResultBlock');
-            if (batchBlock) batchBlock.style.display = 'none';
+            // Просто удаляем файл автосейва, чтобы он не надоедал, 
+            // но НЕ трогаем реальные данные (productionQueue)
+            localStorage.removeItem(AUTOSAVE_KEY_V3);
+            
+            // На всякий случай обновляем бейдж, чтобы показать то, что загрузилось из базы
+            updateQueueBadge(); 
         }
         
     } catch (e) { console.log('Ошибка восстановления', e); }
@@ -12795,6 +12841,7 @@ function openShapeLightbox() {
   </body>
 
 </html>
+
 
 
 
