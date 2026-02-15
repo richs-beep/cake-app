@@ -13314,82 +13314,86 @@ async function editOrderFromQueue(id) {
 
 
   // ==========================================
-// 🔙 УПРАВЛЕНИЕ КНОПКОЙ "НАЗАД" (ANDROID/iOS)
+// 🔙 УПРАВЛЕНИЕ КНОПКОЙ "НАЗАД" (FIX v2)
 // ==========================================
 
 // 1. При запуске ставим "ловушку" в историю
 window.addEventListener('load', function() {
-    window.history.pushState({ page: 'app' }, '', '');
+    window.history.pushState({ page: 'app_root' }, '', '');
 });
 
 // 2. Слушаем нажатие кнопки "Назад"
 window.addEventListener('popstate', function(event) {
-    
-    // --- ПРОВЕРКА: ЧТО СЕЙЧАС ОТКРЫТО? ---
-    
-    // А. Лайтбокс (Фото на весь экран)
-    const lightbox = document.getElementById('cakeLightbox');
-    const isLightboxOpen = lightbox && lightbox.style.display === 'flex';
+    // Эта функция вернет true, если мы что-то закрыли внутри приложения
+    const handledInternally = closeAnyOpenWindow();
 
-    // Б. Модальные окна (кроме загрузки)
-    // Ищем любой оверлей, который видим (display: flex/block), кроме лоадера
+    if (handledInternally) {
+        // СИТУАЦИЯ 1: Мы закрыли окно (рецепт, фото и т.д.)
+        // Мы остались в приложении, но нажатие "Назад" съело нашу ловушку.
+        // СРОЧНО возвращаем её на место, чтобы следующее нажатие снова было перехвачено!
+        window.history.pushState({ page: 'app_root' }, '', '');
+    } else {
+        // СИТУАЦИЯ 2: Закрывать нечего, мы на главном экране.
+        // Спрашиваем пользователя
+        const shouldExit = confirm("🚪 Выйти из приложения?");
+        
+        if (!shouldExit) {
+            // Пользователь нажал "Отмена" (Остаться).
+            // Снова возвращаем ловушку, иначе следующее нажатие выкинет без спроса.
+            window.history.pushState({ page: 'app_root' }, '', '');
+        } else {
+            // Пользователь нажал "ОК" (Выйти).
+            // Ничего не делаем. Браузер уже находится в состоянии "назад", 
+            // так что он просто уйдет на предыдущую страницу или закроется.
+            // (Можно дополнительно вызвать history.back(), но обычно это не требуется)
+        }
+    }
+});
+
+// Вспомогательная функция, которая ищет и закрывает всё, что открыто
+function closeAnyOpenWindow() {
+    // А. Лайтбокс (Фото)
+    const lightbox = document.getElementById('cakeLightbox');
+    if (lightbox && lightbox.style.display === 'flex') {
+        closeLightbox();
+        return true;
+    }
+
+    // Б. Модальные окна (кроме лоадера)
+    // Ищем видимые оверлеи
     const openModal = Array.from(document.querySelectorAll('.modal-overlay')).find(el => {
+        // Проверка computedStyle надежнее
         const style = window.getComputedStyle(el);
         return el.id !== 'loadingOverlay' && (style.display === 'flex' || style.display === 'block');
     });
 
+    if (openModal) {
+        openModal.style.display = 'none';
+        // Если закрыли окно заказа - сбрасываем режим правки
+        if (openModal.id === 'orderFinalizeModal' && typeof clearOrderImage === 'function') {
+            clearOrderImage();
+            editingOrderId = null;
+        }
+        return true;
+    }
+
     // В. Мобильный редактор рецептов (выезжающая панель)
     const recipeLayout = document.querySelector('.recipe-layout.mobile-view-active');
+    if (recipeLayout) {
+        closeRecipeMobile();
+        return true;
+    }
 
     // Г. Панель уведомлений
     const notifPanel = document.getElementById('notifPanel');
-    const isNotifOpen = notifPanel && notifPanel.style.display === 'flex';
-
-    // --- ЛОГИКА ЗАКРЫТИЯ ---
-    let actionTaken = false;
-
-    if (isLightboxOpen) {
-        closeLightbox(); // Закрываем фото
-        actionTaken = true;
-    } 
-    else if (openModal) {
-        // Закрываем найденное модальное окно
-        openModal.style.display = 'none';
-        
-        // Если это было окно заказа, нужно сбросить режим редактирования
-        if (openModal.id === 'orderFinalizeModal' && typeof clearOrderImage === 'function') {
-            clearOrderImage();
-            editingOrderId = null; // Сброс глобальной переменной
-        }
-        actionTaken = true;
-    }
-    else if (recipeLayout) {
-        closeRecipeMobile(); // Возвращаемся к списку рецептов
-        actionTaken = true;
-    }
-    else if (isNotifOpen) {
+    if (notifPanel && notifPanel.style.display === 'flex') {
         notifPanel.style.display = 'none';
-        actionTaken = true;
+        return true;
     }
 
-    // --- ФИНАЛ: ОСТАЕМСЯ ИЛИ ВЫХОДИМ? ---
-    
-    if (actionTaken) {
-        // Если мы что-то закрыли, значит пользователь хочет остаться в приложении.
-        // Но нажатие "Назад" "съело" нашу запись в истории.
-        // Срочно возвращаем "ловушку" обратно!
-        window.history.pushState({ page: 'app' }, '', '');
-    } else {
-        // Если закрывать нечего, значит мы на главном экране.
-        const exit = confirm("🚪 Выйти из приложения?");
-        if (!exit) {
-            // Если передумал - снова ставим ловушку, чтобы кнопка работала дальше
-            window.history.pushState({ page: 'app' }, '', '');
-        } else {
-            // Если нажал "ОК", ничего не делаем -> браузер выйдет сам (или можно window.history.back())
-        }
-    }
-});
+    // Если ничего не нашли
+    return false;
+}
 
     </script>
 
@@ -13404,6 +13408,7 @@ window.addEventListener('popstate', function(event) {
   </body>
 
 </html>
+
 
 
 
