@@ -3524,19 +3524,25 @@ body {
                    <span style="font-weight:bold; color:#00695c;">🛠️ Виды работ (Справочник)</span>
                </label>
            </div>
-           <div class="stock-toolbar" style="margin-bottom:15px; display:flex; gap:10px; align-items:center; background:#f5f5f5; padding:10px; border-radius:8px;">
-    <button class="add-btn-small" onclick="openProcurementModal()" style="background:#4CAF50; font-size:13px; padding:8px 15px;">🛒 Оформить ЗАКУП</button>
+           <div class="stock-toolbar" style="margin-bottom:15px; display:flex; gap:10px; align-items:center; background:#f5f5f5; padding:10px; border-radius:8px; flex-wrap:wrap;">
+    <div style="background:white; padding:4px; border-radius:6px; border:1px solid #ddd; display:flex; gap:5px;">
+        <button class="shelf-btn active" onclick="setStockShelf('all', this)" style="border:none; background:#eee; border-radius:4px; padding:5px 10px; cursor:pointer; font-weight:bold;">Все</button>
+        <button class="shelf-btn" onclick="setStockShelf('food', this)" style="border:none; background:white; border-radius:4px; padding:5px 10px; cursor:pointer;">🍎 Продукты</button>
+        <button class="shelf-btn" onclick="setStockShelf('pack', this)" style="border:none; background:white; border-radius:4px; padding:5px 10px; cursor:pointer;">📦 Упак/Декор</button>
+    </div>
     
     <div style="width:1px; height:20px; background:#ccc; margin:0 5px;"></div>
 
-    <button id="btnInventoryToggle" class="tab-btn" onclick="toggleInventoryMode()" style="background:#fff; border:1px solid #ccc; color:#555;">🔘 Инвентаризация (Выкл)</button>
-    <label style="cursor:pointer; display:flex; align-items:center; gap:5px; margin-left:10px; background:#fff; padding:5px 10px; border-radius:8px; border:1px solid #ccc;">
-    <input type="checkbox" id="toggleKbju" onchange="toggleKbjuColumns()"> 
-    <span style="font-size:12px; font-weight:bold;">Показать КБЖУ</span>
-</label>
-    <button class="tab-btn" onclick="openReportsModal()" style="background:#E3F2FD; color:#1565C0; border:1px solid #BBDEFB;">📊 Отчеты</button>
+    <button class="add-btn-small" onclick="openProcurementModal()" style="background:#4CAF50; font-size:13px; padding:8px 15px;">🛒 ЗАКУП</button>
+    <button id="btnInventoryToggle" class="tab-btn" onclick="toggleInventoryMode()" style="background:#fff; border:1px solid #ccc; color:#555;">🔘 Инвент.</button>
     
-    <button class="tab-btn" onclick="openStockHistory()" style="margin-left:auto; background:#E0E0E0;">📜 Журнал</button>
+    <label style="cursor:pointer; display:flex; align-items:center; gap:5px; margin-left:5px;">
+        <input type="checkbox" id="toggleKbju" onchange="toggleKbjuColumns()"> 
+        <span style="font-size:11px;">КБЖУ</span>
+    </label>
+    
+    <button class="tab-btn" onclick="openReportsModal()" style="background:#E3F2FD; color:#1565C0; border:1px solid #BBDEFB;">📊</button>
+    <button class="tab-btn" onclick="openStockHistory()" style="margin-left:auto; background:#E0E0E0;">📜</button>
 </div>
            <div id="ingredientsStockBlock" style="overflow-x: auto;"> <table class="stock-table" style="min-width: 1200px;">
                 <thead>
@@ -3562,30 +3568,36 @@ body {
     </thead>
     <tbody id="stockTableBody"></tbody>
     <tfoot>
-        <tr style="background:#e8f5e9;">
-            <td><input id="newIngName" placeholder="Название"></td>
-            <td>
-                <select id="newIngUnit" onchange="toggleNewWeightInput()">
-                    <option value="г">г</option>
-                    <option value="шт">шт</option>
-                    <option value="мл">мл</option>
-                    <option value="см">см</option>
-                    <option value="м">м</option>
-                </select>
-            </td>
-            <td><input type="number" id="newIngSingleWeight" placeholder="Вес 1шт" disabled style="background:#eee;"></td>
-            <td style="text-align:center;"><input type="checkbox" id="newIngUseWeight" title="Рецепт в граммах"></td>
-            
-            <td class="col-kbju"><input type="number" id="newIngP" placeholder="Б"></td>
-<td class="col-kbju"><input type="number" id="newIngF" placeholder="Ж"></td>
-<td class="col-kbju"><input type="number" id="newIngC" placeholder="У"></td>
-<td class="col-kbju"><input type="number" id="newIngK" placeholder="Ккал"></td>
-            <td><input type="number" id="newIngPack" placeholder="В пачке"></td>
-            <td><input type="number" id="newIngPrice" placeholder="Цена"></td>
-            <td></td> 
-            <td><button class="add-btn-small" onclick="addNewIngredient()">+</button></td>
-        </tr>
-    </tfoot>
+    <tr style="background:#e8f5e9;">
+        <td style="display:flex; gap:5px;">
+            <select id="newIngCat" style="width:40px; padding:0;" title="Категория">
+                <option value="food">🍎</option>
+                <option value="pack">📦</option>
+            </select>
+            <input id="newIngName" placeholder="Название" style="flex:1;">
+        </td>
+        <td>
+            <select id="newIngUnit" onchange="toggleNewWeightInput()">
+                <option value="г">г</option>
+                <option value="шт">шт</option>
+                <option value="мл">мл</option>
+                <option value="см">см</option>
+                <option value="м">м</option>
+            </select>
+        </td>
+        <td><input type="number" id="newIngSingleWeight" placeholder="Вес 1шт" disabled style="background:#eee;"></td>
+        <td style="text-align:center;"><input type="checkbox" id="newIngUseWeight" title="Рецепт в граммах"></td>
+        
+        <td class="col-kbju"><input type="number" id="newIngP" placeholder="Б"></td>
+        <td class="col-kbju"><input type="number" id="newIngF" placeholder="Ж"></td>
+        <td class="col-kbju"><input type="number" id="newIngC" placeholder="У"></td>
+        <td class="col-kbju"><input type="number" id="newIngK" placeholder="Ккал"></td>
+        <td><input type="number" id="newIngPack" placeholder="В пачке"></td>
+        <td><input type="number" id="newIngPrice" placeholder="Цена"></td>
+        <td></td> 
+        <td><button class="add-btn-small" onclick="addNewIngredient()">+</button></td>
+    </tr>
+</tfoot>
 </table>
                <div style="margin-top:10px; font-size:12px; color:#888;">* <b>Вес 1шт</b> указывайте только для штучных товаров (Яйца ~60г). Для граммов это поле не нужно.</div>
            </div>
@@ -4421,6 +4433,22 @@ let laborSort = { field: 'name', dir: 'asc' }; // Для работ
       
 
       // --- 3. FUNCTIONS ---
+
+     let currentStockShelf = 'all'; // 'all', 'food', 'pack'
+
+function setStockShelf(shelf, btn) {
+    currentStockShelf = shelf;
+    
+    // Визуальное переключение кнопок
+    document.querySelectorAll('.shelf-btn').forEach(b => {
+        b.style.background = 'white';
+        b.classList.remove('active');
+    });
+    btn.style.background = '#eee';
+    btn.classList.add('active');
+    
+    renderStockTable(); // Перерисовываем таблицу
+}
 
       function setRecFilter(type, btn) {
     currentRecFilter = type;
@@ -5454,43 +5482,39 @@ function renderStockTable() {
     tb.innerHTML = '';
     const search = document.getElementById('stockSearch').value.toLowerCase().trim();
 
-    // 1. Создаем временный массив с индексами (чтобы сортировка не ломала редактирование)
-    // Мы храним originalIndex, чтобы updIng(x, ...) обращался к правильному элементу
+    // 1. Маппинг
     let list = myIngredients.map((item, index) => ({ data: item, originalIndex: index }));
 
-    // 2. Фильтруем (поиск)
+    // 2. Фильтрация ПОИСК
     list = list.filter(wrapper => wrapper.data.name.toLowerCase().includes(search));
 
-    // 3. Сортируем
+    // 3. Фильтрация ПОЛКИ (НОВОЕ!)
+    if (currentStockShelf !== 'all') {
+        list = list.filter(wrapper => {
+            const cat = wrapper.data.category || 'food'; // Если категории нет, считаем Продуктом
+            return cat === currentStockShelf;
+        });
+    }
+
+    // 4. Сортировка
     list.sort((a, b) => {
         let valA = a.data[stockSort.field];
         let valB = b.data[stockSort.field];
-
-        // Обработка строк (без учета регистра)
         if (typeof valA === 'string') valA = valA.toLowerCase();
         if (typeof valB === 'string') valB = valB.toLowerCase();
-        
-        // Обработка чисел (чтобы 10 было больше 2)
-        if (stockSort.field === 'packPrice' || stockSort.field === 'stock' || stockSort.field.length < 2) {
-             valA = parseFloat(valA) || 0;
-             valB = parseFloat(valB) || 0;
+        if (stockSort.field === 'packPrice' || stockSort.field === 'stock') {
+             valA = parseFloat(valA) || 0; valB = parseFloat(valB) || 0;
         }
-
         if (valA < valB) return stockSort.dir === 'asc' ? -1 : 1;
         if (valA > valB) return stockSort.dir === 'asc' ? 1 : -1;
         return 0;
     });
 
-    // 4. Обновляем иконки в шапке (чтобы стрелочки прыгали)
-    // Находим все заголовки и обновляем текст (это грубый, но надежный метод)
-    // Лучше делать это прямо в HTML через вызов getSortArrow, см. Шаг 4
-
-    // 5. Рисуем
+    // 5. Рендер
     list.forEach(wrapper => {
         const i = wrapper.data;
-        const x = wrapper.originalIndex; // ВАЖНО: Используем настоящий индекс для функций!
+        const x = wrapper.originalIndex;
 
-        // Логика отображения Остатка
         const stockVal = i.stock || 0;
         let stockStyle = 'font-weight:bold; text-align:center; width:80px;';
         if (stockVal < 0) stockStyle += ' background:#ffebee; color:#d32f2f; border:1px solid #ef9a9a;';
@@ -5499,9 +5523,21 @@ function renderStockTable() {
 
         const disabledAttr = isInventoryMode ? '' : 'disabled';
         const opacityStyle = isInventoryMode ? '' : 'opacity:0.8; cursor:not-allowed;';
-
+        
+        // Определение иконки категории
+        const isPack = (i.category === 'pack');
+        
         tb.innerHTML += `<tr>
-          <td><input value="${i.name}" onchange="updIng(${x},'name',this.value)"></td>
+          <td style="position:relative;">
+             <div style="position:absolute; top:2px; left:2px; z-index:10;">
+                <select onchange="updIng(${x}, 'category', this.value); renderStockTable();" 
+                        style="font-size:10px; padding:0; border:none; background:transparent; cursor:pointer;" title="Сменить полку">
+                    <option value="food" ${!isPack?'selected':''}>🍎</option>
+                    <option value="pack" ${isPack?'selected':''}>📦</option>
+                </select>
+             </div>
+             <input value="${i.name}" onchange="updIng(${x},'name',this.value)" style="padding-left:25px;">
+          </td>
           
           <td><select onchange="updIng(${x},'unit',this.value); renderStockTable();">
             <option value="г" ${i.unit==='г'?'selected':''}>г</option>
@@ -5528,40 +5564,28 @@ function renderStockTable() {
           <td class="col-kbju"><input type="number" value="${i.c||0}" onchange="updIng(${x},'c',this.value)"></td>
           <td class="col-kbju"><input type="number" value="${i.k||0}" onchange="updIng(${x},'k',this.value)"></td>
 
-          <td>
-              <input type="text" 
-                     value="${parseFloat(i.packWeight||0).toLocaleString('ru-RU')}" 
-                     onchange="updIng(${x},'packWeight',this.value)"
-                     style="text-align:right;">
-          </td>
-
-          <td>
-              <input type="text" 
-                     value="${parseFloat(i.packPrice||0).toLocaleString('ru-RU')}" 
-                     onchange="updIng(${x},'packPrice',this.value)"
-                     style="text-align:right;">
-          </td>
+          <td><input type="text" value="${parseFloat(i.packWeight||0).toLocaleString('ru-RU')}" onchange="updIng(${x},'packWeight',this.value)" style="text-align:right;"></td>
+          <td><input type="text" value="${parseFloat(i.packPrice||0).toLocaleString('ru-RU')}" onchange="updIng(${x},'packPrice',this.value)" style="text-align:right;"></td>
 
           <td style="color:#888; font-size:11px; text-align:right;">
               ${(i.packPrice/i.packWeight).toLocaleString('ru-RU', {maximumFractionDigits: 1})}
           </td>
           
           <td>
-            <input type="text" 
-                   value="${parseFloat(stockVal).toLocaleString('ru-RU')}" 
+            <input type="text" value="${parseFloat(stockVal).toLocaleString('ru-RU')}" 
                    onchange="updIng(${x},'stock',this.value)" 
                    style="${stockStyle} ${opacityStyle} text-align:right;" 
-                   ${disabledAttr} 
-                   title="${isInventoryMode ? 'Редактирование разрешено' : 'Включите Инвентаризацию для изменения'}">
+                   ${disabledAttr}>
           </td>
 
           <td><button class="del-btn" onclick="delIng(${x})">✕</button></td>
         </tr>`;
     });
     
-    // Обновляем стрелочки в заголовках (Динамически)
     updateSortArrows('stock');
 }
+
+     
       function toggleNewWeightInput() {
           const u = document.getElementById('newIngUnit').value;
           const inp = document.getElementById('newIngSingleWeight');
@@ -5598,6 +5622,7 @@ function addNewIngredient() {
     const packInput = document.getElementById('newIngPack');
     const priceInput = document.getElementById('newIngPrice');
     const singleInput = document.getElementById('newIngSingleWeight');
+    const catInput = document.getElementById('newIngCat');
     
     // Новые поля КБЖУ
     const pInput = document.getElementById('newIngP');
@@ -5638,7 +5663,8 @@ function addNewIngredient() {
     saveToHistory();
     myIngredients.push({
         id: 'i' + Date.now(), 
-        name: n, 
+        name: n,
+        category: catInput.value,
         unit: u, 
         singleWeight: single,
         useWeightInRecipe: useWeightInput.checked,
@@ -14203,6 +14229,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
