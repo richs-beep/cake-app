@@ -6164,6 +6164,14 @@ function renderQueue() {
 
     // Обертка для табов
     let finalHtml = `<div class="date-tabs-container">${tabsHtml}</div>`;
+  // Вставляем её сразу после табов, перед списком карточек
+    finalHtml += `
+    <div style="margin-bottom:10px; display:flex; justify-content:flex-end; padding-right:5px;">
+        <label style="font-size:12px; cursor:pointer; color:#1976D2; font-weight:bold; background:#e3f2fd; padding:6px 12px; border-radius:20px; display:flex; align-items:center; gap:6px; transition:0.2s;">
+            <input type="checkbox" onchange="toggleAllBatch(this)" checked style="margin:0; width:16px; height:16px; cursor:pointer;"> 
+            Выбрать все для ведомости
+        </label>
+    </div>`;
 
     // 3. Фильтрация списка
     let filteredQueue = productionQueue;
@@ -13028,6 +13036,7 @@ imageDB.init().then(() => console.log("📸 База фото готова"));
   </body>
 
 </html>
+
 
 
 
