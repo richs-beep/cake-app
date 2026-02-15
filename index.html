@@ -13103,6 +13103,105 @@ const imageDB = {
 // Запускаем базу сразу при старте
 imageDB.init().then(() => console.log("📸 База фото готова"));
 
+     // ==========================================
+// 🕹️ ЛОГИКА РЕДАКТИРОВАНИЯ И ДОЛГОГО НАЖАТИЯ
+// ==========================================
+
+
+function startLongPress(id) {
+    // Ждем 800мс. Если палец не убрали - запускаем редактирование
+    longPressTimer = setTimeout(() => {
+        // Визуальный эффект (показываем "Отпускайте")
+        const hint = document.getElementById('edit-hint-' + id);
+        if(hint) hint.style.display = 'flex';
+        
+        // Вибрация
+        if(navigator.vibrate) navigator.vibrate(50);
+        
+        // Через небольшую паузу открываем окно
+        setTimeout(() => {
+            if(hint) hint.style.display = 'none'; // Скрываем подсказку
+            editOrderFromQueue(id);
+        }, 300);
+        
+    }, 800);
+}
+
+function cancelLongPress() {
+    if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+    }
+    // На всякий случай скрываем все подсказки, если они успели появиться
+    document.querySelectorAll('[id^="edit-hint-"]').forEach(el => el.style.display = 'none');
+}
+
+// --- ФУНКЦИЯ ЗАГРУЗКИ ДАННЫХ В ОКНО (РЕДАКТИРОВАНИЕ) ---
+async function editOrderFromQueue(id) {
+    const order = productionQueue.find(o => o.id === id);
+    if (!order) return;
+
+    editingOrderId = id; // Включаем режим редактирования
+
+    // 1. Заполняем поля
+    const setVal = (elmId, val) => {
+        const el = document.getElementById(elmId);
+        if(el) el.value = val || '';
+    };
+
+    setVal('orderClientSearch', order.name);
+    setVal('orderClientId', order.clientId); // Скрытый ID клиента
+    
+    setVal('orderReason', order.reason);
+    setVal('orderForWhom', order.forWhom);
+    setVal('orderPhone', order.phone);
+    setVal('orderSocial', order.social);
+    setVal('orderAddress', order.address);
+    setVal('orderPrepayment', order.prepayment);
+    setVal('orderBalance', order.balance);
+    setVal('orderColor', order.color);
+    setVal('orderDeadline', order.date);
+    setVal('orderComment', order.comment);
+    
+    // Списки (Select)
+    const paySel = document.getElementById('orderPayment');
+    if(paySel) paySel.value = order.payment || paySel.options[0].value;
+
+    const delSel = document.getElementById('orderDelivery');
+    if(delSel) delSel.value = order.delivery || delSel.options[0].value;
+
+    // 2. Фото (Референс) - Асинхронно достаем из базы телефона
+    clearOrderImage(); 
+    if (order.refImage === 'LOCAL_DB') {
+        try {
+            const base64 = await imageDB.get(id);
+            if (base64) {
+                currentOrderImageBase64 = base64;
+                const img = document.getElementById('orderRefImg');
+                const box = document.getElementById('orderRefPreviewBox');
+                const btn = document.getElementById('btnDelRef');
+                
+                if(img) { img.src = base64; img.style.display = 'block'; }
+                if(box) { 
+                    const span = box.querySelector('span');
+                    if(span) span.style.display = 'none';
+                }
+                if(btn) btn.style.display = 'inline-block';
+            }
+        } catch(e) { console.log('Нет фото локально', e); }
+    }
+
+    // 3. Меняем кнопку сохранения
+    const btn = document.querySelector('#orderFinalizeModal .main-btn');
+    if(btn) {
+        btn.innerText = "💾 Сохранить изменения";
+        btn.style.background = "#1976D2"; // Синий цвет
+    }
+
+    // 4. Открываем окно
+    document.getElementById('orderFinalizeModal').style.display = 'flex';
+}
+
     </script>
 
 <script>
@@ -13116,6 +13215,7 @@ imageDB.init().then(() => console.log("📸 База фото готова"));
   </body>
 
 </html>
+
 
 
 
