@@ -3053,7 +3053,7 @@ body {
         <button class="tab-btn" onclick="switchTab('clients')">👥 Клиенты</button>
         <button class="tab-btn" onclick="switchTab('colors')">🎨 Лаборатория цвета</button>
         <button class="tab-btn" onclick="switchTab('shapes')">🔢 Фигуры (SVG)</button>
-      <button class="tab-btn" onclick="switchTab('archive')">🗄️ Архив</button>
+        <button class="tab-btn" onclick="switchTab('archive')">🗄️ Архив</button>
       
         
         <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div>
@@ -7335,7 +7335,7 @@ function clearOrderImage() {
     if (btn) btn.style.display = 'none';
 }
 
-// --- 2. ПРОСМОТР РЕФЕРЕНСА НА ВЕСЬ ЭКРАН ---
+
 // --- 2. ПРОСМОТР РЕФЕРЕНСА (УМНЫЙ: КЭШ + ОБЛАКО) ---
 async function viewOrderRef(orderId) {
     const order = productionQueue.find(o => o.id === orderId);
@@ -9804,6 +9804,8 @@ async function deleteOrderFromHistory(clientId, orderId) { // Добавили a
         if (snapshot.exists()) { snapshot.forEach(child => child.ref.remove()); }
     });
 }
+
+     
 // 2. Редактирование заказа (через prompt для быстроты или можно вызвать модалку)
 function editOrderInHistory(clientId, orderId) {
     const order = clientsDataLocal[clientId].history[orderId];
@@ -13650,7 +13652,7 @@ async function editOrderFromQueue(id) {
     // 4. Открываем окно
     document.getElementById('orderFinalizeModal').style.display = 'flex';
   checkDateLoad();
-
+}
 // ==========================================
 // 🔙 НАВИГАЦИЯ КНОПКОЙ "НАЗАД" (СТАНДАРТНАЯ)
 // ==========================================
@@ -13894,6 +13896,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
