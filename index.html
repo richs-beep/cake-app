@@ -321,6 +321,139 @@ async function apiSaveDataImpl(sheetName, data) {
     }
 }
 
+      // --- 5. РАБОТА С ФОТОГРАФИЯМИ (GOOGLE DRIVE) ---
+
+// А. Найти или создать папку для фото
+async function apiGetPhotoFolderId() {
+    try {
+        // Ищем папку
+        const q = "mimeType = 'application/vnd.google-apps.folder' and name = 'CakePro_Photos' and trashed = false";
+        const response = await gapi.client.drive.files.list({ q: q, fields: 'files(id)', spaces: 'drive' });
+        
+        if (response.result.files && response.result.files.length > 0) {
+            return response.result.files[0].id; // Папка уже есть
+        } else {
+            // Создаем папку
+            const fileMetadata = {
+                'name': 'CakePro_Photos',
+                'mimeType': 'application/vnd.google-apps.folder'
+            };
+            const folder = await gapi.client.drive.files.create({
+                resource: fileMetadata,
+                fields: 'id'
+            });
+            console.log('📁 Создана папка для фото:', folder.result.id);
+            return folder.result.id;
+        }
+    } catch (e) {
+        console.error("Ошибка папки фото:", e);
+        return null;
+    }
+}
+
+      // Г. Удалить файл с Диска (Навсегда)
+async function apiDeleteFileFromDrive(fileId) {
+    try {
+        await gapi.client.drive.files.delete({
+            fileId: fileId
+        });
+        console.log('🗑️ Фото удалено с Диска:', fileId);
+        return true;
+    } catch (e) {
+        console.error("Ошибка удаления фото с Диска:", e);
+        return false;
+    }
+}
+
+// Б. Загрузить фото (Base64 -> Drive)
+async function apiUploadPhotoToDrive(base64Data, filename) {
+    try {
+        const folderId = await apiGetPhotoFolderId();
+        if (!folderId) return null;
+
+        // 1. Конвертируем Base64 в BLOB
+        // (Base64 приходит в формате "data:image/jpeg;base64,/9j/4AAQSk...")
+        const boundary = '-------314159265358979323846';
+        const delimiter = "\r\n--" + boundary + "\r\n";
+        const close_delim = "\r\n--" + boundary + "--";
+
+        // Очищаем заголовок data:image/...
+        const contentType = 'image/jpeg';
+        const base64Content = base64Data.split(',')[1];
+
+        // Метаданные файла
+        const metadata = {
+            'name': filename,
+            'mimeType': contentType,
+            'parents': [folderId]
+        };
+
+        // Собираем тело запроса (Multipart)
+        const multipartRequestBody =
+            delimiter +
+            'Content-Type: application/json\r\n\r\n' +
+            JSON.stringify(metadata) +
+            delimiter +
+            'Content-Type: ' + contentType + '\r\n' +
+            'Content-Transfer-Encoding: base64\r\n' +
+            '\r\n' +
+            base64Content +
+            close_delim;
+
+        // Отправляем запрос
+        const request = gapi.client.request({
+            'path': '/upload/drive/v3/files',
+            'method': 'POST',
+            'params': {'uploadType': 'multipart'},
+            'headers': {
+                'Content-Type': 'multipart/related; boundary="' + boundary + '"'
+            },
+            'body': multipartRequestBody
+        });
+
+        const response = await request;
+        console.log('☁️ Фото загружено на Диск:', response.result.id);
+        return response.result.id; // Возвращаем ID файла на Диске
+
+    } catch (e) {
+        console.error("Ошибка загрузки фото:", e);
+        return null;
+    }
+}
+
+// В. Скачать фото (Drive ID -> Base64 для отображения)
+async function apiDownloadPhotoFromDrive(fileId) {
+    try {
+        const response = await gapi.client.drive.files.get({
+            fileId: fileId,
+            alt: 'media'
+        });
+        // Google возвращает сырые данные. Нужно превратить их в Base64.
+        // GAPI клиент иногда возвращает body, иногда result.
+        // Самый надежный способ для картинок в браузере - через fetch с токеном, 
+        // но попробуем штатный, если он вернет текст.
+        
+        // ВАРИАНТ ЧЕРЕЗ FETCH (Надежнее для бинарников)
+        const token = gapi.client.getToken().access_token;
+        const fetchResp = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const blob = await fetchResp.blob();
+        
+        // Blob -> Base64
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+
+    } catch (e) {
+        console.error("Ошибка скачивания фото:", e);
+        return null;
+    }
+}
+
     // 4. Расчет торта (Локально)
     function apiCalculateOrderImpl(data) {
         try {
@@ -2920,6 +3053,7 @@ body {
         <button class="tab-btn" onclick="switchTab('clients')">👥 Клиенты</button>
         <button class="tab-btn" onclick="switchTab('colors')">🎨 Лаборатория цвета</button>
         <button class="tab-btn" onclick="switchTab('shapes')">🔢 Фигуры (SVG)</button>
+      <button class="tab-btn" onclick="switchTab('archive')">🗄️ Архив</button>
       
         
         <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div>
@@ -2974,6 +3108,34 @@ body {
                 </tbody>
             </table>
         </div>
+    </div>
+</div>
+
+      <div id="tab-archive" class="tab-content" style="display:none;">
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <h2>🗄️ Архив заказов</h2>
+            <div style="font-size:12px; color:#666;">
+                Всего: <b id="archiveTotalCount">0</b>
+            </div>
+        </div>
+
+        <div style="background:#f5f5f5; padding:10px; border-radius:8px; margin-bottom:15px; display:flex; gap:10px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:120px;">
+                <span class="form-label">С даты:</span>
+                <input type="date" id="archiveDateStart" onchange="renderArchive()">
+            </div>
+            <div style="flex:1; min-width:120px;">
+                <span class="form-label">По дату:</span>
+                <input type="date" id="archiveDateEnd" onchange="renderArchive()">
+            </div>
+            <div style="flex:2; min-width:200px;">
+                <span class="form-label">Поиск (Имя, Начинка):</span>
+                <input type="text" id="archiveSearch" placeholder="🔍 Найти..." oninput="renderArchive()">
+            </div>
+        </div>
+
+        <div id="archiveContainer"></div>
     </div>
 </div>
 
@@ -3076,9 +3238,12 @@ body {
                 <input type="hidden" id="orderClientId">
             </div>
             <div class="form-group">
-                <span class="form-label">📅 Дата сдачи</span>
-                <input type="date" id="orderDeadline">
-            </div>
+    <span class="form-label">📅 Дата сдачи</span>
+    
+    <input type="date" id="orderDeadline" onchange="checkDateLoad()" required>
+
+    <div id="dateLoadIndicator" style="margin-top: 5px; font-size: 13px; font-weight: bold; display: none; padding: 5px; border-radius: 4px;"></div>
+</div>
         </div>
 
         <div class="form-row">
@@ -3555,6 +3720,28 @@ body {
         <button class="del-btn" onclick="clearQueue()" style="font-size:12px; background:#ffebee; padding:5px 10px; border-radius:4px;">🗑️ Очистить</button>
     </div>
 </div>
+
+          <div id="tab-production" class="tab-content" style="display:none;">
+        <div class="card">
+           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">
+              <h2 style="margin:0; border:none; padding:0;">🏭 План (Очередь)</h2>
+              <div>
+                 <button class="add-btn-small" onclick="openBookingModal()" style="background:#FF9800; margin-right:10px; padding:6px 12px; font-size:13px;">📅 Забронировать дату</button>
+                 <button class="del-btn" onclick="clearQueue()" style="font-size:12px; background:#ffebee; padding:5px 10px; border-radius:4px;">🗑️ Очистить</button>
+              </div>
+           </div>
+
+           <div style="margin-bottom: 15px; position: relative;">
+               <input type="text" id="orderSearchInput" 
+                      placeholder="🔍 Имя, телефон или начинка..." 
+                      oninput="filterOrders()"
+                      style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px;">
+               
+               <span id="searchClearBtn" onclick="clearSearch()" 
+                     style="position: absolute; right: 10px; top: 12px; cursor: pointer; display: none; color: #999;">✖</span>
+           </div>
+          
+          
            <div id="queueContainer" style="margin-bottom:20px;">
                <div style="color:#999; text-align:center; padding:20px; border: 2px dashed #ddd; border-radius: 8px;">В плане пусто.<br>Рассчитайте торт и нажмите "➕ В план"</div>
            </div>
@@ -4255,6 +4442,9 @@ let laborSort = { field: 'name', dir: 'asc' }; // Для работ
     
     if(t === 'clients') {
         renderClientsCloud(); 
+    }
+       if(t === 'archive') {
+        renderArchive();
     }
 }
 
@@ -6399,6 +6589,84 @@ function renderQueue() {
     finalHtml += `</div>`; // Закрываем сетку
     c.innerHTML = finalHtml;
 }
+
+// --- 🔍 ПОИСК ПО ЗАКАЗАМ ---
+function filterOrders() {
+    const term = document.getElementById('orderSearchInput').value.toLowerCase().trim();
+    const clearBtn = document.getElementById('searchClearBtn');
+    
+    // Показываем/скрываем крестик
+    if (clearBtn) clearBtn.style.display = term ? 'block' : 'none';
+
+    if (!term) {
+        // Если пусто - показываем всё (сортируем как обычно)
+        renderQueue(productionQueue); 
+        return;
+    }
+
+    // Фильтруем массив
+    const filtered = productionQueue.filter(order => {
+        // Ищем совпадения в: Имени, Телефоне, Названии торта, Дате
+        const nameMatch = (order.name || '').toLowerCase().includes(term);
+        const phoneMatch = (order.phone || '').includes(term);
+        const dateMatch = (order.date || '').includes(term);
+        
+        // Для поиска по начинке нужно заглянуть внутрь объекта data (если он есть)
+        let cakeMatch = false;
+        if (order.data && order.data.name) {
+            cakeMatch = order.data.name.toLowerCase().includes(term);
+        }
+
+        return nameMatch || phoneMatch || dateMatch || cakeMatch;
+    });
+
+    // Рендерим отфильтрованный список
+    renderQueue(filtered);
+}
+
+// --- 🚦 ПРОВЕРКА ЗАГРУЖЕННОСТИ ДАТЫ ---
+function checkDateLoad() {
+    const dateInput = document.getElementById('orderDeadline');
+    const indicator = document.getElementById('dateLoadIndicator');
+    
+    if (!dateInput || !indicator) return;
+    
+    const selectedDate = dateInput.value;
+    if (!selectedDate) {
+        indicator.style.display = 'none';
+        return;
+    }
+
+    // Считаем заказы на эту дату (исключая тот, который мы сейчас редактируем, если это правка)
+    // editingOrderId - это переменная из нашего прошлого шага
+    const count = productionQueue.filter(o => o.date === selectedDate && o.id !== editingOrderId).length;
+
+    indicator.style.display = 'block';
+
+    if (count === 0) {
+        indicator.style.background = '#E8F5E9'; // Светло-зеленый
+        indicator.style.color = '#2E7D32';
+        indicator.innerHTML = `✅ Свободно (Заказов: 0)`;
+    } 
+    else if (count <= 2) {
+        indicator.style.background = '#FFF3E0'; // Светло-оранжевый
+        indicator.style.color = '#EF6C00';
+        indicator.innerHTML = `⚠️ Плотная запись (Уже есть: ${count})`;
+    } 
+    else {
+        indicator.style.background = '#FFEBEE'; // Светло-красный
+        indicator.style.color = '#C62828';
+        indicator.innerHTML = `🔥 ПЕРЕГРУЗ! (Уже заказов: ${count})`;
+        // Можно добавить вибрацию, чтобы привлечь внимание
+        if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    }
+}
+     
+function clearSearch() {
+    document.getElementById('orderSearchInput').value = '';
+    filterOrders(); // Сброс фильтра
+}
+  
 // Переключение даты
 function setDateFilter(date) {
     activeDateFilter = date;
@@ -6457,15 +6725,25 @@ function clearQueue() {
     }
 }
 
-     function removeFromQueue(id, askConfirm = true) {
+    async function removeFromQueue(id, askConfirm = true) { // Добавили async
     const idx = productionQueue.findIndex(item => item.id === id);
     if (idx === -1) return;
 
     if(askConfirm && !confirm("Удалить из плана безвозвратно?")) return;
 
+    const order = productionQueue[idx];
+
+    // 1. Удаляем фото с Диска (если оно успело туда улететь)
+    if (order.refImage && order.refImage.startsWith('DRIVE:')) {
+        const fileId = order.refImage.split(':')[1];
+        apiDeleteFileFromDrive(fileId); // Запускаем и не ждем (фоном)
+    }
+
+    // 2. Удаляем локально
     saveToHistory();
     productionQueue.splice(idx, 1);
-    imageDB.delete(id);
+    imageDB.delete(id); // Удаляем из кэша телефона
+    
     saveQueue();
     updateQueueBadge();
 }
@@ -6729,6 +7007,7 @@ function addToQueue() {
     });
     clearOrderImage(); // <--- ДОБАВИТЬ
     document.getElementById('orderFinalizeModal').style.display = 'flex';
+  checkDateLoad();
 }
 
 // 2. Логика выбора клиента (авто-определение ID по имени)
@@ -6895,9 +7174,45 @@ async function confirmAddToQueueWithClient() {
     };
 
     // --- СОХРАНЕНИЕ ФОТО ---
+   // --- СОХРАНЕНИЕ ФОТО (ГИБРИДНОЕ) ---
+    // 1. Всегда сохраняем локально (для скорости)
     if (currentOrderImageBase64) {
         imageDB.save(orderData.id, currentOrderImageBase64);
+        
+        // 2. Пытаемся загрузить в Облако (фоном, чтобы не тормозить интерфейс)
+        // Но лучше подождать пару секунд, чтобы получить ID файла сразу.
+        
+        // Показываем пользователю, что идет загрузка
+        const btn = document.querySelector('#orderFinalizeModal .main-btn');
+        const oldText = btn.innerText;
+        btn.innerText = "☁️ Грузим фото...";
+        btn.disabled = true;
+
+        try {
+            const fileName = `Order_${orderData.id}_${clientName}.jpg`;
+            const driveFileId = await apiUploadPhotoToDrive(currentOrderImageBase64, fileName);
+            
+            if (driveFileId) {
+                orderData.refImage = 'DRIVE:' + driveFileId;
+            } else {
+                // Если не вышло, оставляем локальную метку
+                orderData.refImage = 'LOCAL_DB'; 
+            }
+        } catch(e) {
+            console.log('Ошибка облака, фото останется локально');
+            orderData.refImage = 'LOCAL_DB';
+        }
+        
+        btn.innerText = oldText;
+        btn.disabled = false;
     } 
+    // Если фото не меняли при редактировании, оставляем старую ссылку (DRIVE:... или LOCAL_DB)
+    else if (editingOrderId) {
+        const oldOrder = productionQueue.find(o => o.id === editingOrderId);
+        if (oldOrder && oldOrder.refImage) {
+            orderData.refImage = oldOrder.refImage;
+        }
+    }
     // Если редактируем и фото не меняли - оно остается в базе по тому же ID, ничего делать не надо.
 
     // --- ОБНОВЛЕНИЕ ОЧЕРЕДИ ---
@@ -7021,23 +7336,52 @@ function clearOrderImage() {
 }
 
 // --- 2. ПРОСМОТР РЕФЕРЕНСА НА ВЕСЬ ЭКРАН ---
-// --- 2. ПРОСМОТР РЕФЕРЕНСА (ИЗ ЛОКАЛЬНОЙ БАЗЫ) ---
+// --- 2. ПРОСМОТР РЕФЕРЕНСА (УМНЫЙ: КЭШ + ОБЛАКО) ---
 async function viewOrderRef(orderId) {
     const order = productionQueue.find(o => o.id === orderId);
     if (!order) return;
 
     let imageUrl = null;
+    const loader = document.getElementById('loadingOverlay');
 
-    // Вариант 1: Это старый заказ, где фото лежит прямо внутри (текстом)
-    if (order.refImage && order.refImage.startsWith('data:image')) {
-        imageUrl = order.refImage;
-    } 
-    // Вариант 2: Это новый заказ, фото в базе телефона
-    else if (order.refImage === 'LOCAL_DB') {
-        try {
-            // Достаем из базы
-            imageUrl = await imageDB.get(orderId);
-        } catch (e) { console.error(e); }
+    try {
+        // 1. Сначала ищем в локальном кэше (быстро)
+        const localData = await imageDB.get(orderId);
+        
+        if (localData) {
+            imageUrl = localData;
+            console.log('📸 Фото взято из кэша телефона');
+        } 
+        // 2. Если нет локально, но есть ссылка на Диск
+        else if (order.refImage && order.refImage.startsWith('DRIVE:')) {
+            const fileId = order.refImage.split(':')[1];
+            
+            // Показываем лоадер, так как скачивание может занять 1-2 сек
+            if(loader) {
+                loader.style.display = 'flex';
+                document.getElementById('dbStatus').innerText = "☁️ Скачивание фото...";
+            }
+
+            const cloudData = await apiDownloadPhotoFromDrive(fileId);
+            
+            if(loader) loader.style.display = 'none';
+
+            if (cloudData) {
+                imageUrl = cloudData;
+                // Сохраняем в локальный кэш, чтобы в следующий раз не качать
+                imageDB.save(orderId, cloudData); 
+                console.log('☁️ Фото скачано с Диска');
+            }
+        }
+        // 3. Старый формат (Base64 внутри JSON)
+        else if (order.refImage && order.refImage.startsWith('data:image')) {
+            imageUrl = order.refImage;
+        }
+
+    } catch (e) {
+        console.error(e);
+        if(loader) loader.style.display = 'none';
+        alert("Ошибка загрузки фото: " + e.message);
     }
 
     // Показываем
@@ -7046,7 +7390,7 @@ async function viewOrderRef(orderId) {
         container.innerHTML = `<img src="${imageUrl}" style="max-width:100%; max-height:100%; object-fit:contain; box-shadow:0 0 20px rgba(0,0,0,0.5);">`;
         document.getElementById('cakeLightbox').style.display = 'flex';
     } else {
-        alert("⚠️ Фото не найдено на этом устройстве.");
+        alert("⚠️ Фото не найдено (ни в телефоне, ни в облаке).");
     }
 }
 
@@ -9375,7 +9719,7 @@ function deleteClientCloud(id) {
 }
 
 // --- 1. УДАЛЕНИЕ ЗАКАЗА (МГНОВЕННЫЙ ПЕРЕСЧЕТ) ---
-function deleteOrderFromHistory(clientId, orderId) {
+async function deleteOrderFromHistory(clientId, orderId) { // Добавили async
     // 1. Получаем данные
     const client = clientsDataLocal[clientId];
     if (!client || !client.history || !client.history[orderId]) return;
@@ -9391,10 +9735,9 @@ function deleteOrderFromHistory(clientId, orderId) {
         returnProducts = confirm(`📦 ВЕРНУТЬ продукты на склад?\n\n[ОК] - Да, вернуть остатки\n[Отмена] - Нет, оставить списанными`);
     }
 
-    // --- МГНОВЕННОЕ ОБНОВЛЕНИЕ ИНТЕРФЕЙСА (OPTIMISTIC UPDATE) ---
+    // --- МГНОВЕННОЕ ОБНОВЛЕНИЕ ИНТЕРФЕЙСА ---
     
     // А. Склад (Локально)
-    let logBatch = {};
     if (returnProducts) {
         let returnedCount = 0;
         order.data.shoppingList.forEach(shopItem => {
@@ -9403,67 +9746,62 @@ function deleteOrderFromHistory(clientId, orderId) {
                 const amountToAdd = parseFloat(shopItem.amount);
                 ing.stock = (parseFloat(ing.stock) || 0) + amountToAdd;
                 returnedCount++;
-                
-                // Готовим журнал для отправки
+                // ... (лог в историю склада) ...
                 const logId = 'log_' + Date.now() + Math.random().toString().substr(2, 5);
                 stockHistory.push({
-                    id: logId,
-                    date: new Date().toISOString(),
-                    type: 'procurement', // Возврат считаем как приход
-                    item: ing.name,
-                    diff: `+${amountToAdd} ${ing.unit}`,
-                    balance: `${parseFloat(ing.stock.toFixed(2))} ${ing.unit}`,
-                    comment: `Возврат: Удаление заказа`
+                    id: logId, date: new Date().toISOString(), type: 'procurement',
+                    item: ing.name, diff: `+${amountToAdd} ${ing.unit}`,
+                    balance: `${parseFloat(ing.stock.toFixed(2))} ${ing.unit}`, comment: `Возврат: Удаление заказа`
                 });
             }
         });
-        if (returnedCount > 0) alert(`✅ На склад возвращено позиций: ${returnedCount} (Сохраняем...)`);
+        if (returnedCount > 0) alert(`✅ На склад возвращено позиций: ${returnedCount}`);
     }
 
-    // Б. Клиент и Сумма (Локально)
-    // Удаляем из локальной памяти
+    // Б. Удаляем фото (Локально + Диск)
+    // 1. Из кэша телефона
+    imageDB.delete(orderId);
+
+    // 2. С Гугл Диска (НОВОЕ!)
+    if (order.refImage && order.refImage.startsWith('DRIVE:')) {
+        const fileId = order.refImage.split(':')[1];
+        // Мы не спрашиваем подтверждение второй раз, считаем что при удалении заказа мусор не нужен
+        console.log("Удаляем фото с диска...");
+        await apiDeleteFileFromDrive(fileId); 
+    }
+
+    // В. Клиент и Сумма
     delete clientsDataLocal[clientId].history[orderId];
 
-    // Пересчитываем сумму (LTV) по оставшимся заказам
+    // Пересчет суммы
     let newLocalTotal = 0;
     const hist = clientsDataLocal[clientId].history || {};
     Object.values(hist).forEach(o => newLocalTotal += (parseFloat(o.price) || 0));
-    
-    // Обновляем локальный объект
     clientsDataLocal[clientId].totalSpend = newLocalTotal;
 
-    // В. Обновляем экран ПРЯМО СЕЙЧАС
+    // Обновляем экран
     const spendDiv = document.getElementById('clientTotalSpend');
     const symbol = SYMBOLS[currentCurrency] || '';
     if (spendDiv) {
          spendDiv.innerHTML = `Заказов на: <b>${newLocalTotal.toLocaleString()} ${symbol}</b> <span onclick="forceRecalcClient('${clientId}')" style="cursor:pointer; margin-left:8px; font-size:14px;" title="Пересчитать">🔄</span>`;
     }
     
-    // Перерисовываем список истории
     renderClientOrdersHistory(clientId);
-    // Перерисовываем список клиентов (чтобы там тоже обновилась сумма и бейдж)
     renderClientsCloud();
 
-
-    // --- ФОНОВАЯ ОТПРАВКА В БАЗУ (В КОНЦЕ) ---
-    
-    // 1. Отправляем склад и журнал (если надо)
+    // --- ФОНОВАЯ ОТПРАВКА В БАЗУ ---
     if (returnProducts) {
-        saveIngs(); // Сохраняет ингредиенты
+        saveIngs(); 
         saveToCloud('history_stock', stockHistory);
     }
 
-    // 2. Удаляем заказ у клиента и обновляем его сумму
-    db.ref(`clients/${clientId}/history/${orderId}`).remove();
-    db.ref(`clients/${clientId}/totalSpend`).set(newLocalTotal);
+    // Удаляем из Firebase/Таблицы
+    // Тут мы просто сохраняем клиента целиком, так надежнее
+    saveToCloud('clients', clientsDataLocal);
 
-    // 3. Удаляем из архива (с учетом предупреждения про индекс)
-    // Используем прямой путь, если знаем ID, так быстрее и без поиска
-    // Но так как архив плоский или мы не знаем ключ архива, оставим поиск, но он уже не заблокирует экран
+    // Чистим архив (если используете отдельный лист архива)
     db.ref('archive').orderByChild('id').equalTo(orderId).once('value', snapshot => {
-        if (snapshot.exists()) {
-            snapshot.forEach(child => child.ref.remove());
-        }
+        if (snapshot.exists()) { snapshot.forEach(child => child.ref.remove()); }
     });
 }
 // 2. Редактирование заказа (через prompt для быстроты или можно вызвать модалку)
@@ -13311,7 +13649,7 @@ async function editOrderFromQueue(id) {
 
     // 4. Открываем окно
     document.getElementById('orderFinalizeModal').style.display = 'flex';
-}
+  checkDateLoad();
 
 // ==========================================
 // 🔙 НАВИГАЦИЯ КНОПКОЙ "НАЗАД" (СТАНДАРТНАЯ)
@@ -13389,6 +13727,160 @@ function closeAnyOpenWindow() {
     }
     return false;
 }
+
+     // ==========================================
+// 🗄️ ЛОГИКА АРХИВА
+// ==========================================
+
+function initArchiveDates() {
+    // По умолчанию ставим: Начало месяца - Сегодня
+    const date = new Date();
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+    
+    // Форматируем YYYY-MM-DD
+    const toIso = (d) => d.toISOString().split('T')[0];
+    
+    const startEl = document.getElementById('archiveDateStart');
+    const endEl = document.getElementById('archiveDateEnd');
+    
+    if (startEl && endEl) {
+        startEl.value = toIso(firstDay);
+        endEl.value = toIso(date);
+    }
+}
+
+// Запускаем установку дат один раз при старте
+document.addEventListener('DOMContentLoaded', initArchiveDates);
+
+
+function renderArchive() {
+    const container = document.getElementById('archiveContainer');
+    const countEl = document.getElementById('archiveTotalCount');
+    
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    // Берем фильтры
+    const startStr = document.getElementById('archiveDateStart').value;
+    const endStr = document.getElementById('archiveDateEnd').value;
+    const search = document.getElementById('archiveSearch').value.toLowerCase().trim();
+    
+    const startDate = startStr ? new Date(startStr) : new Date('2020-01-01');
+    const endDate = endStr ? new Date(endStr) : new Date();
+    // Конец дня
+    endDate.setHours(23, 59, 59); 
+
+    // Фильтруем
+    let filtered = archiveOrders.filter(ord => {
+        // 1. Проверка даты (completedAt или date)
+        // Обычно в архиве есть completedAt, но если нет - берем плановую дату
+        const dStr = ord.completedAt || ord.date; 
+        if (!dStr) return false;
+        
+        const d = new Date(dStr);
+        if (d < startDate || d > endDate) return false;
+        
+        // 2. Поиск
+        if (search) {
+            const text = (ord.name + ' ' + ord.reason + ' ' + (ord.desc||'')).toLowerCase();
+            // Ищем также в составе (если есть data)
+            let tiersText = "";
+            if (ord.data && ord.data.tiers) {
+                tiersText = ord.data.tiers.map(t => t.recipeName).join(' ').toLowerCase();
+            }
+            return text.includes(search) || tiersText.includes(search);
+        }
+        
+        return true;
+    });
+
+    // Сортировка: Новые сверху
+    filtered.sort((a, b) => {
+        const dA = new Date(a.completedAt || a.date);
+        const dB = new Date(b.completedAt || b.date);
+        return dB - dA;
+    });
+
+    countEl.innerText = filtered.length;
+
+    if (filtered.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:30px; color:#999;">Ничего не найдено 🤷‍♂️</div>';
+        return;
+    }
+
+    // Рендер карточек
+    filtered.forEach(item => {
+        const dateStr = item.completedAt ? new Date(item.completedAt).toLocaleDateString() : item.date;
+        const price = Math.round(item.price).toLocaleString();
+        
+        // Описание торта
+        let cakeDesc = "Нет данных о составе";
+        if (item.data && item.data.tiers) {
+            cakeDesc = item.data.tiers.map((t, i) => {
+                const size = (item.data.geometry.shape === 'rectangle') 
+                             ? `${Math.round(t.d)}x${Math.round(t.w)}` 
+                             : `D${Math.round(t.d)}`;
+                return `<b>${t.recipeName}</b> (${size})`;
+            }).join(', ');
+        } else if (item.desc) {
+            cakeDesc = item.desc;
+        }
+
+        // Кнопка фото (если есть)
+        let photoBtn = '';
+        if (item.refImage) {
+            photoBtn = `<button onclick="viewOrderRef('${item.id}')" style="background:#E3F2FD; color:#1565C0; border:none; padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer; font-weight:bold;">📷 Фото</button>`;
+        }
+
+        container.innerHTML += `
+        <div style="background:white; border:1px solid #eee; border-left:4px solid #9E9E9E; border-radius:6px; padding:10px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <div style="font-size:12px; color:#666;">📅 ${dateStr}</div>
+                <div style="font-weight:bold; color:#333;">${price} ${SYMBOLS[currentCurrency]||''}</div>
+            </div>
+            
+            <div style="font-size:14px; font-weight:bold; margin-bottom:3px; color:#000;">
+                ${item.name} <span style="font-weight:normal; color:#666;">(${item.reason || 'Заказ'})</span>
+            </div>
+            
+            <div style="font-size:13px; color:#444; margin-bottom:10px; line-height:1.4;">
+                ${cakeDesc} <span style="background:#f5f5f5; padding:1px 5px; border-radius:4px; font-size:11px;">${item.weight} кг</span>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed #eee; padding-top:8px;">
+                <div>${photoBtn}</div>
+                <button onclick="repeatOrder('${item.id}')" style="background:#E8F5E9; color:#2E7D32; border:1px solid #C8E6C9; padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer; font-weight:bold;">🔄 Повторить</button>
+            </div>
+        </div>`;
+    });
+}
+
+// Функция повтора заказа (Копирует из архива в План)
+function repeatOrder(id) {
+    const oldOrder = archiveOrders.find(o => o.id === id);
+    if (!oldOrder) return;
+
+    if (!confirm(`Создать копию заказа "${oldOrder.reason}" для ${oldOrder.name} в План?`)) return;
+
+    // Создаем копию
+    const newOrder = JSON.parse(JSON.stringify(oldOrder));
+    
+    newOrder.id = 'ord_' + Date.now(); // Новый ID
+    newOrder.date = new Date().toISOString().split('T')[0]; // Дата - сегодня
+    newOrder.status = 'pending'; // Статус - в ожидании
+    delete newOrder.completedAt; // Убираем дату завершения
+    
+    // Сбрасываем прогресс
+    newOrder.progress = { bake: false, assemble: false, decor: false, pack: false };
+
+    // Добавляем в план
+    productionQueue.push(newOrder);
+    saveQueue();
+    
+    alert("✅ Заказ скопирован в План! Теперь вы можете его отредактировать (дату и детали).");
+    switchTab('production'); // Переходим в план
+}
     </script>
 
 <script>
@@ -13402,6 +13894,7 @@ function closeAnyOpenWindow() {
   </body>
 
 </html>
+
 
 
 
