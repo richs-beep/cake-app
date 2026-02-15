@@ -2803,6 +2803,46 @@ body {
 }
 
 .status-btn:active { transform: scale(0.95); }
+
+
+      /* --- СТИЛИ ДЛЯ ТЕХКАРТЫ (ВМЕСТО СПИСКА ПОКУПОК) --- */
+.recipe-view-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+.rv-header {
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #444;
+    background: #f5f5f5;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+}
+.rv-body {
+    padding: 8px 10px;
+    font-size: 12px;
+}
+.rv-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3px;
+    border-bottom: 1px dotted #f0f0f0;
+    padding-bottom: 2px;
+}
+.rv-row:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+/* Цветовое кодирование типов */
+.rv-type-filling { border-left: 4px solid #42A5F5; } /* Начинка - Синий */
+.rv-type-coating { border-left: 4px solid #795548; } /* Покрытие - Коричневый */
+.rv-type-extra   { border-left: 4px solid #FF9800; } /* Декор - Оранжевый */
     </style>
     
 
@@ -5034,6 +5074,7 @@ function renderSideControls(side) {
 
 
 // ОБНОВЛЕНИЕ СПИСКА ПОКУПОК (ПОД НОВУЮ СТРУКТУРУ)
+// ОБНОВЛЕНИЕ СПИСКА (ТЕПЕРЬ ЭТО РЕЦЕПТ / ТЕХКАРТА)
 function setActiveSide(side) {
     appState.activeSide = side;
     
@@ -5050,21 +5091,83 @@ function setActiveSide(side) {
     // 3. Обновляем Плавающий Футер (Мобильный)
     updateStickyFooter(side);
 
-    // 4. Отрисовка списка покупок (Старый код)
+    // 4. ОТРИСОВКА РЕЦЕПТА (Техкарты)
     const res = appState.results[side];
     if (!res) return;
 
-    const list = res.shoppingList;
+    // Меняем заголовок
+    const titleEl = document.getElementById('shopListTitle');
+    if(titleEl) {
+        titleEl.innerHTML = (side === 'Left' ? 'Вариант 1' : 'Вариант 2') + 
+                            ` <span style="font-size:12px; color:#999; font-weight:normal;">(Техкарта)</span>`;
+    }
+
+    const container = document.getElementById('shopListContainer');
+    container.innerHTML = '';
+    
+    // Меняем стиль сетки на одну колонку, так как рецепты шире
+    container.style.display = 'block'; 
+
+    if (!res.detailedBlocks || res.detailedBlocks.length === 0) {
+        container.innerHTML = '<div style="color:#999; text-align:center;">Нет данных</div>';
+        return;
+    }
+
     let html = '';
-    list.forEach(i => {
-        let formattedAmount = (i.amount < 10) ? i.amount.toFixed(1) : Math.round(i.amount);
-        if (parseFloat(formattedAmount) === 0 && i.amount > 0) formattedAmount = i.amount.toFixed(2);
-        html += `<div style="display:flex; justify-content:space-between; border-bottom:1px dotted #ccc; font-size:13px;">
-            <span>${i.name}</span><span><b>${formattedAmount}</b> ${i.unit}</span>
+
+    res.detailedBlocks.forEach(block => {
+        // Пропускаем пустые блоки
+        if (!block.ingredients || block.ingredients.length === 0) return;
+
+        // Определяем стиль и иконку
+        let typeClass = 'rv-type-filling';
+        let icon = '🍰';
+        const nameLow = block.name.toLowerCase();
+
+        if (block.type === 'coating') { 
+            typeClass = 'rv-type-coating'; 
+            icon = '🎨'; 
+        }
+        else if (block.type === 'extra') { 
+            typeClass = 'rv-type-extra'; 
+            icon = '📦'; 
+        }
+        else if (nameLow.includes('бисквит')) icon = '🍞';
+        else if (nameLow.includes('крем')) icon = '🥣';
+        else if (nameLow.includes('пропитка')) icon = '💧';
+        else if (nameLow.includes('конфи') || nameLow.includes('начинка')) icon = '🍓';
+
+        // Собираем ингредиенты
+        let rows = '';
+        block.ingredients.forEach(ing => {
+            // Форматируем число (убираем лишние нули)
+            let val = ing.amount;
+            // Округляем: если больше 10 - до целого, если меньше - до десятых
+            let valStr = (val > 10) ? Math.round(val) : parseFloat(val.toFixed(1));
+            
+            rows += `
+            <div class="rv-row">
+                <span>${ing.name}</span>
+                <span style="font-weight:bold; color:#333; white-space:nowrap;">${valStr} ${ing.unit}</span>
+            </div>`;
+        });
+
+        // Собираем карточку
+        // Пытаемся очистить имя от "Ярус 1: ..." для краткости, если это очевидно
+        // Но лучше оставить полностью для точности
+        
+        html += `
+        <div class="recipe-view-card ${typeClass}">
+            <div class="rv-header">
+                <span>${icon} ${block.name}</span>
+                </div>
+            <div class="rv-body">
+                ${rows}
+            </div>
         </div>`;
     });
-    document.getElementById('shopListContainer').innerHTML = html;
-    document.getElementById('shopListTitle').innerText = (side === 'Left' ? 'Вариант 1' : 'Вариант 2');
+
+    container.innerHTML = html;
 }
 
 // Новая функция для обновления футера
@@ -13203,6 +13306,85 @@ async function editOrderFromQueue(id) {
     document.getElementById('orderFinalizeModal').style.display = 'flex';
 }
 
+
+  // ==========================================
+// 🔙 УПРАВЛЕНИЕ КНОПКОЙ "НАЗАД" (ANDROID/iOS)
+// ==========================================
+
+// 1. При запуске ставим "ловушку" в историю
+window.addEventListener('load', function() {
+    window.history.pushState({ page: 'app' }, '', '');
+});
+
+// 2. Слушаем нажатие кнопки "Назад"
+window.addEventListener('popstate', function(event) {
+    
+    // --- ПРОВЕРКА: ЧТО СЕЙЧАС ОТКРЫТО? ---
+    
+    // А. Лайтбокс (Фото на весь экран)
+    const lightbox = document.getElementById('cakeLightbox');
+    const isLightboxOpen = lightbox && lightbox.style.display === 'flex';
+
+    // Б. Модальные окна (кроме загрузки)
+    // Ищем любой оверлей, который видим (display: flex/block), кроме лоадера
+    const openModal = Array.from(document.querySelectorAll('.modal-overlay')).find(el => {
+        const style = window.getComputedStyle(el);
+        return el.id !== 'loadingOverlay' && (style.display === 'flex' || style.display === 'block');
+    });
+
+    // В. Мобильный редактор рецептов (выезжающая панель)
+    const recipeLayout = document.querySelector('.recipe-layout.mobile-view-active');
+
+    // Г. Панель уведомлений
+    const notifPanel = document.getElementById('notifPanel');
+    const isNotifOpen = notifPanel && notifPanel.style.display === 'flex';
+
+    // --- ЛОГИКА ЗАКРЫТИЯ ---
+    let actionTaken = false;
+
+    if (isLightboxOpen) {
+        closeLightbox(); // Закрываем фото
+        actionTaken = true;
+    } 
+    else if (openModal) {
+        // Закрываем найденное модальное окно
+        openModal.style.display = 'none';
+        
+        // Если это было окно заказа, нужно сбросить режим редактирования
+        if (openModal.id === 'orderFinalizeModal' && typeof clearOrderImage === 'function') {
+            clearOrderImage();
+            editingOrderId = null; // Сброс глобальной переменной
+        }
+        actionTaken = true;
+    }
+    else if (recipeLayout) {
+        closeRecipeMobile(); // Возвращаемся к списку рецептов
+        actionTaken = true;
+    }
+    else if (isNotifOpen) {
+        notifPanel.style.display = 'none';
+        actionTaken = true;
+    }
+
+    // --- ФИНАЛ: ОСТАЕМСЯ ИЛИ ВЫХОДИМ? ---
+    
+    if (actionTaken) {
+        // Если мы что-то закрыли, значит пользователь хочет остаться в приложении.
+        // Но нажатие "Назад" "съело" нашу запись в истории.
+        // Срочно возвращаем "ловушку" обратно!
+        window.history.pushState({ page: 'app' }, '', '');
+    } else {
+        // Если закрывать нечего, значит мы на главном экране.
+        const exit = confirm("🚪 Выйти из приложения?");
+        if (!exit) {
+            // Если передумал - снова ставим ловушку, чтобы кнопка работала дальше
+            window.history.pushState({ page: 'app' }, '', '');
+        } else {
+            // Если нажал "ОК", ничего не делаем -> браузер выйдет сам (или можно window.history.back())
+        }
+    }
+});
+
     </script>
 
 <script>
@@ -13216,6 +13398,7 @@ async function editOrderFromQueue(id) {
   </body>
 
 </html>
+
 
 
 
