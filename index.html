@@ -2939,6 +2939,9 @@ body {
             <option value="RUB">₽</option>
             <option value="USD">$</option>
         </select>
+      <button onclick="manualExitApp()" style="background:none; border:none; font-size:18px; cursor:pointer; padding:0 5px;" title="Выйти из приложения">
+        🚪
+    </button>
     </div>
 </div>
 
@@ -13312,88 +13315,65 @@ async function editOrderFromQueue(id) {
     document.getElementById('orderFinalizeModal').style.display = 'flex';
 }
 
-
 // ==========================================
-// 🔙 КНОПКА "НАЗАД" (FIX: ЗАЩИТА ОТ ВЫЛЕТА)
+// 🔒 "ВЕЧНАЯ" БЛОКИРОВКА КНОПКИ НАЗАД
 // ==========================================
 
+// 1. При старте запускаем ловушку
 window.addEventListener('load', function() {
-    // Ставим первую "стену" при запуске
-    window.history.pushState({ page: 'app_root' }, '', window.location.href);
+    pushHistoryTrap();
 });
 
-window.addEventListener('popstate', function(event) {
-    // 1. САМОЕ ВАЖНОЕ:
-    // Как только нажали "Назад" — мы МГНОВЕННО ставим новую "стену".
-    // Мы не ждем проверки условий. Мы сначала запираем дверь, потом разбираемся.
-    window.history.pushState({ page: 'app_root' }, '', window.location.href);
+// Функция, которая ставит "стену" в истории
+function pushHistoryTrap() {
+    window.history.pushState({ page: 'app_trap' }, '', window.location.href);
+}
 
-    // 2. ПРОВЕРКА: Закрываем окна (Модалки, Фото)
+// 2. Слушаем нажатие "Назад"
+window.addEventListener('popstate', function(event) {
+    
+    // СРАЗУ ЖЕ восстанавливаем стену!
+    // Что бы ни случилось, следующее нажатие снова упрется в стену.
+    pushHistoryTrap();
+
+    // --- ЛОГИКА ВНУТРИ ПРИЛОЖЕНИЯ ---
+    
+    // 1. Если открыты окна - закрываем их
     if (closeAnyOpenWindow()) {
-        return; // Остаемся на месте
+        return; 
     }
 
-    // 3. ПРОВЕРКА: Если не Калькулятор — идем в Калькулятор
+    // 2. Если мы не на Калькуляторе - идем в Калькулятор
     const currentTab = document.querySelector('.nav-btn.active');
     if (currentTab && currentTab.id !== 'nav-tab1') {
         const calcBtn = document.getElementById('nav-tab1');
         if (calcBtn) calcBtn.click();
-        return; // Остаемся на месте (переключили вкладку)
+        return;
     }
 
-    // 4. ВЫХОД (с задержкой для надежности)
-    // Если мы дошли сюда, значит окон нет и мы на главной.
-    setTimeout(() => {
-        const shouldExit = confirm("🚪 Выйти из приложения?");
-        
-        if (shouldExit) {
-            // Если "ДА": Нам нужно отменить ту "стену", что мы поставили в шаге 1,
-            // и выйти реально. Поэтому отматываем историю на 2 шага назад.
-            window.history.go(-2); 
-        }
-        // Если "ОТМЕНА": Делать ничего не нужно. 
-        // "Стена" уже поставлена в шаге 1, поэтому следующее нажатие "Назад"
-        // снова попадет в эту же функцию.
-    }, 100);
+    // 3. ЕСЛИ МЫ НА ГЛАВНОЙ:
+    // Раньше мы спрашивали "Выйти?".
+    // ТЕПЕРЬ МЫ НЕ ДЕЛАЕМ НИЧЕГО.
+    // Пользователь нажал "Назад", но мы уже восстановили историю (строка 18).
+    // Он останется на экране. Выход запрещен.
+    
+    // Можно показать легкое уведомление (тост), чтобы он не думал, что телефон завис:
+    // showToast("Для выхода нажмите кнопку 🚪 вверху");
 });
 
-// Вспомогательная функция (без изменений)
-function closeAnyOpenWindow() {
-    // 1. Лайтбокс
-    const lightbox = document.getElementById('cakeLightbox');
-    if (lightbox && getComputedStyle(lightbox).display === 'flex') {
-        closeLightbox();
-        return true;
+// --- ФУНКЦИЯ РУЧНОГО ВЫХОДА (ДЛЯ КНОПКИ В ШАПКЕ) ---
+function manualExitApp() {
+    if (confirm("Вы действительно хотите выйти из приложения?")) {
+        // Вот тут мы разрешаем выход
+        // Отматываем историю далеко назад, чтобы пробить все наши ловушки
+        window.history.go(-100); 
+        // И пробуем закрыть окно (для надежности)
+        setTimeout(() => { window.close(); }, 100);
     }
-    // 2. Модалки
-    const visibleModal = Array.from(document.querySelectorAll('.modal-overlay')).find(el => {
-        const style = getComputedStyle(el);
-        return el.id !== 'loadingOverlay' && 
-               (style.display === 'flex' || style.display === 'block') &&
-               style.opacity !== '0' && style.visibility !== 'hidden';
-    });
-    if (visibleModal) {
-        visibleModal.style.display = 'none';
-        if (visibleModal.id === 'orderFinalizeModal') {
-            if (typeof clearOrderImage === 'function') clearOrderImage();
-            editingOrderId = null;
-        }
-        return true;
-    }
-    // 3. Рецепт (моб)
-    const recipeLayout = document.querySelector('.recipe-layout.mobile-view-active');
-    if (recipeLayout) {
-        closeRecipeMobile();
-        return true;
-    }
-    // 4. Уведомления
-    const notifPanel = document.getElementById('notifPanel');
-    if (notifPanel && getComputedStyle(notifPanel).display === 'flex') {
-        notifPanel.style.display = 'none';
-        return true;
-    }
-    return false;
 }
+
+// (Функция closeAnyOpenWindow остается старой, она у вас уже есть)
+// Если потерялась - скажите, я продублирую.
 
 
     </script>
@@ -13409,6 +13389,7 @@ function closeAnyOpenWindow() {
   </body>
 
 </html>
+
 
 
 
