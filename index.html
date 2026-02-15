@@ -2937,45 +2937,72 @@ body {
 
 .status-btn:active { transform: scale(0.95); }
 
-
-      /* --- СТИЛИ ДЛЯ ТЕХКАРТЫ (ВМЕСТО СПИСКА ПОКУПОК) --- */
+/* --- СТИЛИ ДЛЯ ТЕХКАРТЫ (КОМПАКТНЫЙ РЕЖИМ) --- */
 .recipe-view-card {
     background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 6px;
-    margin-bottom: 8px;
-    overflow: hidden;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    /* Убираем рамки карточек, оставляем только разделитель снизу */
+    border-bottom: 1px solid #eee; 
+    margin-bottom: 0; /* Убираем отступы между блоками */
+    padding: 8px 0;
 }
+
+/* Заголовок слоя (Бисквит, Крем) */
 .rv-header {
-    padding: 6px 10px;
-    font-size: 12px;
-    font-weight: 700;
+    padding: 0 0 4px 0;
+    font-size: 13px;
+    font-weight: 800;
     color: #444;
-    background: #f5f5f5;
-    border-bottom: 1px solid #eee;
+    background: none; /* Убираем серый фон */
+    border-bottom: none;
     display: flex;
-    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
 }
+
+/* Тело со списком */
 .rv-body {
-    padding: 8px 10px;
-    font-size: 12px;
+    padding: 0;
+    font-size: 13px;
 }
+
+/* Строка ингредиента */
 .rv-row {
     display: flex;
-    justify-content: space-between;
-    margin-bottom: 3px;
-    border-bottom: 1px dotted #f0f0f0;
-    padding-bottom: 2px;
+    align-items: baseline; /* Выравнивание по нижней границе текста */
+    width: 100%;
+    margin-bottom: 2px;
 }
-.rv-row:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
+
+/* Название ингредиента */
+.rv-name {
+    color: #555;
+    flex-shrink: 0; /* Не сжимать текст */
+    max-width: 70%; /* Чтобы длинное название не задавило вес */
 }
-/* Цветовое кодирование типов */
-.rv-type-filling { border-left: 4px solid #42A5F5; } /* Начинка - Синий */
-.rv-type-coating { border-left: 4px solid #795548; } /* Покрытие - Коричневый */
-.rv-type-extra   { border-left: 4px solid #FF9800; } /* Декор - Оранжевый */
+
+/* Точки-направляющие ................. */
+.rv-dots {
+    flex-grow: 1; /* Занимает всё свободное место */
+    border-bottom: 1px dotted #ccc; /* Сами точки */
+    margin: 0 4px;
+    position: relative;
+    top: -4px; /* Чуть поднять визуально */
+}
+
+/* Вес */
+.rv-val {
+    font-weight: 700;
+    color: #000;
+    flex-shrink: 0;
+    white-space: nowrap; /* Цифры не переносить */
+}
+
+/* Цветовые маркеры (тонкая полоска слева) */
+.recipe-view-card { border-left: 3px solid transparent; padding-left: 8px; }
+.rv-type-filling { border-left-color: #42A5F5; } /* Начинка - Синий */
+.rv-type-coating { border-left-color: #795548; } /* Покрытие - Коричневый */
+.rv-type-extra   { border-left-color: #FF9800; } /* Декор - Оранжевый */
+      
     </style>
     
 
@@ -5289,13 +5316,11 @@ function renderSideControls(side) {
     });
 }
 
-
-// ОБНОВЛЕНИЕ СПИСКА ПОКУПОК (ПОД НОВУЮ СТРУКТУРУ)
-// ОБНОВЛЕНИЕ СПИСКА (ТЕХКАРТА) - С КРАСИВЫМИ НОМЕРАМИ ЯРУСОВ
+// ОБНОВЛЕНИЕ СПИСКА (ТЕХКАРТА) - КОМПАКТНЫЙ ВИД С ТОЧКАМИ
 function setActiveSide(side) {
     appState.activeSide = side;
     
-    // 1. Переключаем колонки (и для ПК, и для Мобил)
+    // 1. Переключаем колонки
     document.querySelectorAll('.compare-col').forEach(e => e.classList.remove('active'));
     const col = document.getElementById('col-' + side);
     if(col) col.classList.add('active');
@@ -5328,16 +5353,13 @@ function setActiveSide(side) {
         return;
     }
 
-    // --- [НОВОЕ] Создаем карту перевода ID -> Номер яруса ---
+    // Создаем карту перевода ID -> Номер яруса
     const tierMap = {};
     if (res.tiers) {
-        // Проходим снизу вверх (0, 1, 2...)
         res.tiers.forEach((t, index) => {
-            // Запоминаем: ID "177..." это Ярус "1" (index + 1)
             tierMap[t.id] = index + 1;
         });
     }
-    // --------------------------------------------------------
 
     let html = '';
 
@@ -5345,9 +5367,11 @@ function setActiveSide(side) {
         if (!block.ingredients || block.ingredients.length === 0) return;
 
         let typeClass = 'rv-type-filling';
-        let icon = '🍰';
+        // Если хотите убрать иконки, оставьте icon пустой строкой
+        let icon = ''; 
         const nameLow = block.name.toLowerCase();
 
+        // Простая логика цветов
         if (block.type === 'coating') { typeClass = 'rv-type-coating'; icon = '🎨'; }
         else if (block.type === 'extra') { typeClass = 'rv-type-extra'; icon = '📦'; }
         else if (nameLow.includes('бисквит')) icon = '🍞';
@@ -5355,35 +5379,32 @@ function setActiveSide(side) {
         else if (nameLow.includes('пропитка')) icon = '💧';
         else if (nameLow.includes('конфи') || nameLow.includes('начинка')) icon = '🍓';
 
-        // --- [НОВОЕ] Очищаем название от длинных цифр ---
+        // Очищаем название
         let displayName = block.name;
-        
-        // Регулярное выражение ищет "Ярус" + пробелы + цифры
-        // И заменяет цифры на нормальный номер из нашей карты tierMap
         displayName = displayName.replace(/Ярус\s+(\d+)/g, (match, id) => {
             return tierMap[id] ? `Ярус ${tierMap[id]}` : match;
         });
         
-        // Также чистим покрытие, если там тоже ID (например "Покрытие (Ярус 177...)")
-        // Этот же regex сработает и там, но на всякий случай убедимся визуально
-        // ------------------------------------------------
-
         let rows = '';
         block.ingredients.forEach(ing => {
             let val = ing.amount;
             let valStr = (val > 10) ? Math.round(val) : parseFloat(val.toFixed(1));
             
+            // --- ГЕНЕРАЦИЯ СТРОКИ С ТОЧКАМИ ---
             rows += `
             <div class="rv-row">
-                <span>${ing.name}</span>
-                <span style="font-weight:bold; color:#333; white-space:nowrap;">${valStr} ${ing.unit}</span>
+                <div class="rv-name">${ing.name}</div>
+                <div class="rv-dots"></div>
+                <div class="rv-val">${valStr} ${ing.unit}</div>
             </div>`;
+            // ----------------------------------
         });
 
         html += `
         <div class="recipe-view-card ${typeClass}">
             <div class="rv-header">
-                <span>${icon} ${displayName}</span> </div>
+                ${icon} <span>${displayName}</span>
+            </div>
             <div class="rv-body">
                 ${rows}
             </div>
@@ -5392,6 +5413,7 @@ function setActiveSide(side) {
 
     container.innerHTML = html;
 }
+
 
 // Новая функция для обновления футера
 function updateStickyFooter(side) {
@@ -7151,16 +7173,30 @@ async function confirmAddToQueueWithClient() {
     
     // ... (код создания клиента тот же, сократил для краткости) ...
     // Авто-создание клиента (если новый)
+// --- ПОЛУЧАЕМ ДАННЫЕ ИЗ ФОРМЫ ---
+    const inputPhone = document.getElementById('orderPhone').value.trim();
+    const inputSocial = document.getElementById('orderSocial').value.trim();
+
+    // Авто-создание ИЛИ Обновление клиента
     if (!clientId) {
+        // 1. ЕСЛИ НОВЫЙ — СОЗДАЕМ
         clientId = 'c' + Date.now();
         clientsDataLocal[clientId] = {
             name: clientName,
-            phone: document.getElementById('orderPhone').value.trim(),
-            social: document.getElementById('orderSocial').value.trim(),
+            phone: inputPhone,
+            social: inputSocial,
             created: new Date().toISOString(),
             totalSpend: 0,
             history: {}
         };
+    } else {
+        // 2. ЕСЛИ СУЩЕСТВУЕТ — ОБНОВЛЯЕМ КОНТАКТЫ
+        if (clientsDataLocal[clientId]) {
+            clientsDataLocal[clientId].phone = inputPhone;
+            clientsDataLocal[clientId].social = inputSocial;
+            // Если имя в поиске исправили — обновим и имя
+            if (clientName) clientsDataLocal[clientId].name = clientName;
+        }
     }
 
     const prepStr = document.getElementById('orderPrepayment').value.replace(/\D/g, '');
@@ -14167,6 +14203,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
