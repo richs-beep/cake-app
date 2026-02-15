@@ -6625,7 +6625,55 @@ function handleClientSelection() {
             document.getElementById('orderSocial').value = '';
         }
 }
+// --- ФУНКЦИЯ ОПТИМИЗАЦИИ ДАННЫХ ПЕРЕД СОХРАНЕНИЕМ ---
+function optimizeOrderPayload(resData) {
+    // Делаем глубокую копию, чтобы не сломать то, что сейчас на экране
+    const data = JSON.parse(JSON.stringify(resData));
 
+    // Хелпер для округления
+    const round2 = (num) => Math.round((parseFloat(num) || 0) * 100) / 100;
+
+    // 1. Чистим общий список покупок
+    if (data.shoppingList) {
+        data.shoppingList = data.shoppingList.map(item => ({
+            id: item.id,
+            name: item.name,
+            amount: round2(item.amount), // Округляем вес
+            unit: item.unit,
+            cost: Math.ceil(item.cost),  // Округляем цену до целого
+            // УДАЛЯЕМ КБЖУ (p_tot, f_tot...) - они занимают 40% места!
+        }));
+    }
+
+    // 2. Чистим детализацию по блокам (для су-шефа)
+    if (data.detailedBlocks) {
+        data.detailedBlocks.forEach(block => {
+            // Округляем цену блока
+            block.totalCost = Math.ceil(block.totalCost);
+            
+            if (block.ingredients) {
+                block.ingredients = block.ingredients.map(ing => ({
+                    // Нам нужны только имя, вес, ед.изм и цена (для отчетов)
+                    // ID здесь не обязателен, если есть имя, но можно оставить для точности
+                    id: ing.id, 
+                    name: ing.name,
+                    amount: round2(ing.amount),
+                    unit: ing.unit,
+                    cost: Math.ceil(ing.cost)
+                }));
+            }
+        });
+    }
+    
+    // 3. Округляем итоговые веса и цены
+    if (data.weights) {
+        data.weights.total = round2(data.weights.total);
+        data.weights.filling = round2(data.weights.filling);
+        data.weights.coating = round2(data.weights.coating);
+    }
+    
+    return data;
+}
 // 3. Сохранение заказа и пересчет суммы
 // 3. Сохранение заказа и пересчет суммы (ИСПРАВЛЕНО: ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ)
 async function confirmAddToQueueWithClient() {
@@ -6668,7 +6716,7 @@ async function confirmAddToQueueWithClient() {
     const orderWeight = (res.weights.total / 1000).toFixed(2);
     const orderDate = document.getElementById('orderDeadline').value;
     const orderComment = document.getElementById('orderComment').value;
-
+    const cleanData = optimizeOrderPayload(res);
     const orderData = {
         id: 'ord_' + Date.now(),
         clientId: clientId,
@@ -6687,7 +6735,7 @@ async function confirmAddToQueueWithClient() {
         comment: orderComment,
         price: orderPrice,
         weight: orderWeight,
-        data: res,
+        data: cleanData,
         labor: JSON.parse(JSON.stringify(currentLaborList || [])),
         extras: JSON.parse(JSON.stringify(extrasList || [])),
         refImage: currentOrderImageBase64 ? 'LOCAL_DB' : null
@@ -13036,6 +13084,7 @@ imageDB.init().then(() => console.log("📸 База фото готова"));
   </body>
 
 </html>
+
 
 
 
