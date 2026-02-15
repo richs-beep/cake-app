@@ -4319,7 +4319,11 @@ body {
         </div>
     </div>
 </div>
-      
+
+      <div id="undoToast" style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#333; color:white; padding:12px 20px; border-radius:30px; z-index:10000; align-items:center; gap:15px; box-shadow:0 4px 15px rgba(0,0,0,0.3);">
+    <span id="undoToastText">Заказ удален</span>
+    <button onclick="executeUndoAction()" style="background:#FF9800; border:none; color:white; padding:5px 12px; border-radius:15px; cursor:pointer; font-weight:bold;">ОТМЕНИТЬ</button>
+</div>
    <script>
       // --- 1. GLOBAL VARIABLES & STATE ---
       const DEFAULT_INGS=[{id:"i1",name:"Яйцо С0",unit:"шт",packWeight:10,packPrice:600},{id:"i2",name:"Сахар",unit:"г",packWeight:1000,packPrice:800},{id:"i3",name:"Мука",unit:"г",packWeight:2000,packPrice:900},{id:"i4",name:"Сливки 33%",unit:"г",packWeight:1000,packPrice:2600},{id:"i5",name:"Творожный сыр",unit:"г",packWeight:2200,packPrice:5500},{id:"i6",name:"Шоколад темный",unit:"г",packWeight:1000,packPrice:6000}];
@@ -9761,9 +9765,10 @@ function deleteClientCloud(id) {
        saveToCloud('clients', clientsDataLocal); // Сохраняем в таблицу
    }
 }
+     let lastDeletedOrderData = null;
 
 // --- 1. УДАЛЕНИЕ ЗАКАЗА (МГНОВЕННЫЙ ПЕРЕСЧЕТ) ---
-async function deleteOrderFromHistory(clientId, orderId) { // Добавили async
+async function deleteOrderFromHistory(clientId, orderId) {
     // 1. Получаем данные
     const client = clientsDataLocal[clientId];
     if (!client || !client.history || !client.history[orderId]) return;
@@ -9771,13 +9776,25 @@ async function deleteOrderFromHistory(clientId, orderId) { // Добавили a
     const order = client.history[orderId];
 
     // 2. Подтверждение
-    if (!confirm(`⚠️ Вы уверены, что хотите удалить заказ "${order.reason || 'Торт'}" от ${order.date}?\n\nСумма клиента пересчитается, заказ исчезнет.`)) return;
+    if (!confirm(`⚠️ Вы уверены, что хотите удалить заказ "${order.reason || 'Торт'}" от ${order.date}?\n\nСумма клиента пересчитается, заказ исчезнет из истории и архива.`)) return;
     
-    // 3. Вопрос про склад (Синхронно)
+    // 3. Вопрос про склад
     let returnProducts = false;
     if (order.status === 'completed' && order.data && order.data.shoppingList) {
         returnProducts = confirm(`📦 ВЕРНУТЬ продукты на склад?\n\n[ОК] - Да, вернуть остатки\n[Отмена] - Нет, оставить списанными`);
     }
+
+    // --- ПОДГОТОВКА К UNDO (Снимок состояния) ---
+    // Сохраняем всё, чтобы можно было откатить: сам заказ, склад и индекс в архиве
+    const archiveIdx = archiveOrders.findIndex(o => o.id === orderId);
+    lastDeletedOrderData = {
+        order: JSON.parse(JSON.stringify(order)),
+        clientId: clientId,
+        archiveIndex: archiveIdx,
+        returnedProducts: returnProducts,
+        // Запоминаем текущие остатки на случай Undo
+        oldStockState: JSON.parse(JSON.stringify(myIngredients)) 
+    };
 
     // --- МГНОВЕННОЕ ОБНОВЛЕНИЕ ИНТЕРФЕЙСА ---
     
@@ -9790,7 +9807,7 @@ async function deleteOrderFromHistory(clientId, orderId) { // Добавили a
                 const amountToAdd = parseFloat(shopItem.amount);
                 ing.stock = (parseFloat(ing.stock) || 0) + amountToAdd;
                 returnedCount++;
-                // ... (лог в историю склада) ...
+                
                 const logId = 'log_' + Date.now() + Math.random().toString().substr(2, 5);
                 stockHistory.push({
                     id: logId, date: new Date().toISOString(), type: 'procurement',
@@ -9803,27 +9820,26 @@ async function deleteOrderFromHistory(clientId, orderId) { // Добавили a
     }
 
     // Б. Удаляем фото (Локально + Диск)
-    // 1. Из кэша телефона
     imageDB.delete(orderId);
-
-    // 2. С Гугл Диска (НОВОЕ!)
     if (order.refImage && order.refImage.startsWith('DRIVE:')) {
         const fileId = order.refImage.split(':')[1];
-        // Мы не спрашиваем подтверждение второй раз, считаем что при удалении заказа мусор не нужен
         console.log("Удаляем фото с диска...");
-        await apiDeleteFileFromDrive(fileId); 
+        apiDeleteFileFromDrive(fileId); // Удаляем без await, чтобы не ждать
     }
 
-    // В. Клиент и Сумма
+    // В. Удаление из КЛИЕНТА и ОБЩЕГО АРХИВА
     delete clientsDataLocal[clientId].history[orderId];
+    
+    if (archiveIdx !== -1) {
+        archiveOrders.splice(archiveIdx, 1);
+    }
 
-    // Пересчет суммы
+    // Пересчет суммы LTV
     let newLocalTotal = 0;
-    const hist = clientsDataLocal[clientId].history || {};
-    Object.values(hist).forEach(o => newLocalTotal += (parseFloat(o.price) || 0));
+    Object.values(clientsDataLocal[clientId].history).forEach(o => newLocalTotal += (parseFloat(o.price) || 0));
     clientsDataLocal[clientId].totalSpend = newLocalTotal;
 
-    // Обновляем экран
+    // Г. Обновление экрана
     const spendDiv = document.getElementById('clientTotalSpend');
     const symbol = SYMBOLS[currentCurrency] || '';
     if (spendDiv) {
@@ -9832,23 +9848,87 @@ async function deleteOrderFromHistory(clientId, orderId) { // Добавили a
     
     renderClientOrdersHistory(clientId);
     renderClientsCloud();
+    renderArchive(); // Обновляем вкладку архива
 
-    // --- ФОНОВАЯ ОТПРАВКА В БАЗУ ---
+    // --- ФОНОВАЯ СИНХРОНИЗАЦИЯ С ОБЛАКОМ ---
     if (returnProducts) {
         saveIngs(); 
         saveToCloud('history_stock', stockHistory);
     }
-
-    // Удаляем из Firebase/Таблицы
-    // Тут мы просто сохраняем клиента целиком, так надежнее
     saveToCloud('clients', clientsDataLocal);
+    saveToCloud('archive', archiveOrders);
 
-    // Чистим архив (если используете отдельный лист архива)
-    db.ref('archive').orderByChild('id').equalTo(orderId).once('value', snapshot => {
-        if (snapshot.exists()) { snapshot.forEach(child => child.ref.remove()); }
-    });
+    // Показываем кнопку "Отменить"
+    showUndoToast("Заказ удален", undoDeleteOrder);
 }
 
+     let currentUndoFunction = null;
+
+function showUndoToast(text, undoFn) {
+    const toast = document.getElementById('undoToast');
+    document.getElementById('undoToastText').innerText = text;
+    currentUndoFunction = undoFn;
+    
+    toast.style.display = 'flex';
+    
+    // Скрыть через 5 секунд автоматически
+    setTimeout(() => {
+        hideUndoToast();
+    }, 5000);
+}
+
+function executeUndoAction() {
+    if (currentUndoFunction) currentUndoFunction();
+    hideUndoToast();
+}
+
+function hideUndoToast() {
+    document.getElementById('undoToast').style.display = 'none';
+    currentUndoFunction = null;
+}
+
+     async function undoDeleteOrder() {
+    if (!lastDeletedOrderData) return;
+
+    const { order, clientId, archiveIndex, returnedProducts, oldStockState } = lastDeletedOrderData;
+
+    // 1. Возвращаем склад в старое состояние (если возвращали продукты)
+    if (returnedProducts) {
+        myIngredients = JSON.parse(JSON.stringify(oldStockState));
+        saveIngs();
+    }
+
+    // 2. Возвращаем клиенту
+    if (!clientsDataLocal[clientId].history) clientsDataLocal[clientId].history = {};
+    clientsDataLocal[clientId].history[order.id] = order;
+
+    // Пересчет LTV
+    let total = 0;
+    Object.values(clientsDataLocal[clientId].history).forEach(o => total += (parseFloat(o.price) || 0));
+    clientsDataLocal[clientId].totalSpend = total;
+
+    // 3. Возвращаем в массив архива
+    if (archiveIndex !== -1) {
+        archiveOrders.splice(archiveIndex, 0, order);
+    } else {
+        archiveOrders.push(order);
+    }
+
+    // 4. Сохраняем в облако
+    saveToCloud('clients', clientsDataLocal);
+    saveToCloud('archive', archiveOrders);
+
+    // 5. Обновляем UI
+    renderArchive();
+    if (document.getElementById('clientModal').style.display === 'flex') {
+        renderClientOrdersHistory(clientId);
+    }
+    renderClientsCloud();
+
+    lastDeletedOrderData = null;
+    hideUndoToast();
+    alert("✅ Удаление отменено");
+}
      
 // 2. Редактирование заказа (через prompt для быстроты или можно вызвать модалку)
 function editOrderInHistory(clientId, orderId) {
@@ -14020,6 +14100,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
