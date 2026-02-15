@@ -14060,6 +14060,25 @@ function renderArchive() {
                 <button onclick="repeatOrder('${item.id}')" style="background:#fff; color:#555; border:1px solid #ddd; padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer;">🔄 Повторить</button>
             </div>
         </div>`;
+      // Внутри renderArchive, в самом конце цикла filtered.forEach:
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; gap:10px;">
+                <div>${photoBtn}</div>
+                
+                <div style="display:flex; gap:8px;">
+                    <button onclick="repeatOrder('${item.id}')" 
+                            style="background:#f5f5f5; color:#555; border:1px solid #ddd; padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer; font-weight:bold;">
+                        🔄 Повторить
+                    </button>
+                    
+                    <button onclick="deleteOrderFromHistory('${item.clientId}', '${item.id}')" 
+                            style="background:#fff; color:#d32f2f; border:1px solid #ffcdd2; padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer; font-weight:bold;"
+                            title="Удалить из истории и архива">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+        </div>`;
     });
 }
 // Функция повтора заказа (Копирует из архива в План)
@@ -14100,6 +14119,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
