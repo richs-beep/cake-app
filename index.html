@@ -6565,7 +6565,7 @@ function printDoc(type) {
 // 1. Подготовка окна оформления (ИСПРАВЛЕНО: Очистка полей)
 function addToQueue() {
   editingOrderId = null;
-  onst btn = document.querySelector('#orderFinalizeModal .main-btn');
+  const btn = document.querySelector('#orderFinalizeModal .main-btn');
     if(btn) {
         btn.innerText = "Создать заказ";
         btn.style.background = "#4CAF50";
@@ -13110,6 +13110,7 @@ imageDB.init().then(() => console.log("📸 База фото готова"));
   </body>
 
 </html>
+
 
 
 
