@@ -14022,26 +14022,26 @@ function renderArchive() {
     const container = document.getElementById('archiveContainer');
     const countEl = document.getElementById('archiveTotalCount');
     if (!container) return;
-    
+
     container.innerHTML = '';
-    
+
     // Фильтры (даты и поиск)
     const startStr = document.getElementById('archiveDateStart').value;
     const endStr = document.getElementById('archiveDateEnd').value;
     const search = document.getElementById('archiveSearch').value.toLowerCase().trim();
-    
+
     const startDate = startStr ? new Date(startStr) : new Date('2020-01-01');
     const endDate = endStr ? new Date(endStr) : new Date();
-    endDate.setHours(23, 59, 59); 
+    endDate.setHours(23, 59, 59);
 
     let filtered = archiveOrders.filter(ord => {
-        const dStr = ord.completedAt || ord.date; 
+        const dStr = ord.completedAt || ord.date;
         if (!dStr) return false;
         const d = new Date(dStr);
         if (d < startDate || d > endDate) return false;
-        
+
         if (search) {
-            const text = (ord.name + ' ' + (ord.reason||'') + ' ' + (ord.comment||'')).toLowerCase();
+            const text = (ord.name + ' ' + (ord.reason || '') + ' ' + (ord.comment || '')).toLowerCase();
             let tiersText = "";
             if (ord.data && ord.data.tiers) {
                 tiersText = ord.data.tiers.map(t => t.recipeName).join(' ').toLowerCase();
@@ -14063,7 +14063,7 @@ function renderArchive() {
         const dateStr = item.completedAt ? new Date(item.completedAt).toLocaleDateString() : item.date;
         const price = Math.round(item.price).toLocaleString();
         const currency = SYMBOLS[currentCurrency] || '';
-        
+
         // 1. Физические параметры
         let paramsHtml = "";
         if (item.data && item.data.tiers) {
@@ -14082,7 +14082,6 @@ function renderArchive() {
         }
 
         // 3. Ссылка на клиента
-        // Мы используем stopPropagation, чтобы клик по карточке не конфликтовал, если будем делать открытие
         const clientLink = `<span onclick="openClientModal('${item.clientId}'); event.stopPropagation();" style="color:#1976D2; cursor:pointer; text-decoration:underline;">${item.name}</span>`;
 
         // 4. Кнопка фото результата
@@ -14090,7 +14089,7 @@ function renderArchive() {
         if (item.refImage) {
             photoBtn = `<button onclick="viewOrderRef('${item.id}')" style="background:#E8F5E9; color:#2E7D32; border:1px solid #C8E6C9; padding:5px 12px; border-radius:20px; font-size:12px; cursor:pointer; font-weight:bold; display:flex; align-items:center; gap:5px;">📷 Итог</button>`;
         } else {
-             photoBtn = `<span style="font-size:11px; color:#ccc;">Без фото</span>`;
+            photoBtn = `<span style="font-size:11px; color:#ccc;">Без фото</span>`;
         }
 
         container.innerHTML += `
@@ -14110,13 +14109,6 @@ function renderArchive() {
             </div>
 
             ${decorHtml}
-
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-                ${photoBtn}
-                <button onclick="repeatOrder('${item.id}')" style="background:#fff; color:#555; border:1px solid #ddd; padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer;">🔄 Повторить</button>
-            </div>
-        </div>`;
-      // Внутри renderArchive, в самом конце цикла filtered.forEach:
 
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; gap:10px;">
                 <div>${photoBtn}</div>
@@ -14175,6 +14167,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
