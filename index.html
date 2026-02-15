@@ -7363,6 +7363,7 @@ function clearOrderImage() {
 
 
 // --- 2. ПРОСМОТР ФОТО (УМНЫЙ: ИЩЕТ ВЕЗДЕ) ---
+// --- 2. ПРОСМОТР ФОТО (УМНЫЙ: С ПРОВЕРКОЙ ВЕРСИИ) ---
 async function viewOrderRef(orderId) {
     // 1. Сначала ищем в ПЛАНЕ (Активные)
     let order = productionQueue.find(o => o.id === orderId);
@@ -7372,7 +7373,7 @@ async function viewOrderRef(orderId) {
         order = archiveOrders.find(o => o.id === orderId);
     }
 
-    // 3. Если все еще нет — ищем глубоко в КЛИЕНТАХ (на случай рассинхрона)
+    // 3. Если все еще нет — ищем глубоко в КЛИЕНТАХ
     if (!order) {
         for (const clientId in clientsDataLocal) {
             const client = clientsDataLocal[clientId];
@@ -7388,38 +7389,50 @@ async function viewOrderRef(orderId) {
         return;
     }
 
-    // --- ДАЛЬШЕ ЛОГИКА ЗАГРУЗКИ (КАК БЫЛО) ---
+    // --- ЛОГИКА ПРОВЕРКИ АКТУАЛЬНОСТИ КЭША (НОВОЕ) ---
+    const remoteLink = order.refImage; // Ссылка из облака (например, DRIVE:1A2B3C...)
+    const cacheKey = 'img_ver_' + orderId; // Ключ для хранения версии
+    const lastKnownLink = localStorage.getItem(cacheKey); // Что мы скачивали в прошлый раз?
+
+    // Если ссылка в облаке отличается от того, что мы помним — значит фото обновилось!
+    if (remoteLink && remoteLink.startsWith('DRIVE:') && lastKnownLink !== remoteLink) {
+        console.log("🔄 Обнаружено новое фото! Удаляем старый кэш...");
+        await imageDB.delete(orderId); // Удаляем старую картинку из памяти телефона
+        localStorage.setItem(cacheKey, remoteLink); // Запоминаем новую версию
+    }
+    // ----------------------------------------------------
+
     let imageUrl = null;
     const loader = document.getElementById('loadingOverlay');
 
     try {
-        // А. Сначала ищем в локальном кэше телефона (быстро)
+        // А. Сначала ищем в локальном кэше (IndexedDB)
         const localData = await imageDB.get(orderId);
         
         if (localData) {
             imageUrl = localData;
-            console.log('📸 Фото взято из кэша телефона');
+            console.log('📸 Фото взято из кэша (быстро)');
         } 
-        // Б. Если ссылка на Google Drive (DRIVE:...)
+        // Б. Если нет локально — качаем с Диска
         else if (order.refImage && order.refImage.startsWith('DRIVE:')) {
             const fileId = order.refImage.split(':')[1];
             
-            // Показываем крутилку
             if(loader) {
                 loader.style.display = 'flex';
                 const status = document.getElementById('dbStatus');
                 if(status) status.innerText = "☁️ Скачивание фото...";
             }
 
-            // Скачиваем
             const cloudData = await apiDownloadPhotoFromDrive(fileId);
             
             if(loader) loader.style.display = 'none';
 
             if (cloudData) {
                 imageUrl = cloudData;
-                // Сохраняем в кэш телефона, чтобы второй раз не качать
+                // Сохраняем в кэш
                 imageDB.save(orderId, cloudData); 
+                // Запоминаем версию, чтобы в будущем знать, что это именно этот файл
+                localStorage.setItem(cacheKey, order.refImage);
             }
         }
         // В. Старый формат (Base64 внутри)
@@ -7439,7 +7452,7 @@ async function viewOrderRef(orderId) {
         container.innerHTML = `<img src="${imageUrl}" style="max-width:100%; max-height:100%; object-fit:contain; box-shadow:0 0 20px rgba(0,0,0,0.5);">`;
         document.getElementById('cakeLightbox').style.display = 'flex';
     } else {
-        alert("⚠️ Фото не найдено (ни в телефоне, ни на Диске). Возможно, оно было удалено.");
+        alert("⚠️ Фото еще не загружено или ссылка устарела.");
     }
 }
 
@@ -9758,110 +9771,138 @@ function renderClientsCloud() {
 }
 
 function deleteClientCloud(id) {
-   if(confirm('Удалить карточку клиента?')) {
-     saveToHistory();
-       delete clientsDataLocal[id]; // Удаляем локально
-       renderClientsCloud();        // Обновляем экран
-       saveToCloud('clients', clientsDataLocal); // Сохраняем в таблицу
-   }
+    const client = clientsDataLocal[id];
+    if (!client) return;
+
+    if(confirm(`Удалить карточку клиента "${client.name}"?\n\n⚠️ ВНИМАНИЕ: Все заказы этого клиента (${Object.keys(client.history || {}).length} шт) будут также удалены из Архива!`)) {
+        saveToHistory(); // Сохраняем состояние всего приложения
+
+        // 1. КАСКАДНОЕ УДАЛЕНИЕ ИЗ АРХИВА
+        // Если у клиента была история, удаляем эти заказы из общего архива
+        if (client.history) {
+            const clientOrderIds = Object.keys(client.history);
+            // Оставляем в архиве только те заказы, чьих ID НЕТ у удаляемого клиента
+            archiveOrders = archiveOrders.filter(order => !clientOrderIds.includes(order.id));
+        }
+
+        // 2. УДАЛЕНИЕ КЛИЕНТА
+        delete clientsDataLocal[id]; 
+
+        // 3. ОБНОВЛЕНИЕ ИНТЕРФЕЙСА
+        renderClientsCloud(); // Обновляем список клиентов
+        renderArchive();      // Обновляем архив (заказы исчезнут)
+
+        // 4. СОХРАНЕНИЕ
+        saveToCloud('clients', clientsDataLocal);
+        saveToCloud('archive', archiveOrders); 
+    }
 }
      let lastDeletedOrderData = null;
 
 // --- 1. УДАЛЕНИЕ ЗАКАЗА (МГНОВЕННЫЙ ПЕРЕСЧЕТ) ---
+// --- 1. УДАЛЕНИЕ ЗАКАЗА (СИНХРОНИЗИРОВАННОЕ) ---
 async function deleteOrderFromHistory(clientId, orderId) {
-    // 1. Получаем данные
-    const client = clientsDataLocal[clientId];
-    if (!client || !client.history || !client.history[orderId]) return;
+    // 1. Сначала ищем заказ хоть где-нибудь, чтобы сделать снимок для Undo
+    // Ищем у клиента
+    let orderData = clientsDataLocal[clientId]?.history?.[orderId];
     
-    const order = client.history[orderId];
+    // Если у клиента нет (рассинхрон), ищем в архиве
+    if (!orderData) {
+        orderData = archiveOrders.find(o => o.id === orderId);
+    }
+
+    if (!orderData) {
+        console.error("Заказ не найден ни у клиента, ни в архиве");
+        return; 
+    }
 
     // 2. Подтверждение
-    if (!confirm(`⚠️ Вы уверены, что хотите удалить заказ "${order.reason || 'Торт'}" от ${order.date}?\n\nСумма клиента пересчитается, заказ исчезнет из истории и архива.`)) return;
-    
-    // 3. Вопрос про склад
+    if (!confirm(`⚠️ Удалить заказ "${orderData.reason || 'Торт'}" (${orderData.date})?\n\nОн исчезнет и из Архива, и из карточки Клиента.`)) return;
+
+    // 3. Вопрос про склад (если завершен)
     let returnProducts = false;
-    if (order.status === 'completed' && order.data && order.data.shoppingList) {
+    if (orderData.status === 'completed' && orderData.data?.shoppingList) {
         returnProducts = confirm(`📦 ВЕРНУТЬ продукты на склад?\n\n[ОК] - Да, вернуть остатки\n[Отмена] - Нет, оставить списанными`);
     }
 
-    // --- ПОДГОТОВКА К UNDO (Снимок состояния) ---
-    // Сохраняем всё, чтобы можно было откатить: сам заказ, склад и индекс в архиве
+    // --- ПОДГОТОВКА К UNDO ---
     const archiveIdx = archiveOrders.findIndex(o => o.id === orderId);
+    
     lastDeletedOrderData = {
-        order: JSON.parse(JSON.stringify(order)),
+        order: JSON.parse(JSON.stringify(orderData)),
         clientId: clientId,
-        archiveIndex: archiveIdx,
+        archiveIndex: archiveIdx, // Запоминаем позицию в архиве
         returnedProducts: returnProducts,
-        // Запоминаем текущие остатки на случай Undo
         oldStockState: JSON.parse(JSON.stringify(myIngredients)) 
     };
 
-    // --- МГНОВЕННОЕ ОБНОВЛЕНИЕ ИНТЕРФЕЙСА ---
-    
-    // А. Склад (Локально)
-    if (returnProducts) {
-        let returnedCount = 0;
-        order.data.shoppingList.forEach(shopItem => {
-            const ing = myIngredients.find(i => i.id === shopItem.id);
-            if (ing) {
-                const amountToAdd = parseFloat(shopItem.amount);
-                ing.stock = (parseFloat(ing.stock) || 0) + amountToAdd;
-                returnedCount++;
-                
-                const logId = 'log_' + Date.now() + Math.random().toString().substr(2, 5);
-                stockHistory.push({
-                    id: logId, date: new Date().toISOString(), type: 'procurement',
-                    item: ing.name, diff: `+${amountToAdd} ${ing.unit}`,
-                    balance: `${parseFloat(ing.stock.toFixed(2))} ${ing.unit}`, comment: `Возврат: Удаление заказа`
-                });
-            }
-        });
-        if (returnedCount > 0) alert(`✅ На склад возвращено позиций: ${returnedCount}`);
+    // --- УДАЛЕНИЕ ---
+
+    // А. Удаляем из КЛИЕНТА (если он есть)
+    if (clientsDataLocal[clientId] && clientsDataLocal[clientId].history) {
+        delete clientsDataLocal[clientId].history[orderId];
+        
+        // Пересчет LTV клиента
+        let newLocalTotal = 0;
+        Object.values(clientsDataLocal[clientId].history).forEach(o => newLocalTotal += (parseFloat(o.price) || 0));
+        clientsDataLocal[clientId].totalSpend = newLocalTotal;
     }
 
-    // Б. Удаляем фото (Локально + Диск)
-    imageDB.delete(orderId);
-    if (order.refImage && order.refImage.startsWith('DRIVE:')) {
-        const fileId = order.refImage.split(':')[1];
-        console.log("Удаляем фото с диска...");
-        apiDeleteFileFromDrive(fileId); // Удаляем без await, чтобы не ждать
-    }
-
-    // В. Удаление из КЛИЕНТА и ОБЩЕГО АРХИВА
-    delete clientsDataLocal[clientId].history[orderId];
-    
+    // Б. Удаляем из ОБЩЕГО АРХИВА (если он там есть)
     if (archiveIdx !== -1) {
         archiveOrders.splice(archiveIdx, 1);
     }
 
-    // Пересчет суммы LTV
-    let newLocalTotal = 0;
-    Object.values(clientsDataLocal[clientId].history).forEach(o => newLocalTotal += (parseFloat(o.price) || 0));
-    clientsDataLocal[clientId].totalSpend = newLocalTotal;
-
-    // Г. Обновление экрана
-    const spendDiv = document.getElementById('clientTotalSpend');
-    const symbol = SYMBOLS[currentCurrency] || '';
-    if (spendDiv) {
-         spendDiv.innerHTML = `Заказов на: <b>${newLocalTotal.toLocaleString()} ${symbol}</b> <span onclick="forceRecalcClient('${clientId}')" style="cursor:pointer; margin-left:8px; font-size:14px;" title="Пересчитать">🔄</span>`;
-    }
-    
-    renderClientOrdersHistory(clientId);
-    renderClientsCloud();
-    renderArchive(); // Обновляем вкладку архива
-
-    // --- ФОНОВАЯ СИНХРОНИЗАЦИЯ С ОБЛАКОМ ---
+    // В. Возврат продуктов (Склад) - логика осталась прежней
     if (returnProducts) {
-        saveIngs(); 
+        let returnedCount = 0;
+        orderData.data.shoppingList.forEach(shopItem => {
+            const ing = myIngredients.find(i => i.id === shopItem.id);
+            if (ing) {
+                ing.stock = (parseFloat(ing.stock) || 0) + parseFloat(shopItem.amount);
+                returnedCount++;
+                // Лог в историю склада... (код сокращен, он такой же как был)
+                stockHistory.push({
+                    id: 'log_' + Date.now(), date: new Date().toISOString(), type: 'procurement',
+                    item: ing.name, diff: `+${shopItem.amount} ${ing.unit}`, balance: `${ing.stock} ${ing.unit}`, comment: `Возврат: Удаление заказа`
+                });
+            }
+        });
+        if (returnedCount > 0) alert(`✅ На склад возвращено позиций: ${returnedCount}`);
+        saveIngs();
         saveToCloud('history_stock', stockHistory);
     }
+
+    // Г. Удаляем фото (Локально + Диск)
+    imageDB.delete(orderId);
+    if (orderData.refImage && orderData.refImage.startsWith('DRIVE:')) {
+        apiDeleteFileFromDrive(orderData.refImage.split(':')[1]);
+    }
+
+    // Д. Сохраняем изменения в облако
     saveToCloud('clients', clientsDataLocal);
     saveToCloud('archive', archiveOrders);
 
-    // Показываем кнопку "Отменить"
-    showUndoToast("Заказ удален", undoDeleteOrder);
-}
+    // Е. Обновляем интерфейс (В зависимости от того, где мы сейчас)
+    // Если открыта модалка клиента - обновляем её
+    if (document.getElementById('clientModal').style.display === 'flex') {
+        const spendDiv = document.getElementById('clientTotalSpend');
+        const symbol = SYMBOLS[currentCurrency] || '';
+        if (spendDiv && clientsDataLocal[clientId]) {
+             spendDiv.innerHTML = `Заказов на: <b>${clientsDataLocal[clientId].totalSpend.toLocaleString()} ${symbol}</b>`;
+        }
+        renderClientOrdersHistory(clientId);
+    }
+    
+    // Обновляем общий список клиентов (если изменилась сумма LTV)
+    renderClientsCloud();
+    
+    // Обновляем Архив (если мы там)
+    renderArchive(); 
 
+    // Показываем кнопку "Отменить"
+    showUndoToast("Заказ удален отовсюду", undoDeleteOrder);
+}
      let currentUndoFunction = null;
 
 function showUndoToast(text, undoFn) {
@@ -9887,19 +9928,30 @@ function hideUndoToast() {
     currentUndoFunction = null;
 }
 
-     async function undoDeleteOrder() {
+   async function undoDeleteOrder() {
     if (!lastDeletedOrderData) return;
 
     const { order, clientId, archiveIndex, returnedProducts, oldStockState } = lastDeletedOrderData;
 
-    // 1. Возвращаем склад в старое состояние (если возвращали продукты)
+    // 1. Возвращаем склад (если был возврат)
     if (returnedProducts) {
         myIngredients = JSON.parse(JSON.stringify(oldStockState));
         saveIngs();
     }
 
-    // 2. Возвращаем клиенту
+    // 2. Возвращаем КЛИЕНТУ
+    // ВАЖНО: Проверяем, существует ли клиент. Если вдруг удалили клиента пока висел Undo - восстанавливаем и его (пустышку)
+    if (!clientsDataLocal[clientId]) {
+        clientsDataLocal[clientId] = { 
+            name: order.name || "Восстановленный клиент", 
+            phone: order.phone, 
+            history: {}, 
+            totalSpend: 0 
+        };
+    }
     if (!clientsDataLocal[clientId].history) clientsDataLocal[clientId].history = {};
+    
+    // Вставляем заказ обратно клиенту
     clientsDataLocal[clientId].history[order.id] = order;
 
     // Пересчет LTV
@@ -9907,8 +9959,9 @@ function hideUndoToast() {
     Object.values(clientsDataLocal[clientId].history).forEach(o => total += (parseFloat(o.price) || 0));
     clientsDataLocal[clientId].totalSpend = total;
 
-    // 3. Возвращаем в массив архива
-    if (archiveIndex !== -1) {
+    // 3. Возвращаем в АРХИВ
+    // Вставляем на то же место, где был (или в конец)
+    if (archiveIndex !== -1 && archiveIndex <= archiveOrders.length) {
         archiveOrders.splice(archiveIndex, 0, order);
     } else {
         archiveOrders.push(order);
@@ -9920,14 +9973,17 @@ function hideUndoToast() {
 
     // 5. Обновляем UI
     renderArchive();
+    renderClientsCloud();
     if (document.getElementById('clientModal').style.display === 'flex') {
         renderClientOrdersHistory(clientId);
+        // Обновляем сумму в модалке
+        const spendDiv = document.getElementById('clientTotalSpend');
+        if(spendDiv) spendDiv.innerHTML = `Заказов на: <b>${total.toLocaleString()} ${SYMBOLS[currentCurrency] || ''}</b>`;
     }
-    renderClientsCloud();
 
     lastDeletedOrderData = null;
     hideUndoToast();
-    alert("✅ Удаление отменено");
+    alert("✅ Заказ восстановлен (в Архив и Клиенту)");
 }
      
 // 2. Редактирование заказа (через prompt для быстроты или можно вызвать модалку)
@@ -14119,6 +14175,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
