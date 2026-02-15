@@ -24,6 +24,7 @@
     // Пытаемся сразу вспомнить почту
     let CURRENT_USER_EMAIL = localStorage.getItem('user_email') || "";
     let USER_DB_ID = localStorage.getItem('cake_db_id');
+      let currentStockShelf = 'all'; // 'all', 'food', 'pack'
 
     // 1. Загрузка GAPI (Google API)
     function gapiLoaded() {
@@ -4434,7 +4435,7 @@ let laborSort = { field: 'name', dir: 'asc' }; // Для работ
 
       // --- 3. FUNCTIONS ---
 
-     let currentStockShelf = 'all'; // 'all', 'food', 'pack'
+     
 
 function setStockShelf(shelf, btn) {
     currentStockShelf = shelf;
@@ -14229,6 +14230,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
