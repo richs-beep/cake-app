@@ -7358,44 +7358,67 @@ function clearOrderImage() {
 }
 
 
-// --- 2. ПРОСМОТР РЕФЕРЕНСА (УМНЫЙ: КЭШ + ОБЛАКО) ---
+// --- 2. ПРОСМОТР ФОТО (УМНЫЙ: ИЩЕТ ВЕЗДЕ) ---
 async function viewOrderRef(orderId) {
-    const order = productionQueue.find(o => o.id === orderId);
-    if (!order) return;
+    // 1. Сначала ищем в ПЛАНЕ (Активные)
+    let order = productionQueue.find(o => o.id === orderId);
 
+    // 2. Если не нашли — ищем в АРХИВЕ
+    if (!order) {
+        order = archiveOrders.find(o => o.id === orderId);
+    }
+
+    // 3. Если все еще нет — ищем глубоко в КЛИЕНТАХ (на случай рассинхрона)
+    if (!order) {
+        for (const clientId in clientsDataLocal) {
+            const client = clientsDataLocal[clientId];
+            if (client.history && client.history[orderId]) {
+                order = client.history[orderId];
+                break;
+            }
+        }
+    }
+
+    if (!order) {
+        alert("❌ Ошибка: Заказ не найден в базе данных.");
+        return;
+    }
+
+    // --- ДАЛЬШЕ ЛОГИКА ЗАГРУЗКИ (КАК БЫЛО) ---
     let imageUrl = null;
     const loader = document.getElementById('loadingOverlay');
 
     try {
-        // 1. Сначала ищем в локальном кэше (быстро)
+        // А. Сначала ищем в локальном кэше телефона (быстро)
         const localData = await imageDB.get(orderId);
         
         if (localData) {
             imageUrl = localData;
             console.log('📸 Фото взято из кэша телефона');
         } 
-        // 2. Если нет локально, но есть ссылка на Диск
+        // Б. Если ссылка на Google Drive (DRIVE:...)
         else if (order.refImage && order.refImage.startsWith('DRIVE:')) {
             const fileId = order.refImage.split(':')[1];
             
-            // Показываем лоадер, так как скачивание может занять 1-2 сек
+            // Показываем крутилку
             if(loader) {
                 loader.style.display = 'flex';
-                document.getElementById('dbStatus').innerText = "☁️ Скачивание фото...";
+                const status = document.getElementById('dbStatus');
+                if(status) status.innerText = "☁️ Скачивание фото...";
             }
 
+            // Скачиваем
             const cloudData = await apiDownloadPhotoFromDrive(fileId);
             
             if(loader) loader.style.display = 'none';
 
             if (cloudData) {
                 imageUrl = cloudData;
-                // Сохраняем в локальный кэш, чтобы в следующий раз не качать
+                // Сохраняем в кэш телефона, чтобы второй раз не качать
                 imageDB.save(orderId, cloudData); 
-                console.log('☁️ Фото скачано с Диска');
             }
         }
-        // 3. Старый формат (Base64 внутри JSON)
+        // В. Старый формат (Base64 внутри)
         else if (order.refImage && order.refImage.startsWith('data:image')) {
             imageUrl = order.refImage;
         }
@@ -7406,13 +7429,13 @@ async function viewOrderRef(orderId) {
         alert("Ошибка загрузки фото: " + e.message);
     }
 
-    // Показываем
+    // Показываем лайтбокс
     if (imageUrl) {
         const container = document.getElementById('lightboxSvgContainer');
         container.innerHTML = `<img src="${imageUrl}" style="max-width:100%; max-height:100%; object-fit:contain; box-shadow:0 0 20px rgba(0,0,0,0.5);">`;
         document.getElementById('cakeLightbox').style.display = 'flex';
     } else {
-        alert("⚠️ Фото не найдено (ни в телефоне, ни в облаке).");
+        alert("⚠️ Фото не найдено (ни в телефоне, ни на Диске). Возможно, оно было удалено.");
     }
 }
 
@@ -13997,6 +14020,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
