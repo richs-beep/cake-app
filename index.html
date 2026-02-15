@@ -1375,6 +1375,8 @@ class CakeVisualizer {
     margin: 0 auto; 
 }
 
+
+      
 /* МОБИЛЬНАЯ АДАПТАЦИЯ (Медиа-запрос) */
 @media (max-width: 768px) {
   /* --- 1. ФОРМЫ В СТОЛБИК --- */
@@ -2700,7 +2702,82 @@ body {
     transform: rotateZ(45deg) rotateX(-60deg); /* Смотрят в камеру */
     white-space: nowrap;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}  
+} 
+
+      /* --- НОВЫЙ ДИЗАЙН ПЛАНА (ТАБЫ + СТАТУСЫ) --- */
+
+/* Лента дат */
+.date-tabs-container {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+    -webkit-overflow-scrolling: touch;
+    border-bottom: 1px solid #eee;
+}
+
+.date-tab {
+    flex: 0 0 auto; /* Не сжимать */
+    padding: 8px 16px;
+    border-radius: 20px;
+    background: #fff;
+    border: 1px solid #ddd;
+    color: #666;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.2s;
+    text-align: center;
+}
+
+.date-tab.active {
+    background: #FF5722;
+    color: white;
+    border-color: #FF5722;
+    box-shadow: 0 4px 10px rgba(255, 87, 34, 0.3);
+}
+
+.date-tab span {
+    display: block;
+    font-size: 10px;
+    font-weight: normal;
+    opacity: 0.9;
+}
+
+/* Строка микро-статусов внутри карточки */
+.status-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #eee;
+    gap: 2px;
+}
+
+.status-btn {
+    flex: 1;
+    border: 1px solid #eee;
+    background: #fafafa;
+    border-radius: 4px;
+    padding: 4px 0;
+    text-align: center;
+    font-size: 16px;
+    cursor: pointer;
+    transition: 0.2s;
+    opacity: 0.4; /* По умолчанию бледные */
+    filter: grayscale(100%);
+}
+
+.status-btn.done {
+    opacity: 1;
+    filter: grayscale(0%);
+    background: #fff;
+    border-color: #4CAF50;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.status-btn:active { transform: scale(0.95); }
     </style>
     
 
@@ -6010,14 +6087,16 @@ function updateRecTypeUI() {
       function updateQueueBadge() { const b=document.getElementById('badgeQueue'); if(productionQueue.length>0){b.style.display='inline-block'; b.innerText=productionQueue.length;}else b.style.display='none'; }
 
       // --- ОТРИСОВКА СПИСКА ЗАКАЗОВ ---
+// --- ГЛОБАЛЬНАЯ ПЕРЕМЕННАЯ ДЛЯ ФИЛЬТРА ДАТ ---
+let activeDateFilter = 'all'; // 'all' или 'YYYY-MM-DD'
+
+// --- НОВАЯ ФУНКЦИЯ ОТРИСОВКИ ОЧЕРЕДИ (ТАБЫ + КАРТОЧКИ) ---
 function renderQueue() {
     const c = document.getElementById('queueContainer');
     if (!c) return;
 
     if (!productionQueue || productionQueue.length === 0) {
-        c.innerHTML = '<div style="color:#999; text-align:center; padding:40px; border: 2px dashed #ddd; border-radius: 12px; background:#fafafa;">📭 В плане пусто.<br>Самое время добавить новый шедевр!</div>';
-        const batchBlock = document.getElementById('batchResultBlock');
-        if (batchBlock) batchBlock.style.display = 'none';
+        c.innerHTML = '<div style="color:#999; text-align:center; padding:40px; border: 2px dashed #ddd; border-radius: 12px; background:#fafafa;">📭 В плане пусто.</div>';
         return;
     }
 
@@ -6028,154 +6107,161 @@ function renderQueue() {
         return new Date(a.date) - new Date(b.date);
     });
 
-    // 2. Группировка по датам
-    const groups = {};
-    productionQueue.forEach(item => {
-        const d = item.date || 'no_date';
-        if (!groups[d]) groups[d] = [];
-        groups[d].push(item);
-    });
-
-    // 3. Генерация HTML
-    let html = `
-    <div style="margin-bottom:15px; display:flex; justify-content:flex-end;">
-        <label style="font-size:12px; cursor:pointer; color:#1976D2; font-weight:bold; background:#e3f2fd; padding:5px 10px; border-radius:20px;">
-            <input type="checkbox" onchange="toggleAllBatch(this)" checked style="vertical-align:middle;"> Выбрать все для Ведомости
-        </label>
-    </div>`;
-
+    // 2. Генерация табов (Дат)
+    let tabsHtml = `<button class="date-tab ${activeDateFilter === 'all' ? 'active' : ''}" onclick="setDateFilter('all')">ВСЕ</button>`;
+    
+    // Собираем уникальные даты
+    const uniqueDates = [...new Set(productionQueue.map(i => i.date || 'no_date'))];
+    
     const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
-    // Пробегаем по группам дат
-    Object.keys(groups).forEach(dateKey => {
-        const items = groups[dateKey];
+    
+    uniqueDates.forEach(date => {
+        if (date === 'no_date') return;
         
-        // Заголовок даты
-        let hTxt='', hBg='#eee', hCol='#555';
-        if (dateKey === 'no_date') { hTxt = '📅 Позже / Без даты'; } 
-        else if (dateKey === today) { hTxt = '🔥 СЕГОДНЯ ('+formatDateRu(dateKey)+')'; hBg='#ffebee'; hCol='#d32f2f'; } 
-        else if (dateKey === tomorrowStr) { hTxt = '⚠️ ЗАВТРА ('+formatDateRu(dateKey)+')'; hBg='#fff3e0'; hCol='#e65100'; } 
-        else { hTxt = '📅 '+formatDateRu(dateKey); hBg='#e3f2fd'; hCol='#1565C0'; }
+        const dObj = new Date(date);
+        const dayName = dObj.toLocaleDateString('ru-RU', { weekday: 'short' }).toUpperCase(); // ПН, ВТ...
+        const dayNum = dObj.toLocaleDateString('ru-RU', { day: 'numeric', month: 'numeric' }); // 15.02
+        
+        let label = dayNum;
+        if (date === today) label = "🔥 Сегодня";
+        
+        const isActive = (activeDateFilter === date) ? 'active' : '';
+        
+        // Подсчет кол-ва заказов на эту дату
+        const count = productionQueue.filter(i => i.date === date).length;
 
-        html += `<div class="plan-group-container">`;
-        html += `<div class="plan-header" style="background:${hBg}; color:${hCol}; width:100%; border-radius:4px;">${hTxt} <span style="opacity:0.6; font-weight:normal;">(${items.length})</span></div>`;
-        html += `<div class="plan-grid">`; // ОТКРЫВАЕМ СЕТКУ
-
-        // Карточки внутри сетки
-        // Карточки внутри сетки
-        items.forEach(item => {
-            const isBooking = (item.type === 'booking');
-            const borderCol = isBooking ? '#FF9800' : '#4CAF50'; 
-            const bgCol = isBooking ? '#fff8e1' : '#fff';
-            const priceDisplay = Math.round(item.price).toLocaleString();
-
-            // Данные
-            let mainTitle = "Заказ";
-            let specsHtml = "";
-            let colorHtml = "";
-            let decorHtml = ""; // <--- НОВАЯ ПЕРЕМЕННАЯ
-
-            // --- ПОДГОТОВКА ТЕКСТА ОФОРМЛЕНИЯ ---
-            if (item.comment && item.comment.trim() !== "") {
-                decorHtml = `<div class="pc-decor">📝 ${item.comment}</div>`;
-            }
-
-            if (isBooking) {
-                mainTitle = "⏳ Бронь даты";
-                // Для брони комментарий - это и есть суть, поэтому показываем его крупнее или оставляем в decorHtml
-                if (!decorHtml) { // Если комментария нет в переменной, пишем заглушку
-                     specsHtml = `<div style="font-style:italic; font-size:12px; color:#999; margin-top:5px;">Нет деталей</div>`;
-                }
-            } else {
-                if (item.data && item.data.tiers) {
-                    const recipes = [...new Set(item.data.tiers.map(t => t.recipeName))].join(' + ');
-                    const sizes = item.data.tiers.map(t => {
-                        const shape = item.data.geometry.shape;
-                        const d = Math.round(t.d);
-                        const h = Math.round(t.h);
-                        
-                        if (shape === 'rectangle') {
-                            return `${d}x${Math.round(t.w)} <small>H${h}</small>`; 
-                        } else if (shape === 'square') {
-                            return `${d}x${d} <small>H${h}</small>`;
-                        } else {
-                            return `D${d} <small>H${h}</small>`;
-                        }
-                    }).join(' + ');
-                    
-                    mainTitle = recipes || item.desc;
-                    specsHtml = `<div style="margin-top:4px; display:flex; gap:5px; flex-wrap:wrap;">
-                                     <span class="pc-badge">${sizes} см</span> 
-                                     <span class="pc-badge">${item.weight} кг</span>
-                                 </div>`;
-                } else {
-                    mainTitle = item.desc; 
-                    specsHtml = `<div style="margin-top:4px;"><span class="pc-badge">${item.weight} кг</span></div>`;
-                }
-
-                if (item.color) {
-                    let dotColor = '#ccc';
-                    const cL = item.color.toLowerCase();
-                    if(cL.includes('красн')) dotColor='red'; else if(cL.includes('син')||cL.includes('голуб')) dotColor='blue';
-                    else if(cL.includes('зелен')) dotColor='green'; else if(cL.includes('розов')) dotColor='pink';
-                    else if(cL.includes('черн')) dotColor='black'; else if(cL.includes('бел')) dotColor='white';
-                    else if(cL.includes('желт')) dotColor='gold';
-                    
-                    colorHtml = `<span class="pc-badge" style="display:inline-flex; align-items:center; gap:3px; margin-top:4px;">
-                                    <span class="pc-color-dot" style="background:${dotColor}"></span>${item.color}
-                                 </span>`;
-                }
-            }
-
-            const batches = item.batchCount || 1;
-
-            // HTML КАРТОЧКИ
-            html += `
-            <div class="plan-card" style="border-left-color: ${borderCol}; background: ${bgCol};">
-               <div class="pc-top">
-                   <div style="display:flex; align-items:center; gap:8px;">
-                       <input type="checkbox" class="batch-checkbox" value="${item.id}" checked>
-                       <span class="pc-client" style="font-size:12px;">👤 ${item.name}</span>
-                   </div>
-                   <div style="font-weight:bold; font-size:12px; color:${isBooking?'#E65100':'#2E7D32'}; white-space:nowrap;">${priceDisplay} ${SYMBOLS[currentCurrency]}</div>
-               </div>
-
-               <div class="pc-body">
-                   <div class="pc-main" style="white-space:normal; line-height:1.25; margin-bottom:2px;">${mainTitle}</div>
-                   ${specsHtml}
-                   ${colorHtml}
-                   ${decorHtml} </div>
-
-               <div class="pc-footer">
-                   ${!isBooking ? `
-                   <div style="display:flex; align-items:center; gap:5px;" title="Кол-во замесов">
-                       <span style="font-size:10px; color:#999; font-weight:bold;">ЗАМЕСЫ:</span>
-                       <input type="number" min="1" value="${batches}" 
-                           onchange="updateBatchCount('${item.id}', this.value)"
-                           style="width:35px; text-align:center; border:1px solid #ddd; border-radius:4px; font-weight:bold; font-size:12px; padding:2px;">
-                   </div>` : '<div></div>'}
-                   
-                   <div class="btn-action-group">
-                       ${item.refImage ? `<button class="btn-done" style="background:#FCE4EC; color:#C2185B; border-color:#F8BBD0;" onclick="viewOrderRef('${item.id}')">📷 Фото</button>` : ''}
-                       
-                       ${isBooking ? 
-                           `<button class="btn-done" style="background:#FFF3E0; color:#E65100; border-color:#FFE0B2;" onclick="startConvertingBooking('${item.id}')">🎂 Собрать</button>` 
-                           : 
-                           `<button class="btn-done" onclick="finishOrder('${item.id}', '${item.name}')">✅ Готово</button>`
-                       }
-                       <button class="btn-icon" onclick="removeFromQueue('${item.id}')">🗑️</button>
-                   </div>
-               </div>
-           </div>`;
-        });
-
-        html += `</div>`; // ЗАКРЫВАЕМ СЕТКУ
-        html += `</div>`; // ЗАКРЫВАЕМ ГРУППУ
+        tabsHtml += `
+            <button class="date-tab ${isActive}" onclick="setDateFilter('${date}')">
+                ${label}
+                <span>${dayName} (${count})</span>
+            </button>`;
     });
 
-    c.innerHTML = html;
+    // Обертка для табов
+    let finalHtml = `<div class="date-tabs-container">${tabsHtml}</div>`;
+
+    // 3. Фильтрация списка
+    let filteredQueue = productionQueue;
+    if (activeDateFilter !== 'all') {
+        filteredQueue = productionQueue.filter(item => (item.date || 'no_date') === activeDateFilter);
+    }
+
+    // 4. Генерация карточек (СЕТКА)
+    finalHtml += `<div class="plan-grid">`;
+
+    filteredQueue.forEach(item => {
+        const isBooking = (item.type === 'booking');
+        const borderCol = isBooking ? '#FF9800' : '#4CAF50'; 
+        const bgCol = isBooking ? '#fff8e1' : '#fff';
+        const priceDisplay = Math.round(item.price).toLocaleString();
+
+        // Текст декора
+        let decorHtml = "";
+        if (item.comment && item.comment.trim() !== "") {
+            decorHtml = `<div class="pc-decor">📝 ${item.comment}</div>`;
+        }
+
+        // Данные для отображения
+        let mainTitle = isBooking ? "⏳ Бронь" : (item.desc || "Заказ");
+        let specsHtml = "";
+        let colorHtml = "";
+
+        if (!isBooking && item.data && item.data.tiers) {
+            const recipes = [...new Set(item.data.tiers.map(t => t.recipeName))].join(' + ');
+            mainTitle = recipes;
+            
+            // Размеры
+            const sizes = item.data.tiers.map(t => {
+                 const shape = item.data.geometry.shape;
+                 const d = Math.round(t.d); const h = Math.round(t.h);
+                 return (shape === 'rectangle') ? `${d}x${Math.round(t.w)}` : `D${d}`;
+            }).join(' + ');
+            
+            specsHtml = `<div style="margin-top:4px; display:flex; gap:5px; flex-wrap:wrap;">
+                             <span class="pc-badge">${sizes}</span> 
+                             <span class="pc-badge">${item.weight} кг</span>
+                         </div>`;
+        }
+
+        if (item.color) {
+             colorHtml = `<span class="pc-badge" style="margin-top:4px;">🎨 ${item.color}</span>`;
+        }
+
+        // --- МИКРО-СТАТУСЫ (ЧЕКБОКСЫ) ---
+        // Если у заказа еще нет объекта progress, создаем пустой
+        const p = item.progress || { bake: false, assemble: false, decor: false, pack: false };
+        
+        const statusRow = `
+        <div class="status-row">
+            <div class="status-btn ${p.bake ? 'done' : ''}" onclick="toggleProgress('${item.id}', 'bake')" title="Выпечка">🥚</div>
+            <div class="status-btn ${p.assemble ? 'done' : ''}" onclick="toggleProgress('${item.id}', 'assemble')" title="Сборка">🏗️</div>
+            <div class="status-btn ${p.decor ? 'done' : ''}" onclick="toggleProgress('${item.id}', 'decor')" title="Декор">🎨</div>
+            <div class="status-btn ${p.pack ? 'done' : ''}" onclick="toggleProgress('${item.id}', 'pack')" title="Упаковка">📦</div>
+        </div>`;
+
+        // СБОРКА КАРТОЧКИ
+        finalHtml += `
+        <div class="plan-card" style="border-left-color: ${borderCol}; background: ${bgCol}; min-height:auto;">
+           <div class="pc-top">
+               <div style="display:flex; align-items:center; gap:8px;">
+                   <input type="checkbox" class="batch-checkbox" value="${item.id}" checked>
+                   <span class="pc-client" style="font-size:12px;">👤 ${item.name}</span>
+               </div>
+               <div style="font-weight:bold; font-size:12px;">${priceDisplay}</div>
+           </div>
+
+           <div class="pc-body">
+               <div class="pc-main" style="white-space:normal; line-height:1.25;">${mainTitle}</div>
+               ${specsHtml}
+               ${colorHtml}
+               ${decorHtml}
+               ${!isBooking ? statusRow : ''} </div>
+
+           <div class="pc-footer">
+               <div style="font-size:10px; color:#999;">${formatDateRu(item.date)}</div>
+               <div class="btn-action-group">
+                   ${item.refImage ? `<button class="btn-done" style="background:#FCE4EC; color:#C2185B; border:none;" onclick="viewOrderRef('${item.id}')">📷</button>` : ''}
+                   ${isBooking ? 
+                       `<button class="btn-done" style="background:#FFF3E0; color:#E65100; border-color:#FFE0B2;" onclick="startConvertingBooking('${item.id}')">🎂 В работу</button>` 
+                       : 
+                       `<button class="btn-done" onclick="finishOrder('${item.id}', '${item.name}')">✅ Готово</button>`
+                   }
+                   <button class="btn-icon" onclick="removeFromQueue('${item.id}')">🗑️</button>
+               </div>
+           </div>
+       </div>`;
+    });
+
+    finalHtml += `</div>`; // Закрываем сетку
+    c.innerHTML = finalHtml;
+}
+
+// Переключение даты
+function setDateFilter(date) {
+    activeDateFilter = date;
+    renderQueue();
+    // Вибрация для тактильного отклика
+    if(navigator.vibrate) navigator.vibrate(10); 
+}
+
+// Переключение статуса (Выпечено/Собрано...)
+function toggleProgress(id, step) {
+    const item = productionQueue.find(i => i.id === id);
+    if (item) {
+        if (!item.progress) item.progress = {};
+        // Переключаем true/false
+        item.progress[step] = !item.progress[step];
+        
+        // Сразу сохраняем
+        saveQueue();
+        
+        // Вибрация
+        if(navigator.vibrate) navigator.vibrate(5);
+        
+        // Не перерисовываем всё (чтобы не моргало), а меняем класс точечно? 
+        // Нет, проще перерисовать всё, это быстро.
+        renderQueue(); 
+    }
 }
 // Хелпер для красивой даты (2026-02-25 -> 25.02)
 function formatDateRu(isoDate) {
@@ -12841,6 +12927,7 @@ function openShapeLightbox() {
   </body>
 
 </html>
+
 
 
 
