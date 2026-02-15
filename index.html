@@ -282,23 +282,44 @@
     }
 
     // 3. Сохранение данных
-    async function apiSaveDataImpl(sheetName, data) {
-        if (!USER_DB_ID) return false;
-        try {
-            const body = { values: [[JSON.stringify(data)]] };
-            await gapi.client.sheets.spreadsheets.values.update({
-                spreadsheetId: USER_DB_ID,
-                range: `${sheetName}!A1`,
-                valueInputOption: "RAW",
-                resource: body
-            });
-            console.log(`💾 Сохранено: ${sheetName}`);
-            return true;
-        } catch (e) {
-            console.error("Ошибка сохранения:", e);
-            return false;
+    // 3. Сохранение данных (С разбиением на чанки по 50к символов)
+async function apiSaveDataImpl(sheetName, data) {
+    if (!USER_DB_ID) return false;
+    
+    try {
+        // Превращаем данные в строку
+        const jsonString = JSON.stringify(data);
+        
+        // Лимит Google Sheets на ячейку ~50000 символов
+        const CHUNK_SIZE = 49000; 
+        const chunks = [];
+        
+        // Режем строку на куски
+        for (let i = 0; i < jsonString.length; i += CHUNK_SIZE) {
+            chunks.push([jsonString.substring(i, i + CHUNK_SIZE)]);
         }
+
+        // Очищаем колонку A перед записью (чтобы не осталось хвостов от старых данных)
+        await gapi.client.sheets.spreadsheets.values.clear({
+            spreadsheetId: USER_DB_ID,
+            range: `${sheetName}!A:A`
+        });
+
+        // Записываем куски в столбик (A1, A2, A3...)
+        await gapi.client.sheets.spreadsheets.values.update({
+            spreadsheetId: USER_DB_ID,
+            range: `${sheetName}!A1`,
+            valueInputOption: "RAW",
+            resource: { values: chunks }
+        });
+
+        console.log(`💾 Сохранено: ${sheetName} (${chunks.length} фрагментов)`);
+        return true;
+    } catch (e) {
+        console.error("Ошибка сохранения:", e);
+        return false;
     }
+}
 
     // 4. Расчет торта (Локально)
     function apiCalculateOrderImpl(data) {
@@ -1069,10 +1090,13 @@ class CakeVisualizer {
   }
 
   // 2. Загрузка всех данных (Чтение ячеек A1 со всех листов)
-  async function apiLoadAllDataImpl() {
+  // 2. Загрузка всех данных (С чтением чанков)
+async function apiLoadAllDataImpl() {
     if (!USER_DB_ID) return {};
     const sheets = ['ingredients', 'recipes', 'labor', 'queue', 'settings', 'clients', 'archive', 'history_stock'];
-    const ranges = sheets.map(s => `${s}!A1`);
+    
+    // Читаем не просто A1, а весь столбец A (A:A)
+    const ranges = sheets.map(s => `${s}!A:A`);
     
     try {
         const response = await gapi.client.sheets.spreadsheets.values.batchGet({
@@ -1085,10 +1109,12 @@ class CakeVisualizer {
         
         valueRanges.forEach((range, index) => {
             const sheetName = sheets[index];
-            if (range.values && range.values[0] && range.values[0][0]) {
+            // Если данные есть
+            if (range.values && range.values.length > 0) {
                 try {
-                    // Данные хранятся как JSON-строка в ячейке A1
-                    result[sheetName] = JSON.parse(range.values[0][0]);
+                    // Склеиваем все ячейки столбца A в одну строку
+                    const fullJson = range.values.map(row => row[0]).join('');
+                    result[sheetName] = JSON.parse(fullJson);
                 } catch(parseErr) {
                     console.warn("Ошибка парсинга листа:", sheetName);
                 }
@@ -1099,8 +1125,7 @@ class CakeVisualizer {
         console.error("Ошибка загрузки:", e);
         return {};
     }
-  }
-
+}
   // 3. Сохранение данных (Запись в ячейку A1)
   async function apiSaveDataImpl(sheetName, data) {
     if (!USER_DB_ID) return false;
@@ -6302,6 +6327,7 @@ function clearQueue() {
 
     saveToHistory();
     productionQueue.splice(idx, 1);
+    imageDB.delete(id);
     saveQueue();
     updateQueueBadge();
 }
@@ -6656,9 +6682,14 @@ async function confirmAddToQueueWithClient() {
         data: res,
         labor: JSON.parse(JSON.stringify(currentLaborList || [])),
         extras: JSON.parse(JSON.stringify(extrasList || [])),
-        refImage: currentOrderImageBase64 
+        refImage: currentOrderImageBase64 ? 'LOCAL_DB' : null
     };
-
+if (currentOrderImageBase64) {
+        // Сохраняем реальную картинку в IndexedDB по ID заказа
+        imageDB.save(orderData.id, currentOrderImageBase64)
+            .then(() => console.log("Фото сохранено локально"))
+            .catch(err => console.error("Ошибка фото", err));
+    }
     // Логика превращения Брони в Заказ
     if (activeBookingId) {
         const idx = productionQueue.findIndex(b => b.id === activeBookingId);
@@ -6793,13 +6824,32 @@ function clearOrderImage() {
 }
 
 // --- 2. ПРОСМОТР РЕФЕРЕНСА НА ВЕСЬ ЭКРАН ---
-function viewOrderRef(orderId) {
+// --- 2. ПРОСМОТР РЕФЕРЕНСА (ИЗ ЛОКАЛЬНОЙ БАЗЫ) ---
+async function viewOrderRef(orderId) {
     const order = productionQueue.find(o => o.id === orderId);
-    if(order && order.refImage) {
+    if (!order) return;
+
+    let imageUrl = null;
+
+    // Вариант 1: Это старый заказ, где фото лежит прямо внутри (текстом)
+    if (order.refImage && order.refImage.startsWith('data:image')) {
+        imageUrl = order.refImage;
+    } 
+    // Вариант 2: Это новый заказ, фото в базе телефона
+    else if (order.refImage === 'LOCAL_DB') {
+        try {
+            // Достаем из базы
+            imageUrl = await imageDB.get(orderId);
+        } catch (e) { console.error(e); }
+    }
+
+    // Показываем
+    if (imageUrl) {
         const container = document.getElementById('lightboxSvgContainer');
-        // Вставляем картинку вместо SVG
-        container.innerHTML = `<img src="${order.refImage}" style="max-width:100%; max-height:100%; object-fit:contain;">`;
+        container.innerHTML = `<img src="${imageUrl}" style="max-width:100%; max-height:100%; object-fit:contain; box-shadow:0 0 20px rgba(0,0,0,0.5);">`;
         document.getElementById('cakeLightbox').style.display = 'flex';
+    } else {
+        alert("⚠️ Фото не найдено на этом устройстве.");
     }
 }
 
@@ -9691,6 +9741,7 @@ function updateBatchCount(id, val) {
 
 // --- ФУНКЦИЯ: ЗАВЕРШЕНИЕ ЗАКАЗА (СДЕЛАНО) ---
 function finishOrder(id, clientName) {
+ 
     const orderIdx = productionQueue.findIndex(x => x.id === id);
     if (orderIdx === -1) return;
     
@@ -9757,6 +9808,7 @@ function finishOrder(id, clientName) {
 
     // --- 3. УДАЛЕНИЕ ИЗ ПЛАНА (ОЧЕРЕДИ) ---
     productionQueue.splice(orderIdx, 1);
+  imageDB.delete(id);
     saveQueue();
     
     alert("✅ Заказ успешно завершен, списан со склада и сохранен в историю клиента!");
@@ -12913,6 +12965,55 @@ function openShapeLightbox() {
     document.body.style.overflow = 'hidden';
 }
 
+  // --- ЛОКАЛЬНАЯ БАЗА ФОТО (IndexedDB) ---
+const dbName = "CakeProImages";
+const storeName = "images";
+
+const imageDB = {
+    db: null,
+    init: function() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(dbName, 1);
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains(storeName)) {
+                    db.createObjectStore(storeName);
+                }
+            };
+            request.onsuccess = (event) => {
+                this.db = event.target.result;
+                resolve(this.db);
+            };
+            request.onerror = (event) => reject("DB Error: " + event.target.errorCode);
+        });
+    },
+    save: async function(id, base64) {
+        if (!this.db) await this.init();
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction([storeName], "readwrite");
+            const request = tx.objectStore(storeName).put(base64, id); // id заказа = ключ
+            request.onsuccess = () => resolve(true);
+            request.onerror = () => reject(false);
+        });
+    },
+    get: async function(id) {
+        if (!this.db) await this.init();
+        return new Promise((resolve) => {
+            const tx = this.db.transaction([storeName], "readonly");
+            const request = tx.objectStore(storeName).get(id);
+            request.onsuccess = (event) => resolve(event.target.result);
+            request.onerror = () => resolve(null);
+        });
+    },
+    delete: async function(id) {
+        if (!this.db) await this.init();
+        const tx = this.db.transaction([storeName], "readwrite");
+        tx.objectStore(storeName).delete(id);
+    }
+};
+
+// Запускаем базу сразу при старте
+imageDB.init().then(() => console.log("📸 База фото готова"));
 
     </script>
 
@@ -12927,6 +13028,7 @@ function openShapeLightbox() {
   </body>
 
 </html>
+
 
 
 
