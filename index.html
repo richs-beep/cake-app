@@ -5074,7 +5074,7 @@ function renderSideControls(side) {
 
 
 // ОБНОВЛЕНИЕ СПИСКА ПОКУПОК (ПОД НОВУЮ СТРУКТУРУ)
-// ОБНОВЛЕНИЕ СПИСКА (ТЕПЕРЬ ЭТО РЕЦЕПТ / ТЕХКАРТА)
+// ОБНОВЛЕНИЕ СПИСКА (ТЕХКАРТА) - С КРАСИВЫМИ НОМЕРАМИ ЯРУСОВ
 function setActiveSide(side) {
     appState.activeSide = side;
     
@@ -5088,14 +5088,14 @@ function setActiveSide(side) {
     const tabBtn = document.getElementById('tab' + side);
     if(tabBtn) tabBtn.classList.add('active');
 
-    // 3. Обновляем Плавающий Футер (Мобильный)
+    // 3. Обновляем Плавающий Футер
     updateStickyFooter(side);
 
-    // 4. ОТРИСОВКА РЕЦЕПТА (Техкарты)
+    // 4. ОТРИСОВКА РЕЦЕПТА
     const res = appState.results[side];
     if (!res) return;
 
-    // Меняем заголовок
+    // Меняем заголовок списка
     const titleEl = document.getElementById('shopListTitle');
     if(titleEl) {
         titleEl.innerHTML = (side === 'Left' ? 'Вариант 1' : 'Вариант 2') + 
@@ -5104,8 +5104,6 @@ function setActiveSide(side) {
 
     const container = document.getElementById('shopListContainer');
     container.innerHTML = '';
-    
-    // Меняем стиль сетки на одну колонку, так как рецепты шире
     container.style.display = 'block'; 
 
     if (!res.detailedBlocks || res.detailedBlocks.length === 0) {
@@ -5113,36 +5111,49 @@ function setActiveSide(side) {
         return;
     }
 
+    // --- [НОВОЕ] Создаем карту перевода ID -> Номер яруса ---
+    const tierMap = {};
+    if (res.tiers) {
+        // Проходим снизу вверх (0, 1, 2...)
+        res.tiers.forEach((t, index) => {
+            // Запоминаем: ID "177..." это Ярус "1" (index + 1)
+            tierMap[t.id] = index + 1;
+        });
+    }
+    // --------------------------------------------------------
+
     let html = '';
 
     res.detailedBlocks.forEach(block => {
-        // Пропускаем пустые блоки
         if (!block.ingredients || block.ingredients.length === 0) return;
 
-        // Определяем стиль и иконку
         let typeClass = 'rv-type-filling';
         let icon = '🍰';
         const nameLow = block.name.toLowerCase();
 
-        if (block.type === 'coating') { 
-            typeClass = 'rv-type-coating'; 
-            icon = '🎨'; 
-        }
-        else if (block.type === 'extra') { 
-            typeClass = 'rv-type-extra'; 
-            icon = '📦'; 
-        }
+        if (block.type === 'coating') { typeClass = 'rv-type-coating'; icon = '🎨'; }
+        else if (block.type === 'extra') { typeClass = 'rv-type-extra'; icon = '📦'; }
         else if (nameLow.includes('бисквит')) icon = '🍞';
         else if (nameLow.includes('крем')) icon = '🥣';
         else if (nameLow.includes('пропитка')) icon = '💧';
         else if (nameLow.includes('конфи') || nameLow.includes('начинка')) icon = '🍓';
 
-        // Собираем ингредиенты
+        // --- [НОВОЕ] Очищаем название от длинных цифр ---
+        let displayName = block.name;
+        
+        // Регулярное выражение ищет "Ярус" + пробелы + цифры
+        // И заменяет цифры на нормальный номер из нашей карты tierMap
+        displayName = displayName.replace(/Ярус\s+(\d+)/g, (match, id) => {
+            return tierMap[id] ? `Ярус ${tierMap[id]}` : match;
+        });
+        
+        // Также чистим покрытие, если там тоже ID (например "Покрытие (Ярус 177...)")
+        // Этот же regex сработает и там, но на всякий случай убедимся визуально
+        // ------------------------------------------------
+
         let rows = '';
         block.ingredients.forEach(ing => {
-            // Форматируем число (убираем лишние нули)
             let val = ing.amount;
-            // Округляем: если больше 10 - до целого, если меньше - до десятых
             let valStr = (val > 10) ? Math.round(val) : parseFloat(val.toFixed(1));
             
             rows += `
@@ -5152,15 +5163,10 @@ function setActiveSide(side) {
             </div>`;
         });
 
-        // Собираем карточку
-        // Пытаемся очистить имя от "Ярус 1: ..." для краткости, если это очевидно
-        // Но лучше оставить полностью для точности
-        
         html += `
         <div class="recipe-view-card ${typeClass}">
             <div class="rv-header">
-                <span>${icon} ${block.name}</span>
-                </div>
+                <span>${icon} ${displayName}</span> </div>
             <div class="rv-body">
                 ${rows}
             </div>
@@ -13398,6 +13404,7 @@ window.addEventListener('popstate', function(event) {
   </body>
 
 </html>
+
 
 
 
