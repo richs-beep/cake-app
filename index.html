@@ -6234,25 +6234,27 @@ function renderQueue() {
             <div class="status-btn ${p.pack ? 'done' : ''}" onclick="toggleProgress('${item.id}', 'pack')" title="Упаковка">📦</div>
         </div>`;
 
-        // СБОРКА КАРТОЧКИ
-        // СБОРКА КАРТОЧКИ (С ДОЛГИМ НАЖАТИЕМ)
+       
+        // СБОРКА КАРТОЧКИ (С РАБОЧИМ ДОЛГИМ НАЖАТИЕМ)
         finalHtml += `
         <div class="plan-card" 
-             style="border-left-color: ${borderCol}; background: ${bgCol}; min-height:auto; position:relative; user-select:none;"
+             style="border-left-color: ${borderCol}; background: ${bgCol}; min-height:auto; position:relative; user-select:none; -webkit-touch-callout: none;"
+             oncontextmenu="return false;"
              onmousedown="startLongPress('${item.id}')" 
              onmouseup="cancelLongPress()" 
              onmouseleave="cancelLongPress()"
              ontouchstart="startLongPress('${item.id}')" 
              ontouchend="cancelLongPress()"
+             ontouchmove="cancelLongPress()"
              >
              
            <div id="edit-hint-${item.id}" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:10; align-items:center; justify-content:center; color:#1976D2; font-weight:bold; font-size:18px; border-radius:8px;">
-               ✏️ Редактировать
+               ✏️ Отпускайте...
            </div>
 
            <div class="pc-top">
                <div style="display:flex; align-items:center; gap:8px;">
-                   <input type="checkbox" class="batch-checkbox" value="${item.id}" checked>
+                   <input type="checkbox" class="batch-checkbox" value="${item.id}" checked onclick="event.stopPropagation()">
                    <span class="pc-client" style="font-size:12px;">👤 ${item.name}</span>
                </div>
                <div style="font-weight:bold; font-size:12px;">${priceDisplay}</div>
@@ -6269,13 +6271,17 @@ function renderQueue() {
            <div class="pc-footer">
                <div style="font-size:10px; color:#999;">${formatDateRu(item.date)}</div>
                <div class="btn-action-group">
-                   ${item.refImage ? `<button class="btn-done" style="background:#FCE4EC; color:#C2185B; border:none;" onclick="viewOrderRef('${item.id}')">📷</button>` : ''}
+                   ${item.refImage ? `<button class="btn-done" style="background:#FCE4EC; color:#C2185B; border:none;" onclick="viewOrderRef('${item.id}'); event.stopPropagation();">📷</button>` : ''}
+                   
                    ${isBooking ? 
-                       `<button class="btn-done" style="background:#FFF3E0; color:#E65100; border-color:#FFE0B2;" onclick="startConvertingBooking('${item.id}')">🎂 В работу</button>` 
+                       `<button class="btn-done" style="background:#FFF3E0; color:#E65100; border-color:#FFE0B2;" onclick="startConvertingBooking('${item.id}'); event.stopPropagation();">🎂 В работу</button>` 
                        : 
-                       `<button class="btn-done" onclick="finishOrder('${item.id}', '${item.name}')">✅ Готово</button>`
+                       `<button class="btn-done" onclick="finishOrder('${item.id}', '${item.name}'); event.stopPropagation();">✅ Готово</button>`
                    }
-                   <button class="btn-icon" onclick="removeFromQueue('${item.id}')">🗑️</button>
+                   
+                   <button class="btn-icon" onclick="editOrderFromQueue('${item.id}'); event.stopPropagation();" title="Редактировать">✏️</button>
+                   
+                   <button class="btn-icon" onclick="removeFromQueue('${item.id}'); event.stopPropagation();">🗑️</button>
                </div>
            </div>
        </div>`;
@@ -13110,6 +13116,7 @@ imageDB.init().then(() => console.log("📸 База фото готова"));
   </body>
 
 </html>
+
 
 
 
