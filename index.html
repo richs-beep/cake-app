@@ -4228,9 +4228,11 @@ body {
     
     <div class="form-group" style="flex:1;">
         <span class="form-label">🎨 Покрытие (Ганаш)</span>
-        <select id="shapeCoatingSelect" style="font-weight:bold; background:#EFEBE9;">
-            <option value="">-- Выберите --</option>
-        </select>
+        <select id="shapeCoatingSelect" 
+        onchange="recalcFromWeight()" 
+        style="font-weight:bold; background:#EFEBE9;">
+    <option value="">-- Выберите --</option>
+</select>
     </div>
 </div>
 
@@ -4341,6 +4343,22 @@ body {
             style="background:linear-gradient(45deg, #7B1FA2, #E040FB); box-shadow: 0 4px 15px rgba(224, 64, 251, 0.4);">
         🚀 Рассчитать и Создать Заказ
     </button>
+              <div id="shapeRecipePreview" style="margin-top:20px; display:none; border-top:2px dashed #eee; padding-top:20px;">
+    <h3 style="font-size:16px; color:#444; margin-bottom:10px;">📋 Предварительный состав</h3>
+    
+    <div style="display:flex; gap:10px; margin-bottom:15px;">
+        <div style="flex:1; background:#E8F5E9; padding:10px; border-radius:6px; text-align:center;">
+            <div style="font-size:10px; color:#2E7D32;">ИТОГО ВЕС</div>
+            <div id="previewWeight" style="font-weight:bold; font-size:16px;">0 кг</div>
+        </div>
+        <div style="flex:1; background:#E3F2FD; padding:10px; border-radius:6px; text-align:center;">
+            <div style="font-size:10px; color:#1565C0;">СЕБЕСТОИМОСТЬ</div>
+            <div id="previewCost" style="font-weight:bold; font-size:16px;">0</div>
+        </div>
+    </div>
+
+    <div id="shapePreviewList"></div>
+</div>
     <div style="font-size:11px; color:#666; margin-top:5px;">
         Автоматически рассчитает бисквит (лист), начинку (внутрь) и покрытие (площадь).
     </div>
@@ -13549,15 +13567,20 @@ function getScaledRecipeComponents(recipeId, targetWeight, filterFn) {
 }
 
 function updateShapeRecipes() { 
-    // 1. Заполняем Начинки
+    // 1. Заполняем Начинки (Фильтр: без слова "бомба")
     const selFilling = document.getElementById('shapeRecipeSelect');
     if (selFilling) {
         selFilling.innerHTML = '';
-        const fillings = myRecipes.filter(r => r.type === 'filling');
+        
+        const fillings = myRecipes.filter(r => {
+            const n = r.name.toLowerCase();
+            return r.type === 'filling' && !n.includes('бомба');
+        });
+
         fillings.forEach(r => {
-            // Считаем примерную плотность для расчета веса
             const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
             const density = r.outputWeight / vol; 
+            
             const opt = document.createElement('option');
             opt.value = r.id; 
             opt.dataset.density = density; 
@@ -13566,12 +13589,24 @@ function updateShapeRecipes() {
         });
     }
 
-    // 2. Заполняем Покрытия (НОВОЕ)
+    // 2. Заполняем Покрытия 
+    // УСЛОВИЕ: Только тип 'coating' (Крем/Ганаш) и без слова "бомба"
     const selCoating = document.getElementById('shapeCoatingSelect');
     if (selCoating) {
         selCoating.innerHTML = '<option value="">-- Выберите --</option>';
-        // Ищем рецепты типа 'coating' (Крем) и 'extra' (Велюр/Гляссаж)
-        const coatings = myRecipes.filter(r => r.type === 'coating' || r.type === 'extra');
+        
+        const coatings = myRecipes.filter(r => {
+            const n = r.name.toLowerCase();
+            
+            // Строго тип coating (исключаем 'extra' - велюр)
+            const isTypeOk = (r.type === 'coating');
+            
+            // Исключаем слово "бомба"
+            const isNameOk = !n.includes('бомба');
+            
+            return isTypeOk && isNameOk;
+        });
+
         coatings.forEach(r => {
             const opt = document.createElement('option');
             opt.value = r.id;
@@ -13580,7 +13615,7 @@ function updateShapeRecipes() {
         });
     }
 }
-
+     
 function generate3DLayers() { 
     const stack = document.getElementById('cakeStack');
     if (!stack) return;
@@ -13739,6 +13774,12 @@ function finalizeCalc(L, W, H, D, weight) {
     shapeState.current = { l: L, w: W, h: H, d: D, weight: weight };
     
     update3DScene(L, W, H, D);
+
+    // --- НОВЫЙ БЛОК: ЖИВОЙ ПЕРЕСЧЕТ РЕЦЕПТА ---
+    // Выполняем полный расчет (как при нажатии кнопки)
+    const previewData = calculateShapeComplete(); 
+    // Рисуем таблицу внизу
+    renderShapeRecipePreview(previewData);
 }
 
 // 5. ВИЗУАЛИЗАЦИЯ (ИСПРАВЛЕННАЯ ЦЕНТРОВКА)
@@ -14486,6 +14527,62 @@ function repeatOrder(id) {
     alert("✅ Заказ скопирован в План! Теперь вы можете его отредактировать (дату и детали).");
     switchTab('production'); // Переходим в план
 }
+function renderShapeRecipePreview(data) {
+    const container = document.getElementById('shapeRecipePreview');
+    const list = document.getElementById('shapePreviewList');
+    
+    if (!data || !data.detailedBlocks) {
+        container.style.display = 'none';
+        return;
+    }
+    
+    container.style.display = 'block';
+    
+    // Обновляем шапку
+    document.getElementById('previewWeight').innerText = (data.weights.total / 1000).toFixed(2) + ' кг';
+    document.getElementById('previewCost').innerText = Math.ceil(data.costs.totalProductionCost).toLocaleString() + ' ' + (SYMBOLS[currentCurrency] || '');
+
+    let html = '';
+
+    data.detailedBlocks.forEach(block => {
+        // Определяем стиль в зависимости от типа
+        let icon = '📦';
+        let borderLeft = '#ccc';
+        let bg = '#fff';
+
+        if (block.name.includes('Полный лист')) { 
+            icon = '🍱'; borderLeft = '#FFC107'; bg = '#FFF8E1'; // Бисквит - Желтый
+        } else if (block.name.includes('В фигуру')) { 
+            icon = '🍓'; borderLeft = '#E91E63'; bg = '#FCE4EC'; // Начинка - Розовый
+        } else if (block.name.includes('Покрытие')) { 
+            icon = '🎨'; borderLeft = '#795548'; bg = '#EFEBE9'; // Покрытие - Коричневый
+        }
+
+        // Собираем ингредиенты
+        let rows = '';
+        block.ingredients.forEach(ing => {
+            rows += `
+            <div style="display:flex; justify-content:space-between; font-size:12px; border-bottom:1px dashed rgba(0,0,0,0.05); padding:2px 0;">
+                <span>${ing.name}</span>
+                <span style="font-weight:bold;">${ing.amount} ${ing.unit}</span>
+            </div>`;
+        });
+
+        html += `
+        <div style="margin-bottom:10px; background:${bg}; border-radius:6px; border-left:4px solid ${borderLeft}; padding:8px; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+            <div style="font-weight:bold; font-size:13px; color:#333; margin-bottom:5px; border-bottom:1px solid rgba(0,0,0,0.1); padding-bottom:3px;">
+                ${icon} ${block.name}
+            </div>
+            <div>${rows}</div>
+            <div style="text-align:right; font-size:11px; color:#666; margin-top:4px;">
+                Себест: <b>${ing.cost}</b>
+            </div>
+        </div>`;
+    });
+
+    list.innerHTML = html;
+}
+     
     </script>
 
 <script>
@@ -14499,6 +14596,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
