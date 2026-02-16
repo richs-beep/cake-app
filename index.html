@@ -13692,96 +13692,128 @@ function recalcFromWeight() {
 }
 
 function recalcFromDimensions(source) {
-    const isLocked = document.getElementById('lockWeight').checked;
-    const density = getDensity();
+    // 1. Считываем текущие размеры
+    let L = parseFloat(document.getElementById('inpL').value) || 20;
+    let W = parseFloat(document.getElementById('inpW').value) || 15;
     let H = parseFloat(document.getElementById('inpH').value) || 10;
-    let targetWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
+    let D = parseFloat(document.getElementById('inpD').value) || 20;
+
+    const density = getDensity();
     const linkAspect = document.getElementById('linkAspect').checked;
+    
+    // Проверка блокировки веса (если галочка стоит)
+    const isWeightLocked = document.getElementById('lockWeight').checked;
 
     if (shapeState.currentShape === 'rect') {
-        let L = parseFloat(document.getElementById('inpL').value) || 20;
-        let W = parseFloat(document.getElementById('inpW').value) || 15;
+        // --- ЛОГИКА ДЛЯ ПРЯМОУГОЛЬНИКА ---
         
+        // Если меняем одну сторону, а пропорции связаны - подгоняем вторую
         if (linkAspect) {
-            if (source === 'L') { W = L * shapeState.nativeRatio; updateInputNoTrigger('inpW', W); }
-            else if (source === 'W') { L = W / shapeState.nativeRatio; updateInputNoTrigger('inpL', L); }
+            if (source === 'L') { 
+                W = L * shapeState.nativeRatio; 
+                updateInputNoTrigger('inpW', W); 
+            } else if (source === 'W') { 
+                L = W / shapeState.nativeRatio; 
+                updateInputNoTrigger('inpL', L); 
+            }
         }
 
-        if (isLocked) {
-             const targetVol = (targetWeight * 1000) / density;
-             if (source === 'H') {
-                 const neededArea = (targetVol / H) / shapeState.kFactorRect;
-                 const ratioToUse = linkAspect ? shapeState.nativeRatio : (W / L);
-                 L = Math.sqrt(neededArea / ratioToUse); W = L * ratioToUse;
-                 updateInputNoTrigger('inpL', L); updateInputNoTrigger('inpW', W);
-             } else {
-                 const areaBox = L * W;
-                 H = targetVol / (areaBox * shapeState.kFactorRect);
-                 updateInputNoTrigger('inpH', H);
-             }
+        // РАЗВИЛКА:
+        // А. Если вес заблокирован -> меняем Высоту (H), чтобы попасть в вес
+        // Б. Если вес НЕ заблокирован (или меняем саму Высоту) -> пересчитываем ВЕС
+        
+        if (isWeightLocked && source !== 'H') {
+            const targetWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
+            const targetVol = (targetWeight * 1000) / density; // Объем самой фигуры
+            
+            // V_фигуры = L * W * H * kFactor
+            // H = V / (L * W * kFactor)
+            const areaBox = L * W;
+            H = targetVol / (areaBox * shapeState.kFactorRect);
+            
+            // Обновляем высоту на экране
+            updateInputNoTrigger('inpH', H);
+            
+            // Вес остается старым (3 кг)
+            finalizeCalc(L, W, H, 0, targetWeight);
+            
         } else {
-            const areaSymbol = (L * W) * shapeState.kFactorRect;
-            targetWeight = (areaSymbol * H * density) / 1000;
-            updateInputNoTrigger('inpWeight', targetWeight);
+            // ФИЗИКА: Размеры заданы -> Считаем реальный вес
+            const fullSheetVol = L * W * H;      // Объем всего противня
+            const shapeVol = fullSheetVol * shapeState.kFactorRect; // Объем фигуры
+            
+            const realWeight = (shapeVol * density) / 1000; // Вес в кг
+            
+            // Обновляем поле веса
+            updateInputNoTrigger('inpWeight', realWeight);
+            
+            finalizeCalc(L, W, H, 0, realWeight);
         }
-        finalizeCalc(L, W, H, 0, targetWeight);
 
     } else {
-        // КРУГ
-        let D = parseFloat(document.getElementById('inpD').value) || 20;
-        if (isLocked) {
+        // --- ЛОГИКА ДЛЯ КРУГА ---
+        
+        if (isWeightLocked && source !== 'H') {
+            const targetWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
             const targetVol = (targetWeight * 1000) / density;
-            if (source === 'H') {
-                const neededAreaSymbol = targetVol / H;
-                const neededAreaCircle = neededAreaSymbol / shapeState.kFactorCircle;
-                D = Math.sqrt(neededAreaCircle / Math.PI) * 2;
-                updateInputNoTrigger('inpD', D);
-            } else {
-                const areaCircle = Math.PI * Math.pow(D/2, 2);
-                const areaSymbol = areaCircle * shapeState.kFactorCircle;
-                H = targetVol / areaSymbol;
-                updateInputNoTrigger('inpH', H);
-            }
-        } else {
+            
             const areaCircle = Math.PI * Math.pow(D/2, 2);
-            const areaSymbol = areaCircle * shapeState.kFactorCircle;
-            targetWeight = (areaSymbol * H * density) / 1000;
-            updateInputNoTrigger('inpWeight', targetWeight);
+            const areaShape = areaCircle * shapeState.kFactorCircle;
+            
+            H = targetVol / areaShape;
+            updateInputNoTrigger('inpH', H);
+            
+            const visualL = D / shapeState.radiusToHeightRatio;
+            const visualW = visualL * shapeState.nativeRatio;
+            finalizeCalc(visualL, visualW, H, D, targetWeight);
+            
+        } else {
+            const fullCylinderVol = Math.PI * Math.pow(D/2, 2) * H;
+            const shapeVol = fullCylinderVol * shapeState.kFactorCircle;
+            const realWeight = (shapeVol * density) / 1000;
+            
+            updateInputNoTrigger('inpWeight', realWeight);
+            
+            const visualL = D / shapeState.radiusToHeightRatio;
+            const visualW = visualL * shapeState.nativeRatio;
+            finalizeCalc(visualL, visualW, H, D, realWeight);
         }
-        const visualL = D / shapeState.radiusToHeightRatio;
-        const visualW = visualL * shapeState.nativeRatio;
-        finalizeCalc(visualL, visualW, H, D, targetWeight);
     }
 }
 
-function finalizeCalc(L, W, H, D, weight) {
+function finalizeCalc(L, W, H, D, shapeWeight) {
     const density = getDensity();
-    let totalVol = 0;
+    let fullSheetVol = 0; // Объем полного противня/формы
     
     if (shapeState.currentShape === 'rect') {
-        totalVol = L * W * H;
+        fullSheetVol = L * W * H;
     } else {
-        totalVol = Math.PI * Math.pow(D/2, 2) * H;
+        fullSheetVol = Math.PI * Math.pow(D/2, 2) * H;
     }
     
-    const totalWeight = (totalVol * density) / 1000;
-    const waste = totalWeight - weight;
-    const wastePct = totalWeight > 0 ? (waste / totalWeight) * 100 : 0;
+    // Вес полного листа (для выпечки)
+    const fullSheetWeight = (fullSheetVol * density) / 1000;
     
-    document.getElementById('infoTotal').innerText = `${totalWeight.toFixed(2)} кг`;
+    // Отходы (разница между полным листом и весом фигуры)
+    const waste = fullSheetWeight - shapeWeight;
+    const wastePct = fullSheetWeight > 0 ? (waste / fullSheetWeight) * 100 : 0;
+    
+    // --- ОБНОВЛЕНИЕ ИНФО-БЛОКА ---
+    // Теперь тут честный вес полного бисквита (6.09 кг)
+    document.getElementById('infoTotal').innerText = `${fullSheetWeight.toFixed(2)} кг`;
     document.getElementById('infoWaste').innerText = `${waste.toFixed(2)} кг (${Math.round(wastePct)}%)`;
     
-    shapeState.current = { l: L, w: W, h: H, d: D, weight: weight };
+    // Сохраняем состояние
+    shapeState.current = { l: L, w: W, h: H, d: D, weight: shapeWeight };
     
+    // Обновляем картинку
     update3DScene(L, W, H, D);
 
-    // --- НОВЫЙ БЛОК: ЖИВОЙ ПЕРЕСЧЕТ РЕЦЕПТА ---
-    // Выполняем полный расчет (как при нажатии кнопки)
-    const previewData = calculateShapeComplete(false);
-    // Рисуем таблицу внизу
+    // Запускаем пересчет рецепта (Тихий режим)
+    const previewData = calculateShapeComplete(false); 
     renderShapeRecipePreview(previewData);
 }
-
+     
 // 5. ВИЗУАЛИЗАЦИЯ (ИСПРАВЛЕННАЯ ЦЕНТРОВКА)
 function update3DScene(L, W, H, D) {
     const box = document.getElementById('ghostBox');
@@ -13920,14 +13952,38 @@ function stepShape(axis, delta) {
 }
 
 let holdTimer = null, holdInterval = null;
+let lastClickTime = 0; // Защита от двойного клика
+
 function startChange(id, delta, axis) {
-    saveToHistory(); // <--- СОХРАНЯЕМ ПЕРЕД НАЧАЛОМ ИЗМЕНЕНИЯ
+    // 1. Защита от "призрачных" кликов
+    // Если между нажатиями прошло меньше 200мс, считаем это дублем (Touch + Mouse) и игнорируем
+    const now = Date.now();
+    if (now - lastClickTime < 200) return;
+    lastClickTime = now;
+
+    // 2. Сохраняем историю
+    saveToHistory();
+
+    // 3. Делаем первый шаг
     stepShape(axis, delta);
+
+    // 4. Настраиваем таймер удержания
+    // Было 400мс -> Ставим 600мс (надо держать дольше, чтобы цифры побежали)
     holdTimer = setTimeout(() => {
-        holdInterval = setInterval(() => stepShape(axis, delta), 100); 
-    }, 400); 
+        // Запускаем непрерывное изменение
+        // Было 100мс -> Ставим 150мс (бегут чуть медленнее, легче поймать нужную цифру)
+        holdInterval = setInterval(() => stepShape(axis, delta), 150); 
+    }, 600); 
 }
-function stopChange() { clearTimeout(holdTimer); clearInterval(holdInterval); }
+
+// Функцию stopChange оставляем такой же, но на всякий случай продублирую для проверки:
+function stopChange() { 
+    clearTimeout(holdTimer); 
+    clearInterval(holdInterval); 
+    
+    // Сброс вибрации (если была)
+    if(navigator.vibrate) navigator.vibrate(0);
+}
 
 function stepWeight(delta) {
   saveToHistory(); 
@@ -14596,6 +14652,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
