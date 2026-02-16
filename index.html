@@ -14224,7 +14224,7 @@ function stepWeight(delta) {
      // isInteractive = true (нажали кнопку), false (авто-пересчет при вводе)
 function calculateShapeComplete(isInteractive = false) {
     const { l, w, h, d, weight } = shapeState.current; 
-    const targetFigWeightG = weight * 1000; // Например, 3000 г
+    const targetFigWeightG = weight * 1000; // Вес фигуры (3000 г)
     
     const recipeId = document.getElementById('shapeRecipeSelect').value;
     const coatingId = document.getElementById('shapeCoatingSelect').value;
@@ -14255,45 +14255,47 @@ function calculateShapeComplete(isInteractive = false) {
     const fillingRec = myRecipes.find(r => r.id === recipeId);
 
     // ====================================================================
-    // 1. ЖЕЛЕЗОБЕТОННЫЙ РАСЧЕТ БИСКВИТА (ПО ВАШЕЙ ЛОГИКЕ)
+    // 1. ГЛАВНЫЙ РАСЧЕТ: ОТ ФИГУРЫ К ПРЯМОУГОЛЬНИКУ
     // ====================================================================
     
-    // Определяем коэффициент заполнения (kFactor)
+    // Коэффициент заполнения (0.6)
     const kFactor = (shapeState.currentShape === 'circle') 
         ? (shapeState.kFactorCircle || 1) 
         : (shapeState.kFactorRect || 1);
 
-    // Логика: Если фигура (3 кг) - это kFactor (0.6), то полный торт - это X.
-    // X = 3 / 0.6 = 5 кг.
-    // Мы считаем, что эти 5 кг - это полноценный торт (Бисквит + Начинка + Покрытие).
+    // Логика: 3 кг / 0.6 = 5 кг.
+    // Это вес полного торта (Бисквит + Начинка + Покрытие), который мы берем за основу.
     const fullRectTotalWeight = targetFigWeightG / kFactor;
 
-    // СКАЛИРУЕМ РЕЦЕПТ НА ЭТОТ ПОЛНЫЙ ВЕС (5 кг) И ЗАБИРАЕМ БИСКВИТ
-    // Функция getScaledRecipeComponents берет рецепт и подгоняет его так, 
-    // чтобы сумма всех ингредиентов была равна fullRectTotalWeight.
+
+    // ====================================================================
+    // 2. БИСКВИТ (БЕРЕМ ИЗ ВЕСА 5 КГ)
+    // ====================================================================
+    
+    // Просто скалируем рецепт на 5 кг и забираем бисквит.
     const biscuitBlocks = getScaledRecipeComponents(recipeId, fullRectTotalWeight, (name) => {
         return name.toLowerCase().includes('бисквит');
     });
 
 
     // ====================================================================
-    // 2. РАСЧЕТ РЕАЛЬНОГО ПОКРЫТИЯ (КОТОРОЕ ПОЙДЕТ НА ФИГУРУ)
+    // 3. ПОКРЫТИЕ (РЕАЛЬНОЕ, НА ФИГУРУ)
     // ====================================================================
+    // Бисквит мы печем как на 5 кг, но покрывать будем только вырезанную фигуру.
+    
     let neededCoatingWeight = 0;
     let coatingBlocks = [];
 
     if (!skipCoating && coatingRec) {
-        // Площадь верха фигуры (по факту выреза)
+        // Площадь поверхности фигуры (Верх + Бока)
         const topArea = (shapeState.currentShape === 'circle' ? (Math.PI * Math.pow(d/2, 2)) : (l * w)) * kFactor;
-
-        // Площадь боков (Периметр фигуры * Высота)
         const widthRef = (shapeState.currentShape === 'circle') ? d : w;
         const perimeterCm = widthRef * shapeState.perimeterRatio;
         const sideArea = perimeterCm * h;
         
         const totalFigureArea = topArea + sideArea;
         
-        // Расход покрытия (г/см2)
+        // Расход покрытия
         let coatConsumption = 1.2;
         const calArea = (Math.PI * Math.pow(coatingRec.calibrationD/2, 2)) + (Math.PI * coatingRec.calibrationD * coatingRec.calibrationH);
         if (calArea > 0) coatConsumption = coatingRec.outputWeight / calArea;
@@ -14306,26 +14308,26 @@ function calculateShapeComplete(isInteractive = false) {
 
 
     // ====================================================================
-    // 3. РАСЧЕТ НАЧИНКИ (ОСТАТОК ВЕСА ВНУТРИ ФИГУРЫ)
+    // 4. НАЧИНКА (ОСТАТОК ВЕСА)
     // ====================================================================
-    // Формула: Вес Заказа (3кг) = Вес Покрытия + Вес Бисквита(В фигуре) + Вес Начинки
-    // Начинка = 3кг - Покрытие - Бисквит(В фигуре)
+    // Нам нужно, чтобы ИТОГОВЫЙ торт на весах показал ровно 3000 г.
+    // Формула: Начинка = 3000 - Покрытие - (Тот бисквит, что остался после обрезки)
 
-    // 3.1. Считаем вес бисквита в ПОЛНОМ листе (5 кг)
-    let fullBiscuitWeight = 0;
+    // 4.1. Считаем вес всего испеченного бисквита (из списка ингредиентов)
+    let fullBakedBiscuitWeight = 0;
     biscuitBlocks.forEach(b => b.ingredients.forEach(i => {
          let w = i.amount;
-         if (i.unit === 'шт') w *= 55; // Конвертируем шт в граммы для математики
-         fullBiscuitWeight += w;
+         if (i.unit === 'шт') w *= 55; // Яйца в граммы
+         fullBakedBiscuitWeight += w;
     }));
     
-    // 3.2. Считаем, сколько бисквита попадет в фигуру (вырезаем 60%)
-    const figureBiscuitWeight = fullBiscuitWeight * kFactor; 
+    // 4.2. Сколько бисквита реально пойдет в торт? (60% от испеченного)
+    const figureBiscuitWeight = fullBakedBiscuitWeight * kFactor; 
     
-    // 3.3. Вычисляем начинку
+    // 4.3. Заполняем остаток веса начинкой
     let neededFillingWeight = targetFigWeightG - neededCoatingWeight - figureBiscuitWeight;
     
-    if (neededFillingWeight < 50) neededFillingWeight = 50; // Чтобы не ушло в минус
+    if (neededFillingWeight < 50) neededFillingWeight = 50; 
 
     const fillingBlocks = getScaledRecipeComponents(recipeId, neededFillingWeight, (name) => {
         return !name.toLowerCase().includes('бисквит');
@@ -14333,7 +14335,7 @@ function calculateShapeComplete(isInteractive = false) {
 
 
     // ====================================================================
-    // 4. СБОРКА ИТОГОВОГО СПИСКА
+    // 5. СБОРКА ИТОГА
     // ====================================================================
     const allDetailedBlocks = [
         ...biscuitBlocks.map(b => ({...b, name: `🍱 ${b.name} (Полный лист)`})), 
@@ -14375,7 +14377,9 @@ function calculateShapeComplete(isInteractive = false) {
         detailedBlocks: allDetailedBlocks
     };
 }
-     
+
+
+          
 // --- ОТПРАВКА В ПЛАН ---
 function submitShapeOrder() {
     // 1. Выполняем расчет
@@ -14903,6 +14907,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
