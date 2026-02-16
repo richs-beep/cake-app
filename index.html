@@ -14257,7 +14257,7 @@ function processShapeCanvas(img) {
     const cvs = document.getElementById('shapeAnalysisCanvas');
     const ctx = cvs.getContext('2d');
     
-    // 1. Рисуем для анализа (размер фиксируем для стандартизации расчетов)
+    // Фиксируем размер для анализа
     const w = 300; 
     const h = Math.round(w * (img.height / img.width));
     cvs.width = w;
@@ -14269,25 +14269,25 @@ function processShapeCanvas(img) {
     const data = imgData.data;
     
     let solidPixels = 0;
-    let edgePixels = 0; // Считаем длину границы
+    let edgePixels = 0; // Точный счетчик границы
     let minX=w, maxX=0, minY=h, maxY=0;
     
-    // Хелпер проверки пикселя (прозрачный или белый = пусто)
+    // Хелпер: проверка, закрашен ли пиксель
     const isSolid = (x, y) => {
         if (x<0 || x>=w || y<0 || y>=h) return false;
         const i = (y*w+x)*4;
         const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
-        const isWhite = (r>230 && g>230 && b>230);
-        return (a > 50 && !isWhite);
+        // Считаем твердым всё, что не прозрачное и не чисто белое
+        return (a > 50 && !(r>230 && g>230 && b>230));
     };
 
-    // 2. Проход по пикселям
+    // Проход по всем пикселям
     for(let y=0; y<h; y++) {
         for(let x=0; x<w; x++) {
             if (isSolid(x, y)) {
                 solidPixels++;
                 
-                // Проверка на границу (если сосед пустой - значит это край)
+                // Если хоть один сосед пустой — это граница (периметр)
                 if (!isSolid(x+1, y) || !isSolid(x-1, y) || !isSolid(x, y+1) || !isSolid(x, y-1)) {
                     edgePixels++;
                 }
@@ -14297,8 +14297,9 @@ function processShapeCanvas(img) {
                 if(y < minY) minY = y;
                 if(y > maxY) maxY = y;
             } else {
+                // Чистим фон (делаем прозрачным для красоты)
                 const i = (y*w+x)*4;
-                data[i+3] = 0; // Делаем прозрачным
+                data[i+3] = 0; 
             }
         }
     }
@@ -14308,46 +14309,51 @@ function processShapeCanvas(img) {
     
     if (realW <= 0 || realH <= 0) { alert("Фигура не найдена!"); return; }
     
-    // 3. Визуальный кроп (как было раньше)
+    // 1. Визуальный кроп (центрируем фигуру в квадрате)
     const tempCvs = document.createElement('canvas');
     tempCvs.width = realW;
     tempCvs.height = realH;
     const tempCtx = tempCvs.getContext('2d');
-    tempCtx.putImageData(imgData, -minX, -minY);
+    tempCtx.putImageData(imgData, -minX, -minY); // Сдвигаем
     
     cvs.width = realW;
     cvs.height = realH;
     ctx.drawImage(tempCvs, 0, 0);
-    shapeState.cleanImgUrl = cvs.toDataURL();
+    shapeState.cleanImgUrl = cvs.toDataURL(); // Сохраняем для 3D
 
-    // 4. МАТЕМАТИКА (ИСПРАВЛЕННАЯ)
+    // 2. МАТЕМАТИКА (ИСПРАВЛЕННАЯ)
     const boundingArea = realW * realH;
-    const boundingPerimeter = 2 * (realW + realH); // Периметр прямоугольника
+    
+    // Периметр описывающего прямоугольника (в пикселях)
+    const boundingPerimeter = 2 * (realW + realH); 
     
     const fillRate = solidPixels / boundingArea;
     const aspectRatio = realW / realH;
     
-    // Коэффициент сложности периметра.
-    // Если периметр фигуры равен периметру рамки, то Ratio = 1.
-    // У цифры "5" он будет около 2.5 - 3.0.
-    // edgePixels - это длина в пикселях.
-    const perimeterRatio = edgePixels / boundingPerimeter;
+    // Реальный коэффициент извилистости
+    // (Делим реальную длину границы на периметр прямоугольника)
+    // Добавляем множитель 1.2, так как пиксельная лесенка короче реальной обмазки шпателем
+    let perimeterRatio = (edgePixels / boundingPerimeter) * 1.2;
+    
+    // Защита: коэффициент не может быть меньше 1 (периметр фигуры не может быть меньше рамки)
+    if (perimeterRatio < 1) perimeterRatio = 1;
 
     shapeCalcState.fillRate = fillRate;
     shapeCalcState.aspectRatio = aspectRatio;
-    // Добавляем множитель 1.1 для надежности (складки крема, неровности)
-    shapeCalcState.perimeterRatio = perimeterRatio * 1.1; 
+    shapeCalcState.perimeterRatio = perimeterRatio;
     
-    // UI
+    // Обновляем UI
     document.getElementById('lblFillRate').innerText = Math.round(fillRate * 100) + '%';
     document.getElementById('lblAspectRatio').innerText = aspectRatio.toFixed(2);
-    document.getElementById('lblPerimFactor').innerText = shapeCalcState.perimeterRatio.toFixed(2);
+    document.getElementById('lblPerimFactor').innerText = perimeterRatio.toFixed(2);
     
     document.getElementById('shapeAnalysisBlock').style.display = 'block';
     fillShapeRecipes();
-    calculateShapeOrder();
+    
+    // Запускаем пересчет сразу
+    setTimeout(calculateShapeOrder, 100);
 }
-     
+  
 function fillShapeRecipes() {
     const selMain = document.getElementById('shapeRecipeSelectMain');
     const selCoat = document.getElementById('shapeCoatingSelect');
@@ -14528,130 +14534,161 @@ function addShapeToQueue() {
     const recipe = myRecipes.find(r => r.id === recId);
     const coating = myRecipes.find(r => r.id === coatId);
     
-    const shoppingList = [];
-    let totalPrice = 0;
-    
-    // Коэффициенты
     const recOutput = parseFloat(recipe.outputWeight) || 1000;
     
-    // 1. Для БИСКВИТА берем Gross (грязный) вес
-    // Если в рецепте бисквит весит 400г, а нам надо испечь 1700г (gross), коэфф = 1700/1000? Нет.
-    // Нам нужно понять, какую долю в рецепте занимает бисквит.
-    // Упрощение: мы уже посчитали res.grossSponge. 
-    // Считаем масштаб для бисквитных блоков:
-    // Scale = (Вес бисквита на противень) / (Вес бисквита в рецепте)
-    // Но вес в рецепте неизвестен точно без перебора.
-    // ПРОСТОЙ ПУТЬ: 
-    // ScaleFilling = res.weightInner / recOutput; (Это масштаб для чистой фигуры)
-    // ScaleSponge = ScaleFilling / shapeCalcState.fillRate; (Это масштаб для противня)
+    // Коэффициенты масштабирования
+    // 1. Бисквит печем на ВЕСЬ ЛИСТ (Gross)
+    const scaleSponge = res.grossSponge / recOutput;
+    // 2. Начинку делаем ТОЛЬКО В ФИГУРУ (Net)
+    const scaleFilling = res.netFilling / recOutput; 
+    // 3. Крем считаем от веса покрытия
+    const coatOutput = coating ? (parseFloat(coating.outputWeight) || 500) : 500;
+    const scaleCoating = coating ? (res.weightCoat / coatOutput) : 0;
+
+    // Массивы для разделения (чтобы не смешивать Сахар для теста и Сахар для крема)
+    const spongeIngs = [];
+    const fillingIngs = [];
+    const coatingIngs = [];
     
-    const scaleFilling = res.weightInner / recOutput;
-    const scaleSponge = scaleFilling / shapeCalcState.fillRate; 
+    let spongeCost = 0;
+    let fillingCost = 0;
+    let coatingCost = 0;
 
-    // Массив для детализации (чтобы в отчете были красивые слои)
-    const detailedBlocks = [];
-
-    // --- ОБРАБОТКА ОСНОВНОГО РЕЦЕПТА ---
+    // --- 1. РАЗБОР ОСНОВНОГО РЕЦЕПТА ---
     if(recipe.blocks) {
         recipe.blocks.forEach(b => {
             const bName = b.name.toLowerCase();
-            // Проверка: это бисквит?
-            const isSponge = bName.includes('бисквит') || bName.includes('корж') || bName.includes('тесто');
+            // Определяем, куда относится блок: Выпечка или Сборка?
+            const isSponge = bName.includes('бисквит') || bName.includes('корж') || bName.includes('тесто') || bName.includes('выпечка');
             const scale = isSponge ? scaleSponge : scaleFilling;
-            
-            // Название для отчета
-            const blockTitle = isSponge 
-                ? `🍰 ${b.name} (Выпечка на лист)` 
-                : `🥣 ${b.name} (В фигуру)`;
-
-            const blockIngs = [];
-            let blockCost = 0;
+            const targetArray = isSponge ? spongeIngs : fillingIngs;
 
             b.ingredients.forEach(i => {
                 const ing = myIngredients.find(x => x.id === i.id);
                 if(ing) {
-                    // Фикс яиц (грамм -> шт)
+                    // --- ЛОГИКА ЯИЦ (Fix 500 шт) ---
                     let rawWeight = parseFloat(i.weight);
-                    if (ing.unit === 'шт' && (ing.useWeightInRecipe || rawWeight > 20)) {
-                        rawWeight = rawWeight / (ing.singleWeight || 55);
+                    
+                    // Если единица "шт", а вес похож на граммы (больше 30),
+                    // значит в рецепте написано "Яйцо 200г", а на складе "Яйцо шт".
+                    if (ing.unit === 'шт' && (ing.useWeightInRecipe || rawWeight > 30)) {
+                        const singleW = ing.singleWeight || 55; 
+                        rawWeight = rawWeight / singleW; // Переводим граммы в штуки
                     }
+                    // -------------------------------
 
                     const amount = rawWeight * scale;
                     const price = amount * (ing.packPrice / ing.packWeight);
                     
-                    // Добавляем в общий закуп
-                    const existing = shoppingList.find(x => x.id === ing.id);
-                    if (existing) { existing.amount += amount; existing.cost += price; } 
-                    else { shoppingList.push({ id: ing.id, name: ing.name, amount: amount, unit: ing.unit, cost: price }); }
+                    // Добавляем в нужный список (суммируем, если такой ингредиент уже есть в ЭТОМ блоке)
+                    const existing = targetArray.find(x => x.id === ing.id);
+                    if (existing) {
+                        existing.amount += amount;
+                        existing.cost += price;
+                    } else {
+                        targetArray.push({
+                            id: ing.id, name: ing.name, amount: amount, unit: ing.unit, cost: price
+                        });
+                    }
                     
-                    totalPrice += price;
-
-                    // Добавляем в детализацию блока
-                    blockIngs.push({
-                        name: ing.name,
-                        amount: Math.round(amount*100)/100,
-                        unit: ing.unit,
-                        cost: Math.ceil(price)
-                    });
-                    blockCost += price;
+                    if (isSponge) spongeCost += price; else fillingCost += price;
                 }
             });
-
-            // Сохраняем блок отдельно!
-            detailedBlocks.push({
-                name: blockTitle,
-                type: isSponge ? 'filling' : 'filling', // тип для иконки
-                totalCost: Math.ceil(blockCost),
-                ingredients: blockIngs
-            });
         });
     }
-    
-    // --- ОБРАБОТКА ПОКРЫТИЯ ---
-    if(coating) {
-        const coatOutput = parseFloat(coating.outputWeight) || 500;
-        const coatScale = res.weightCoat / coatOutput;
-        const coatIngs = [];
-        let coatCost = 0;
-        
-        if(coating.blocks) {
-            coating.blocks.forEach(b => {
-                b.ingredients.forEach(i => {
-                    const ing = myIngredients.find(x => x.id === i.id);
-                    if(ing) {
-                        let rawWeight = parseFloat(i.weight);
-                        if (ing.unit === 'шт' && (ing.useWeightInRecipe || rawWeight > 20)) {
-                            rawWeight = rawWeight / (ing.singleWeight || 55);
-                        }
-                        const amount = rawWeight * coatScale;
-                        const price = amount * (ing.packPrice / ing.packWeight);
-                        
-                        const existing = shoppingList.find(x => x.id === ing.id);
-                        if (existing) { existing.amount += amount; existing.cost += price; } 
-                        else { shoppingList.push({ id: ing.id, name: ing.name, amount: amount, unit: ing.unit, cost: price }); }
-                        
-                        totalPrice += price;
-                        coatIngs.push({ name: ing.name, amount: Math.round(amount*100)/100, unit: ing.unit, cost: Math.ceil(price) });
-                        coatCost += price;
+
+    // --- 2. РАЗБОР ПОКРЫТИЯ ---
+    if(coating && coating.blocks) {
+        coating.blocks.forEach(b => {
+            b.ingredients.forEach(i => {
+                const ing = myIngredients.find(x => x.id === i.id);
+                if(ing) {
+                    let rawWeight = parseFloat(i.weight);
+                    if (ing.unit === 'шт' && (ing.useWeightInRecipe || rawWeight > 30)) {
+                        rawWeight = rawWeight / (ing.singleWeight || 55);
                     }
-                });
+
+                    const amount = rawWeight * scaleCoating;
+                    const price = amount * (ing.packPrice / ing.packWeight);
+                    
+                    const existing = coatingIngs.find(x => x.id === ing.id);
+                    if (existing) {
+                        existing.amount += amount;
+                        existing.cost += price;
+                    } else {
+                        coatingIngs.push({
+                            id: ing.id, name: ing.name, amount: amount, unit: ing.unit, cost: price
+                        });
+                    }
+                    coatingCost += price;
+                }
             });
-        }
-        detailedBlocks.push({
-            name: "🎨 Покрытие (Внешнее)",
-            type: 'coating',
-            totalCost: Math.ceil(coatCost),
-            ingredients: coatIngs
         });
     }
-    
-    // Округляем общий список
-    shoppingList.forEach(i => { i.amount = Math.round(i.amount*100)/100; i.cost = Math.ceil(i.cost); });
 
+    // --- 3. ОКРУГЛЕНИЕ ДЛЯ КРАСОТЫ ---
+    const roundList = (list) => list.forEach(i => {
+        i.amount = Math.round(i.amount * 100) / 100;
+        i.cost = Math.ceil(i.cost);
+    });
+    roundList(spongeIngs);
+    roundList(fillingIngs);
+    roundList(coatingIngs);
+
+    // --- 4. СОЗДАЕМ ОБЩИЙ SHOPPING LIST (Для сметы) ---
+    // Объединяем все три списка в один, суммируя одинаковые продукты
+    const masterList = [];
+    const addToMaster = (list) => {
+        list.forEach(item => {
+            const ex = masterList.find(x => x.id === item.id);
+            if(ex) { ex.amount += item.amount; ex.cost += item.cost; }
+            else { masterList.push({...item}); } // Клонируем объект
+        });
+    };
+    addToMaster(spongeIngs);
+    addToMaster(fillingIngs);
+    addToMaster(coatingIngs);
+    
+    // Финальное округление общего списка
+    roundList(masterList);
+
+    // --- 5. СБОРКА ОБЪЕКТА ---
     const hourlyRate = parseFloat(document.getElementById('hourlyRate').value) || 0;
     const laborCost = (currentLaborList || []).reduce((s,l) => s + (l.realHours*l.coeff*hourlyRate), 0);
+    const totalPrice = masterList.reduce((sum, i) => sum + i.cost, 0);
     const totalCost = totalPrice + laborCost;
     
+    // Формируем блоки для Сводной Ведомости
+    // ВАЖНО: Мы передаем готовые изолированные массивы, а не фильтруем их потом!
+    const detailedBlocks = [];
+    
+    if (spongeIngs.length > 0) {
+        detailedBlocks.push({ 
+            name: "🍰 Выпечка (На лист/противень)", 
+            type: 'filling', 
+            totalCost: Math.ceil(spongeCost),
+            ingredients: spongeIngs
+        });
+    }
+    
+    if (fillingIngs.length > 0) {
+        detailedBlocks.push({ 
+            name: "🥣 Сборка (Внутрь фигуры)", 
+            type: 'filling', 
+            totalCost: Math.ceil(fillingCost),
+            ingredients: fillingIngs
+        });
+    }
+    
+    if (coatingIngs.length > 0) {
+        detailedBlocks.push({ 
+            name: "🎨 Покрытие (Внешнее)", 
+            type: 'coating', 
+            totalCost: Math.ceil(coatingCost),
+            ingredients: coatingIngs
+        });
+    }
+
     const shapeData = {
         isShapeCake: true, 
         geometry: {
@@ -14677,14 +14714,13 @@ function addShapeToQueue() {
             weight: res.weightTotal,
             totalCost: Math.ceil(totalPrice)
         }],
-        shoppingList: shoppingList,
-        detailedBlocks: detailedBlocks // ВОТ ЭТО ГЛАВНОЕ ИЗМЕНЕНИЕ
+        shoppingList: masterList,
+        detailedBlocks: detailedBlocks // <-- Теперь здесь четкое разделение
     };
 
     appState.results[appState.activeSide] = shapeData;
     addToQueue();
 }
- 
 
 // 1. ГЕНЕРАЦИЯ СЛОЕВ (Вызывается 1 раз при загрузке новой картинки)
 function generateShapeLayers(imgUrl) {
@@ -14796,6 +14832,7 @@ function updateShape3DScene(L, W, H) {
   </body>
 
 </html>
+
 
 
 
