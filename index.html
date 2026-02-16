@@ -14224,7 +14224,7 @@ function stepWeight(delta) {
      // isInteractive = true (нажали кнопку), false (авто-пересчет при вводе)
 function calculateShapeComplete(isInteractive = false) {
     const { l, w, h, d, weight } = shapeState.current; 
-    const targetFigWeightG = weight * 1000; // Вес фигуры (например 3000 г)
+    const targetFigWeightG = weight * 1000; // Вес фигуры (3000 г)
     
     const recipeId = document.getElementById('shapeRecipeSelect').value;
     const coatingId = document.getElementById('shapeCoatingSelect').value;
@@ -14235,61 +14235,53 @@ function calculateShapeComplete(isInteractive = false) {
         return null;
     }
     
-    let coatingRec = null; 
-    let skipCoating = !coatingId;
-    if (!skipCoating) coatingRec = myRecipes.find(r => r.id === coatingId);
+    // Определяем покрытие
+    let coatingRec = null;
+    let skipCoating = false;
+    if (!coatingId) {
+        if (isInteractive) {
+             if (confirm("Покрытие не выбрано. Считать без него?")) skipCoating = true;
+             else return null;
+        } else skipCoating = true;
+    } else {
+        coatingRec = myRecipes.find(r => r.id === coatingId);
+    }
+
     const fillingRec = myRecipes.find(r => r.id === recipeId);
 
+
     // ====================================================================
-    // 1. БАЗОВЫЙ ВЕС (ПОЛНЫЙ КИРПИЧ)
+    // 1. ОПРЕДЕЛЯЕМ ВЕС ПОЛНОГО "КИРПИЧА" (ПРЯМОУГОЛЬНИКА)
     // ====================================================================
+    // Если фигура (3 кг) занимает 60% (0.6), то полный кирпич весит 5 кг.
+    // 5 кг - это вес ГОТОВОГО изделия (Бисквит + Начинка + Покрытие).
+    
     const kFactor = (shapeState.currentShape === 'circle') 
         ? (shapeState.kFactorCircle || 1) 
         : (shapeState.kFactorRect || 1);
 
-    // Если фигура 3 кг - это 60%, то полный кирпич = 5 кг.
-    // Это вес ГОТОВОГО торта (Бисквит + Начинка + Покрытие).
     const fullRectTotalWeight = targetFigWeightG / kFactor;
 
 
     // ====================================================================
-    // 2. ПОЛУЧАЕМ ИНГРЕДИЕНТЫ ИЗ "КИРПИЧА" (5 кг)
+    // 2. БИСКВИТ (ИЗ ПРОПОРЦИЙ КИРПИЧА)
     // ====================================================================
+    // Мы берем рецепт и масштабируем его на 5 кг.
+    // Функция getScaledRecipeComponents сама знает процент бисквита в рецепте
+    // и выдаст ровно столько теста, сколько положено на 5-кг торт.
     
-    // Скалируем рецепт на полный вес (5 кг). В нем уже всё есть в нужной пропорции.
-    const fullCakeBlocks = getScaledRecipeComponents(recipeId, fullRectTotalWeight, () => true);
-
-    // 2.1. БИСКВИТ
-    // Берем ЦЕЛИКОМ, как на полный кирпич. Нам нужно испечь лист.
-    const biscuitBlocks = fullCakeBlocks.filter(b => b.name.toLowerCase().includes('бисквит'));
-    
-    // 2.2. НАЧИНКА
-    // В рецепте на 5 кг начинки много (на весь кирпич).
-    // Нам нужно только 60% от нее (внутрь цифры).
-    const fillingBlocksFull = fullCakeBlocks.filter(b => !b.name.toLowerCase().includes('бисквит'));
-    
-    // Уменьшаем количество начинки на коэффициент формы (0.6)
-    const fillingBlocks = fillingBlocksFull.map(block => {
-        return {
-            ...block,
-            ingredients: block.ingredients.map(ing => ({
-                ...ing,
-                amount: ing.amount * kFactor, // Урезаем начинку до размера цифры
-                cost: ing.cost * kFactor
-            })),
-            totalCost: block.totalCost * kFactor
-        };
+    const biscuitBlocks = getScaledRecipeComponents(recipeId, fullRectTotalWeight, (name) => {
+        return name.toLowerCase().includes('бисквит');
     });
 
 
     // ====================================================================
-    // 3. ПОКРЫТИЕ (СЧИТАЕМ ОТДЕЛЬНО ПО ПЛОЩАДИ)
+    // 3. ПОКРЫТИЕ (РЕАЛЬНОЕ НА ФИГУРУ)
     // ====================================================================
-    // Покрытие из рецепта "кирпича" нам не подходит, потому что у цифры 
-    // площадь поверхности сложнее (больше боков). Считаем честно.
+    // Считаем площадь поверхности вырезанной фигуры.
     
-    let coatingBlocks = [];
     let neededCoatingWeight = 0;
+    let coatingBlocks = [];
 
     if (!skipCoating && coatingRec) {
         const topArea = (shapeState.currentShape === 'circle' ? (Math.PI * Math.pow(d/2, 2)) : (l * w)) * kFactor;
@@ -14297,22 +14289,51 @@ function calculateShapeComplete(isInteractive = false) {
         const perimeterCm = widthRef * shapeState.perimeterRatio;
         const sideArea = perimeterCm * h;
         
-        const totalFigureArea = topArea + sideArea;
-        
+        // Расход из настроек покрытия
         let coatConsumption = 1.2;
         const calArea = (Math.PI * Math.pow(coatingRec.calibrationD/2, 2)) + (Math.PI * coatingRec.calibrationD * coatingRec.calibrationH);
         if (calArea > 0) coatConsumption = coatingRec.outputWeight / calArea;
         
-        neededCoatingWeight = totalFigureArea * coatConsumption * 1.1; 
+        // Вес покрытия
+        neededCoatingWeight = (topArea + sideArea) * coatConsumption * 1.1; 
         
         coatingBlocks = getScaledRecipeComponents(coatingId, neededCoatingWeight, () => true);
         coatingBlocks.forEach(b => b.type = 'coating'); 
     }
 
+
     // ====================================================================
-    // 4. СБОРКА
+    // 4. НАЧИНКА (ЧТОБЫ ПОПАСТЬ В ВЕС 3 КГ)
     // ====================================================================
+    // Нам нужно отдать клиенту ровно 3000 г.
+    // Вес Заказа = Покрытие + Бисквит(в фигуре) + Начинка.
+    // Значит: Начинка = 3000 - Покрытие - Бисквит(в фигуре).
+
+    // 4.1. Узнаем вес испеченного бисквита (который мы посчитали в шаге 2)
+    let fullBakedBiscuitWeight = 0;
+    biscuitBlocks.forEach(b => b.ingredients.forEach(i => {
+         let w = i.amount;
+         if (i.unit === 'шт') w *= 55; // 1 яйцо ~ 55г
+         fullBakedBiscuitWeight += w;
+    }));
     
+    // 4.2. В фигуру попадет только 60% (kFactor) от этого бисквита
+    const figureBiscuitWeight = fullBakedBiscuitWeight * kFactor;
+    
+    // 4.3. Остаток заполняем начинкой
+    let neededFillingWeight = targetFigWeightG - neededCoatingWeight - figureBiscuitWeight;
+    
+    if (neededFillingWeight < 50) neededFillingWeight = 50; // Минимум
+
+    // Берем из рецепта всё, что НЕ бисквит
+    const fillingBlocks = getScaledRecipeComponents(recipeId, neededFillingWeight, (name) => {
+        return !name.toLowerCase().includes('бисквит');
+    });
+
+
+    // ====================================================================
+    // 5. СБОРКА ИТОГА
+    // ====================================================================
     const allDetailedBlocks = [
         ...biscuitBlocks.map(b => ({...b, name: `🍱 ${b.name} (Полный лист)`})), 
         ...fillingBlocks.map(b => ({...b, name: `🍓 ${b.name} (В фигуру)`})), 
@@ -14336,13 +14357,11 @@ function calculateShapeComplete(isInteractive = false) {
     const laborRate = parseFloat(document.getElementById('hourlyRate').value) || 0;
     const laborCost = 3 * 2.0 * laborRate; 
     const finalPrice = Math.ceil((totalCost + laborCost) * 1.5); 
-    
-    // Рассчитываем итоговый вес начинки для отчета
+
+    // Вес чистой начинки для отчета
     let finalFillingWeight = 0;
     fillingBlocks.forEach(b => b.ingredients.forEach(i => {
-         let w = i.amount;
-         if (i.unit === 'шт') w *= 55;
-         finalFillingWeight += w;
+         let w = i.amount; if (i.unit === 'шт') w *= 55; finalFillingWeight += w;
     }));
 
     return {
@@ -14361,7 +14380,6 @@ function calculateShapeComplete(isInteractive = false) {
         detailedBlocks: allDetailedBlocks
     };
 }
-
           
 // --- ОТПРАВКА В ПЛАН ---
 function submitShapeOrder() {
@@ -14890,6 +14908,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
