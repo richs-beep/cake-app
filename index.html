@@ -14021,10 +14021,10 @@ function calculateShapeComplete(isInteractive = false) {
     const recipeId = document.getElementById('shapeRecipeSelect').value;
     const coatingId = document.getElementById('shapeCoatingSelect').value;
     
-    // --- ПРОВЕРКИ (ТИХИЕ И ГРОМКИЕ) ---
+    // --- ПРОВЕРКИ ---
     if (!recipeId) {
         if (isInteractive) alert("⚠️ Выберите начинку!"); 
-        return null; // Прерываем расчет, если нет начинки (нечего считать)
+        return null;
     }
 
     let coatingRec = null;
@@ -14032,14 +14032,12 @@ function calculateShapeComplete(isInteractive = false) {
 
     if (!coatingId) {
         if (isInteractive) {
-            // Спрашиваем пользователя
-            if (confirm("⚠️ Покрытие не выбрано.\n\nПосчитать торт БЕЗ финишного покрытия (вес покрытия = 0)?")) {
+            if (confirm("⚠️ Покрытие не выбрано.\n\nПосчитать торт БЕЗ финишного покрытия?")) {
                 skipCoating = true;
             } else {
-                return null; // Пользователь хочет выбрать покрытие
+                return null;
             }
         } else {
-            // В тихом режиме просто считаем без покрытия пока
             skipCoating = true; 
         }
     } else {
@@ -14049,57 +14047,81 @@ function calculateShapeComplete(isInteractive = false) {
     const fillingRec = myRecipes.find(r => r.id === recipeId);
 
     // ==========================
-    // 1. РАСЧЕТ БИСКВИТА
+    // 1. РАСЧЕТ ВЕСА ПОЛНОГО ЛИСТА (ГЕОМЕТРИЯ)
     // ==========================
     let fillDensity = 0.8; 
     const selOpt = document.getElementById('shapeRecipeSelect').selectedOptions[0];
     if (selOpt && selOpt.dataset.density) fillDensity = parseFloat(selOpt.dataset.density);
 
-    let rectVol = (shapeState.currentShape === 'circle') ? (d * d * h) : (l * w * h);
-    const rectWeight = rectVol * fillDensity;
+    // Объем описанной фигуры (Полный лист/Цилиндр)
+    let rectVol = 0;
+    if (shapeState.currentShape === 'circle') {
+        rectVol = Math.PI * Math.pow(d/2, 2) * h;
+    } else {
+        rectVol = l * w * h;
+    }
     
-    const biscuitBlocks = getScaledRecipeComponents(recipeId, rectWeight, (name) => {
+    // Вес полного торта-параллелепипеда
+    const rectTotalWeight = rectVol * fillDensity;
+
+    // --- БИСКВИТ: БЕРЕМ ОТ ПОЛНОГО ВЕСА ---
+    // Мы печем полный прямоугольник весом rectTotalWeight.
+    // Рецепт бисквита берем прямо из этого веса, ничего не вычитая.
+    const biscuitBlocks = getScaledRecipeComponents(recipeId, rectTotalWeight, (name) => {
         return name.toLowerCase().includes('бисквит');
     });
 
+
     // ==========================
-    // 2. РАСЧЕТ ПОКРЫТИЯ
+    // 2. РАСЧЕТ РЕАЛЬНОГО ПОКРЫТИЯ (ДЛЯ ФИГУРЫ)
     // ==========================
     let neededCoatingWeight = 0;
     let coatingBlocks = [];
+    let coatConsumption = 1.2; // Дефолт
 
     if (!skipCoating && coatingRec) {
-        const topArea = (l * w) * shapeState.kFactorRect;
-        const widthCm = (shapeState.currentShape === 'circle') ? d : w;
-        const perimeterCm = widthCm * shapeState.perimeterRatio;
+        // Площадь верха (Фигуры)
+        const topArea = (shapeState.currentShape === 'circle' ? (Math.PI * Math.pow(d/2, 2)) : (l * w)) * shapeState.kFactorRect;
+
+        // Площадь боков (Периметр * Высота)
+        const widthRef = (shapeState.currentShape === 'circle') ? d : w;
+        const perimeterCm = widthRef * shapeState.perimeterRatio;
         const sideArea = perimeterCm * h;
-        const totalArea = topArea + sideArea;
         
-        let coatConsumption = 1.2; 
+        const totalFigureArea = topArea + sideArea;
+        
+        // Считаем расход покрытия из эталона
         const calD = coatingRec.calibrationD || 16;
         const calH = coatingRec.calibrationH || 10;
-        const calArea = (Math.PI * calD * calH) + (Math.PI * Math.pow(calD/2, 2));
+        const calArea = (Math.PI * Math.pow(calD/2, 2)) + (Math.PI * calD * calH);
         const calWeight = coatingRec.outputWeight || 500;
+        
         if (calArea > 0) coatConsumption = calWeight / calArea;
         
-        neededCoatingWeight = totalArea * coatConsumption * 1.1; 
+        // Вес покрытия на фигуру
+        neededCoatingWeight = totalFigureArea * coatConsumption * 1.1; // +10% запас
         
         coatingBlocks = getScaledRecipeComponents(coatingId, neededCoatingWeight, () => true);
         coatingBlocks.forEach(b => b.type = 'coating'); 
     }
 
     // ==========================
-    // 3. РАСЧЕТ НАЧИНКИ
+    // 3. РАСЧЕТ НАЧИНКИ (ВНУТРЬ ФИГУРЫ)
     // ==========================
+    // Начинка (крем, ягоды) кладется только внутрь фигуры.
+    // Вес фигуры (заказ) = (Бисквит_Фигуры + Начинка_Фигуры) + Покрытие_Фигуры.
+    // Значит: Начинка + Бисквит (внутри) = Вес_Заказа - Вес_Покрытия.
+    
     let neededFillingWeight = targetWeightG - neededCoatingWeight;
     if (neededFillingWeight < 100) neededFillingWeight = 100; 
 
+    // Берем из рецепта всё, КРОМЕ бисквита, рассчитанное на этот "чистый" вес
     const fillingBlocks = getScaledRecipeComponents(recipeId, neededFillingWeight, (name) => {
         return !name.toLowerCase().includes('бисквит');
     });
 
     // ==========================
-    // 4. СБОРКА
+    // 4. СБОРКА ИТОГА
     // ==========================
     const allDetailedBlocks = [
         ...biscuitBlocks.map(b => ({...b, name: `🍱 ${b.name} (Полный лист)`})), 
@@ -14141,7 +14163,6 @@ function calculateShapeComplete(isInteractive = false) {
         detailedBlocks: allDetailedBlocks
     };
 }
-
 // --- ОТПРАВКА В ПЛАН ---
 function submitShapeOrder() {
     // 1. Выполняем расчет
@@ -14669,6 +14690,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
