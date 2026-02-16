@@ -14257,8 +14257,8 @@ function processShapeCanvas(img) {
     const cvs = document.getElementById('shapeAnalysisCanvas');
     const ctx = cvs.getContext('2d');
     
-    // Фиксируем размер для анализа
-    const w = 300; 
+    // Фиксируем размер для анализа (достаточно детально для периметра)
+    const w = 400; 
     const h = Math.round(w * (img.height / img.width));
     cvs.width = w;
     cvs.height = h;
@@ -14269,10 +14269,10 @@ function processShapeCanvas(img) {
     const data = imgData.data;
     
     let solidPixels = 0;
-    let edgePixels = 0; // Точный счетчик границы
+    let edgeLength = 0; // Длина границы с учетом диагоналей
     let minX=w, maxX=0, minY=h, maxY=0;
     
-    // Хелпер: проверка, закрашен ли пиксель
+    // Хелпер: проверка, закрашен ли пиксель (Твердый ли он?)
     const isSolid = (x, y) => {
         if (x<0 || x>=w || y<0 || y>=h) return false;
         const i = (y*w+x)*4;
@@ -14287,11 +14287,19 @@ function processShapeCanvas(img) {
             if (isSolid(x, y)) {
                 solidPixels++;
                 
-                // Если хоть один сосед пустой — это граница (периметр)
-                if (!isSolid(x+1, y) || !isSolid(x-1, y) || !isSolid(x, y+1) || !isSolid(x, y-1)) {
-                    edgePixels++;
+                // Проверка на границу (Периметр)
+                // Если у пикселя есть пустой сосед - это край
+                const top = isSolid(x, y-1);
+                const bottom = isSolid(x, y+1);
+                const left = isSolid(x-1, y);
+                const right = isSolid(x+1, y);
+                
+                if (!top || !bottom || !left || !right) {
+                    // Это край. Добавляем к длине.
+                    edgeLength += 1;
                 }
 
+                // Определяем габариты
                 if(x < minX) minX = x;
                 if(x > maxX) maxX = x;
                 if(y < minY) minY = y;
@@ -14307,50 +14315,55 @@ function processShapeCanvas(img) {
     const realW = maxX - minX;
     const realH = maxY - minY;
     
-    if (realW <= 0 || realH <= 0) { alert("Фигура не найдена!"); return; }
+    if (realW <= 0 || realH <= 0) { alert("Фигура не найдена (белый лист)!"); return; }
     
-    // 1. Визуальный кроп (центрируем фигуру в квадрате)
+    // 1. Визуальный кроп (центрируем фигуру)
     const tempCvs = document.createElement('canvas');
     tempCvs.width = realW;
     tempCvs.height = realH;
     const tempCtx = tempCvs.getContext('2d');
-    tempCtx.putImageData(imgData, -minX, -minY); // Сдвигаем
+    tempCtx.putImageData(imgData, -minX, -minY); 
     
     cvs.width = realW;
     cvs.height = realH;
     ctx.drawImage(tempCvs, 0, 0);
     shapeState.cleanImgUrl = cvs.toDataURL(); // Сохраняем для 3D
 
-    // 2. МАТЕМАТИКА (ИСПРАВЛЕННАЯ)
+    // 2. МАТЕМАТИКА
     const boundingArea = realW * realH;
-    
-    // Периметр описывающего прямоугольника (в пикселях)
+    // Периметр рамки (в пикселях)
     const boundingPerimeter = 2 * (realW + realH); 
     
     const fillRate = solidPixels / boundingArea;
     const aspectRatio = realW / realH;
     
-    // Реальный коэффициент извилистости
-    // (Делим реальную длину границы на периметр прямоугольника)
-    // Добавляем множитель 1.2, так как пиксельная лесенка короче реальной обмазки шпателем
-    let perimeterRatio = (edgePixels / boundingPerimeter) * 1.2;
+    // РАСЧЕТ КОЭФФИЦИЕНТА ПЕРИМЕТРА
+    // edgeLength - это длина контура в пикселях.
+    // boundingPerimeter - это длина прямоугольника.
+    // Мы добавляем множитель 1.5, так как реальный торт имеет неровности крема, 
+    // и шпатель проходит большее расстояние, чем идеальная пиксельная линия.
+    // Для цифры "5" этот коэффициент должен получиться в районе 2.5 - 3.5.
+    let perimeterRatio = (edgeLength / boundingPerimeter) * 1.5;
     
-    // Защита: коэффициент не может быть меньше 1 (периметр фигуры не может быть меньше рамки)
-    if (perimeterRatio < 1) perimeterRatio = 1;
+    // Защита: периметр фигуры не может быть меньше периметра круга/квадрата
+    if (perimeterRatio < 1.0) perimeterRatio = 1.0;
 
     shapeCalcState.fillRate = fillRate;
     shapeCalcState.aspectRatio = aspectRatio;
     shapeCalcState.perimeterRatio = perimeterRatio;
     
-    // Обновляем UI
+    // Обновляем UI (для отладки)
     document.getElementById('lblFillRate').innerText = Math.round(fillRate * 100) + '%';
     document.getElementById('lblAspectRatio').innerText = aspectRatio.toFixed(2);
     document.getElementById('lblPerimFactor').innerText = perimeterRatio.toFixed(2);
     
     document.getElementById('shapeAnalysisBlock').style.display = 'block';
+    
+    // Генерируем 3D слои (один раз)
+    if(typeof generateShapeLayers === 'function') generateShapeLayers(shapeState.cleanImgUrl);
     fillShapeRecipes();
     
-    // Запускаем пересчет сразу
+    // Запускаем пересчет
     setTimeout(calculateShapeOrder, 100);
 }
   
@@ -14379,13 +14392,11 @@ function fillShapeRecipes() {
 
 // 2. РАСЧЕТ (Reverse Solver)
 function calculateShapeOrder() {
-    // Проверка: загружена ли картинка
-    if(!shapeCalcState.fillRate) { alert("Сначала загрузите трафарет (фото)!"); return; }
+    if(!shapeCalcState.fillRate) { alert("Сначала загрузите фото!"); return; }
     
-    // Входные данные
     const targetWeight = parseFloat(document.getElementById('shapeTargetWeight').value) * 1000;
     const targetH = parseFloat(document.getElementById('shapeTargetHeight').value);
-    const coatingThickCm = (parseFloat(document.getElementById('shapeCoatingThick').value) || 0) / 10;
+    const coatingThickCm = (parseFloat(document.getElementById('shapeCoatingThick').value) || 0) / 10; // мм -> см
     
     const recId = document.getElementById('shapeRecipeSelectMain').value;
     const coatId = document.getElementById('shapeCoatingSelect').value;
@@ -14393,19 +14404,20 @@ function calculateShapeOrder() {
     const recipe = myRecipes.find(r => r.id === recId);
     const coating = myRecipes.find(r => r.id === coatId);
     
-    // 1. Анализ пропорций рецепта (Сколько % веса занимает тесто, а сколько начинка?)
-    let spongeRatio = 0.4; // Дефолт (если вдруг не найдем)
+    // 1. Анализ пропорций рецепта (Бисквит vs Начинка)
+    // Чтобы понять, сколько веса торта занимает тесто.
+    let spongeRatio = 0.4; // По умолчанию 40%
+    let fillingRatio = 0.6;
     
     if (recipe.blocks && recipe.outputWeight) {
         let spongeW = 0;
         recipe.blocks.forEach(b => {
             const bName = b.name.toLowerCase();
-            // Ищем ключевые слова теста
             if (bName.includes('бисквит') || bName.includes('корж') || bName.includes('тесто') || bName.includes('выпечка')) {
                 b.ingredients.forEach(i => {
-                     // Грубая, но достаточная оценка веса ингредиентов блока
-                     let w = parseFloat(i.weight);
-                     // Если яйца в шт, примерно считаем 55г, чтобы пропорция не сломалась
+                     // --- FIX NaN: Добавлена защита || 0 ---
+                     let w = parseFloat(i.weight) || 0; 
+                     // Корректировка яиц (если в шт)
                      if (i.id && myIngredients.find(mi => mi.id === i.id)?.unit === 'шт') {
                          if (!i.outputWeight && w < 50) w = w * 55; 
                      }
@@ -14416,96 +14428,85 @@ function calculateShapeOrder() {
         const totalRecW = parseFloat(recipe.outputWeight) || 1000;
         if (spongeW > 0) {
             spongeRatio = spongeW / totalRecW;
+            fillingRatio = 1 - spongeRatio;
         }
     }
 
-    // Плотности (для подбора размеров)
+    // Плотности
     const recDensity = analyzeRecipeDensity(recipe).density;
     let coatDensity = 1.2; 
     if(coating) {
         coatDensity = analyzeRecipeDensity(coating).density;
     }
     
-    // 2. ИТЕРАЦИОННЫЙ ПОДБОР РАЗМЕРОВ
-    // Нам нужно подобрать такую ширину (W), чтобы (Вес покрытия + Вес внутренностей) = Цель.
-    
-    let W = 10; // Начинаем с 10 см
+    // 2. ПОДБОР РАЗМЕРА (SOLVER)
+    let W = 10; 
     let finalData = {};
     
     for(let i=0; i<50; i++) {
         const L = W * shapeCalcState.aspectRatio;
         
-        // Геометрия фигуры
-        const rectArea = L * W; // Площадь рамки
-        const shapeArea = rectArea * shapeCalcState.fillRate; // Площадь фигуры
-        
-        // Периметр рамки
+        // Геометрия рамки
         const rectPerim = 2 * (L + W);
-        // Периметр фигуры (умножаем на кэф сложности, который мы посчитали по пикселям)
+        const rectArea = L * W;
+        
+        // Геометрия фигуры
+        const shapeTopArea = rectArea * shapeCalcState.fillRate;
         const shapePerim = rectPerim * shapeCalcState.perimeterRatio;
         
-        // --- ШАГ А: ВЕС ПОКРЫТИЯ ---
-        // Площадь поверхности = Верх + Бока (Периметр * Высота)
-        const surfArea = shapeArea + (shapePerim * targetH);
-        const coatVol = surfArea * coatingThickCm;
+        // --- РАСЧЕТ ПОКРЫТИЯ (ВЕРХ + БОКА) ---
+        const sideArea = shapePerim * targetH;
+        const totalSurfaceArea = shapeTopArea + sideArea;
+        
+        const coatVol = totalSurfaceArea * coatingThickCm;
         const weightCoat = (coatId) ? (coatVol * coatDensity) : 0;
         
-        // --- ШАГ Б: ВЕС ВНУТРЕННОСТЕЙ ---
-        // Сколько веса осталось на сам торт?
-        const weightInnerTarget = targetWeight - weightCoat;
+        // --- РАСЧЕТ ВНУТРЕННОСТЕЙ ---
+        const weightInnerAvailable = targetWeight - weightCoat;
         
-        // Если покрытие тяжелее самого торта - это ошибка ввода (слишком маленький вес)
-        if (weightInnerTarget <= 0) { 
-            // Искусственно увеличиваем W, чтобы выйти из минуса
-            W *= 1.1; continue; 
-        }
+        // Защита от отрицательного веса (если покрытие тяжелее торта)
+        if (weightInnerAvailable <= 0) { W *= 1.1; continue; }
 
-        // Какой объем займет этот вес?
-        const volNeeded = weightInnerTarget / recDensity;
+        const volNeeded = weightInnerAvailable / recDensity;
+        const calcH = volNeeded / shapeTopArea;
         
-        // Какая высота получается при текущей площади?
-        // vol = area * h  =>  area = vol / h
-        // Нам нужно подогнать Площадь (через W), так как H фиксирована.
-        
-        // Текущий вес при текущих L, W, H:
-        const weightInnerCalc = (shapeArea * targetH) * recDensity;
+        // Вес при текущих габаритах
+        const weightInnerCalc = (shapeTopArea * targetH) * recDensity;
         const totalCalc = weightInnerCalc + weightCoat;
         
-        // Проверка сходимости
         if (Math.abs(totalCalc - targetWeight) < 10) {
+            // --- ФИНАЛ ---
             
-            // --- ФИНАЛЬНЫЙ РАСЧЕТ ПРОДУКТОВ ---
+            // Чистый вес бисквита (который внутри фигуры)
+            const netSpongeWeight = weightInnerCalc * spongeRatio;
             
-            // 1. Вес "Голой фигуры" (Бисквит + Начинка внутри)
-            const netInnerWeight = weightInnerCalc;
-            
-            // 2. Чистый вес бисквита внутри фигуры
-            const netSpongeWeight = netInnerWeight * spongeRatio;
-            
-            // 3. Грязный вес бисквита (Прямоугольник)
+            // Грязный вес бисквита (весь противень)
             // Gross = Net / FillRate (Заполняем пустоты тестом)
-            const grossSpongeWeight = netSpongeWeight / shapeCalcState.fillRate;
+            let grossSpongeWeight = netSpongeWeight / shapeCalcState.fillRate;
             
+            // Защита от NaN или Infinity
+            if (!isFinite(grossSpongeWeight)) grossSpongeWeight = 0;
+
             finalData = {
                 L: L, W: W, H: targetH,
                 weightCoat: weightCoat,
-                weightInner: netInnerWeight, // Вес для расчета начинки
+                weightInner: weightInnerCalc, 
                 weightTotal: totalCalc,
                 
-                grossSponge: grossSpongeWeight, // Вес для расчета бисквита
+                grossSponge: grossSpongeWeight, 
+                netFilling: weightInnerCalc * fillingRatio 
             };
             break;
         }
         
-        // Корректировка W (Метод пропорции для площади)
+        // Корректировка W
         const ratio = targetWeight / totalCalc;
         W = W * Math.sqrt(ratio);
     }
     
-    // Сохраняем и рисуем
     shapeCalcState.lastResult = finalData;
     renderShapeResult(finalData, recipe, coating);
-    updateShape3DScene(finalData.L, finalData.W, finalData.H);
+    if(typeof updateShape3DScene === 'function') updateShape3DScene(finalData.L, finalData.W, finalData.H);
 }
 // Вспомогательная функция плотности (нужно добавить в общий код или копировать)
 function analyzeRecipeDensity(r) {
@@ -14836,6 +14837,7 @@ function updateShape3DScene(L, W, H) {
   </body>
 
 </html>
+
 
 
 
