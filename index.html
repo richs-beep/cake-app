@@ -4218,11 +4218,21 @@ body {
 
         <div id="shapeCalcBlock" style="display:none; margin-top:20px;">
             
-            <div class="form-group" style="margin-bottom:15px;">
-                <span class="form-label">🍰 Начинка (Плотность)</span>
-                <select id="shapeRecipeSelect" onchange="recalcFromWeight()" style="font-weight:bold; background:#fff3e0;">
-                    </select>
-            </div>
+            <div class="form-row">
+    <div class="form-group" style="flex:1;">
+        <span class="form-label">🍰 Начинка (Бисквит + Мусс)</span>
+        <select id="shapeRecipeSelect" onchange="recalcFromWeight()" 
+                style="font-weight:bold; background:#fff3e0;">
+        </select>
+    </div>
+    
+    <div class="form-group" style="flex:1;">
+        <span class="form-label">🎨 Покрытие (Ганаш)</span>
+        <select id="shapeCoatingSelect" style="font-weight:bold; background:#EFEBE9;">
+            <option value="">-- Выберите --</option>
+        </select>
+    </div>
+</div>
 
             <div style="margin-bottom:15px; background:#fff; padding:8px; border-radius:8px; border:1px solid #ddd; display:flex; justify-content:center; gap:15px;">
                 <span class="form-label" style="align-self:center; margin:0;">Форма:</span>
@@ -13460,8 +13470,7 @@ function cropAndAnalyze(img) {
 }
 
      // Хелпер: Масштабирует рецепт под нужный вес и фильтрует блоки по имени
-// targetWeight - вес в ГРАММАХ
-// filterFn - функция фильтрации (возвращает true, если блок нужен)
+// Хелпер: Масштабирует рецепт и корректно считает штучные товары (яйца)
 function getScaledRecipeComponents(recipeId, targetWeight, filterFn) {
     const r = myRecipes.find(x => x.id === recipeId);
     if (!r) return [];
@@ -13484,26 +13493,42 @@ function getScaledRecipeComponents(recipeId, targetWeight, filterFn) {
                     const dbIng = myIngredients.find(i => i.id === ingLink.id);
                     if (!dbIng) return null;
 
+                    // Сырой вес из рецепта, умноженный на масштаб (например 500г)
                     let rawW = parseFloat(ingLink.weight) * scale;
-                    let cost = 0;
                     
-                    // Расчет стоимости
-                    if (dbIng.unit === 'шт') {
-                        // Если шт, считаем кратно штукам или весу
-                        const pcs = rawW / (dbIng.singleWeight || 1); // примерный пересчет в штуки, если вес дан
-                        cost = pcs * (dbIng.packPrice / dbIng.packWeight); // упрощенно, надо допиливать под шт
-                        // Для простоты в фигурных тортах считаем всё в граммах/пропорциях, 
-                        // так как мы печем большой пласт.
-                        cost = (rawW / dbIng.packWeight) * dbIng.packPrice;
-                    } else {
-                        cost = (rawW / dbIng.packWeight) * dbIng.packPrice;
+                    let finalAmount = rawW;
+                    let finalUnit = dbIng.unit;
+                    let cost = 0;
+
+                    // --- ИСПРАВЛЕНИЕ РАСЧЕТА ЯИЦ ---
+                    const useWeightMode = dbIng.useWeightInRecipe === true || dbIng.useWeightInRecipe === "true";
+                    const singleW = parseFloat(dbIng.singleWeight) || 0;
+
+                    if (dbIng.unit === 'шт' && useWeightMode && singleW > 0) {
+                        // Если рецепт в граммах, а товар в штуках -> Делим вес на вес 1 шт
+                        // Пример: 500г / 50г = 10 шт
+                        const pieces = rawW / singleW;
+                        
+                        finalAmount = parseFloat(pieces.toFixed(2)); // Оставляем дробные (10.5 шт), чтобы было точнее
+                        finalUnit = 'шт';
+                        
+                        // Цена = Кол-во штук * (Цена пачки / Штук в пачке)
+                        cost = finalAmount * (dbIng.packPrice / dbIng.packWeight);
+                    } 
+                    else {
+                        // Обычный режим (Граммы или Штуки как Штуки)
+                        finalAmount = parseFloat(rawW.toFixed(1));
+                        
+                        // Цена = Вес * (Цена пачки / Вес пачки)
+                        cost = finalAmount * (dbIng.packPrice / dbIng.packWeight);
                     }
+                    // -------------------------------
 
                     return {
                         id: dbIng.id,
                         name: dbIng.name,
-                        amount: parseFloat(rawW.toFixed(1)),
-                        unit: dbIng.unit,
+                        amount: finalAmount,
+                        unit: finalUnit,
                         cost: Math.ceil(cost)
                     };
                 }).filter(i => i !== null);
@@ -13524,19 +13549,36 @@ function getScaledRecipeComponents(recipeId, targetWeight, filterFn) {
 }
 
 function updateShapeRecipes() { 
-    const sel = document.getElementById('shapeRecipeSelect');
-    if (!sel) return;
-    sel.innerHTML = '';
-    const fillings = myRecipes.filter(r => r.type === 'filling');
-    fillings.forEach(r => {
-        const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
-        const density = r.outputWeight / vol; 
-        const opt = document.createElement('option');
-        opt.value = r.id; 
-        opt.dataset.density = density; 
-        opt.innerText = `${r.name} (~${density.toFixed(2)} г/см³)`;
-        sel.appendChild(opt);
-    });
+    // 1. Заполняем Начинки
+    const selFilling = document.getElementById('shapeRecipeSelect');
+    if (selFilling) {
+        selFilling.innerHTML = '';
+        const fillings = myRecipes.filter(r => r.type === 'filling');
+        fillings.forEach(r => {
+            // Считаем примерную плотность для расчета веса
+            const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
+            const density = r.outputWeight / vol; 
+            const opt = document.createElement('option');
+            opt.value = r.id; 
+            opt.dataset.density = density; 
+            opt.innerText = `${r.name}`;
+            selFilling.appendChild(opt);
+        });
+    }
+
+    // 2. Заполняем Покрытия (НОВОЕ)
+    const selCoating = document.getElementById('shapeCoatingSelect');
+    if (selCoating) {
+        selCoating.innerHTML = '<option value="">-- Выберите --</option>';
+        // Ищем рецепты типа 'coating' (Крем) и 'extra' (Велюр/Гляссаж)
+        const coatings = myRecipes.filter(r => r.type === 'coating' || r.type === 'extra');
+        coatings.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            opt.innerText = r.name;
+            selCoating.appendChild(opt);
+        });
+    }
 }
 
 function generate3DLayers() { 
@@ -13862,7 +13904,7 @@ function calculateShapeComplete() {
     const targetWeightG = weight * 1000;
     
     const recipeId = document.getElementById('shapeRecipeSelect').value;
-    const coatingId = document.getElementById('coatingIdSelect').value; // Общий селект покрытия из шапки
+   const coatingId = document.getElementById('shapeCoatingSelect').value; // Берем из текущего блока
     
     if (!recipeId) { alert("Выберите начинку!"); return; }
     if (!coatingId) { alert("Выберите покрытие (в блоке калькулятора сверху)!"); return; }
@@ -14457,6 +14499,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
