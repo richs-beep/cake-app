@@ -4273,7 +4273,7 @@ body {
                             <span class="form-label">Длина (Вертикаль)</span>
                             <div class="stepper">
                                 <button class="step-btn" onmousedown="startChange('inpL', -1, 'L')" ontouchstart="startChange('inpL', -1, 'L')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">−</button>
-                                <input type="number" id="inpL" value="25" onchange="recalcFromDimensions('L')">
+                                <input type="number" id="inpL" value="25" oninput="recalcFromDimensions('L')">
                                 <button class="step-btn" onmousedown="startChange('inpL', 1, 'L')" ontouchstart="startChange('inpL', 1, 'L')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">+</button>
                             </div>
                         </div>
@@ -4281,7 +4281,7 @@ body {
                             <span class="form-label">Ширина (Горизонталь)</span>
                             <div class="stepper">
                                 <button class="step-btn" onmousedown="startChange('inpW', -1, 'W')" ontouchstart="startChange('inpW', -1, 'W')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">−</button>
-                                <input type="number" id="inpW" value="18" onchange="recalcFromDimensions('W')">
+                                <input type="number" id="inpW" value="18" oninput="recalcFromDimensions('W')">
                                 <button class="step-btn" onmousedown="startChange('inpW', 1, 'W')" ontouchstart="startChange('inpW', 1, 'W')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">+</button>
                             </div>
                             <div style="font-size:10px; text-align:center; margin-top:2px;">
@@ -4295,7 +4295,7 @@ body {
                             <span class="form-label" style="color:#E91E63;">Диаметр (см)</span>
                             <div class="stepper">
                                 <button class="step-btn" onmousedown="startChange('inpD', -1, 'D')" ontouchstart="startChange('inpD', -1, 'D')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">−</button>
-                                <input type="number" id="inpD" value="20" style="color:#E91E63;" onchange="recalcFromDimensions('D')">
+                                <input type="number" id="inpD" value="20" style="color:#E91E63;" oninput="recalcFromDimensions('D')">
                                 <button class="step-btn" onmousedown="startChange('inpD', 1, 'D')" ontouchstart="startChange('inpD', 1, 'D')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">+</button>
                             </div>
                         </div>
@@ -4305,7 +4305,7 @@ body {
                         <span class="form-label">Высота (Толщина)</span>
                         <div class="stepper">
                             <button class="step-btn" onmousedown="startChange('inpH', -0.5, 'H')" ontouchstart="startChange('inpH', -0.5, 'H')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">−</button>
-                            <input type="number" id="inpH" value="10" onchange="recalcFromDimensions('H')">
+                            <input type="number" id="inpH" value="10" oninput="recalcFromDimensions('H')">
                             <button class="step-btn" onmousedown="startChange('inpH', 0.5, 'H')" ontouchstart="startChange('inpH', 0.5, 'H')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">+</button>
                         </div>
                     </div>
@@ -14527,20 +14527,28 @@ function repeatOrder(id) {
     alert("✅ Заказ скопирован в План! Теперь вы можете его отредактировать (дату и детали).");
     switchTab('production'); // Переходим в план
 }
-function renderShapeRecipePreview(data) {
+
+
+  function renderShapeRecipePreview(data) {
     const container = document.getElementById('shapeRecipePreview');
     const list = document.getElementById('shapePreviewList');
     
+    // Защита от пустых данных
     if (!data || !data.detailedBlocks) {
-        container.style.display = 'none';
+        if(container) container.style.display = 'none';
         return;
     }
     
     container.style.display = 'block';
     
-    // Обновляем шапку
+    // Обновляем шапку (Общий вес и Цена)
     document.getElementById('previewWeight').innerText = (data.weights.total / 1000).toFixed(2) + ' кг';
-    document.getElementById('previewCost').innerText = Math.ceil(data.costs.totalProductionCost).toLocaleString() + ' ' + (SYMBOLS[currentCurrency] || '');
+    
+    const currencySymbol = (typeof SYMBOLS !== 'undefined' && typeof currentCurrency !== 'undefined') 
+                           ? (SYMBOLS[currentCurrency] || '') 
+                           : '';
+                           
+    document.getElementById('previewCost').innerText = Math.ceil(data.costs.totalProductionCost).toLocaleString() + ' ' + currencySymbol;
 
     let html = '';
 
@@ -14558,15 +14566,17 @@ function renderShapeRecipePreview(data) {
             icon = '🎨'; borderLeft = '#795548'; bg = '#EFEBE9'; // Покрытие - Коричневый
         }
 
-        // Собираем ингредиенты
+        // Собираем строки ингредиентов
         let rows = '';
-        block.ingredients.forEach(ing => {
-            rows += `
-            <div style="display:flex; justify-content:space-between; font-size:12px; border-bottom:1px dashed rgba(0,0,0,0.05); padding:2px 0;">
-                <span>${ing.name}</span>
-                <span style="font-weight:bold;">${ing.amount} ${ing.unit}</span>
-            </div>`;
-        });
+        if (block.ingredients) {
+            block.ingredients.forEach(ing => {
+                rows += `
+                <div style="display:flex; justify-content:space-between; font-size:12px; border-bottom:1px dashed rgba(0,0,0,0.05); padding:2px 0;">
+                    <span>${ing.name}</span>
+                    <span style="font-weight:bold;">${ing.amount} ${ing.unit}</span>
+                </div>`;
+            });
+        }
 
         html += `
         <div style="margin-bottom:10px; background:${bg}; border-radius:6px; border-left:4px solid ${borderLeft}; padding:8px; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
@@ -14574,8 +14584,9 @@ function renderShapeRecipePreview(data) {
                 ${icon} ${block.name}
             </div>
             <div>${rows}</div>
+            
             <div style="text-align:right; font-size:11px; color:#666; margin-top:4px;">
-                Себест: <b>${ing.cost}</b>
+                Себест: <b>${Math.ceil(block.totalCost)}</b>
             </div>
         </div>`;
     });
@@ -14596,6 +14607,7 @@ function renderShapeRecipePreview(data) {
   </body>
 
 </html>
+
 
 
 
