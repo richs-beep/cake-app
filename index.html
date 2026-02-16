@@ -13692,7 +13692,7 @@ function recalcFromWeight() {
 }
 
 function recalcFromDimensions(source) {
-    // 1. Считываем текущие размеры
+    // 1. Считываем текущие значения из полей
     let L = parseFloat(document.getElementById('inpL').value) || 20;
     let W = parseFloat(document.getElementById('inpW').value) || 15;
     let H = parseFloat(document.getElementById('inpH').value) || 10;
@@ -13701,13 +13701,16 @@ function recalcFromDimensions(source) {
     const density = getDensity();
     const linkAspect = document.getElementById('linkAspect').checked;
     
-    // Проверка блокировки веса (если галочка стоит)
+    // Галочка "Вес зафиксирован"
     const isWeightLocked = document.getElementById('lockWeight').checked;
 
+    // ==========================================
+    // ЛОГИКА ДЛЯ ПРЯМОУГОЛЬНИКА
+    // ==========================================
     if (shapeState.currentShape === 'rect') {
-        // --- ЛОГИКА ДЛЯ ПРЯМОУГОЛЬНИКА ---
         
-        // Если меняем одну сторону, а пропорции связаны - подгоняем вторую
+        // 1. Связка Длины и Ширины (Пропорции)
+        // Работает всегда, если стоит галочка "Пропорции"
         if (linkAspect) {
             if (source === 'L') { 
                 W = L * shapeState.nativeRatio; 
@@ -13718,69 +13721,83 @@ function recalcFromDimensions(source) {
             }
         }
 
-        // РАЗВИЛКА:
-        // А. Если вес заблокирован -> меняем Высоту (H), чтобы попасть в вес
-        // Б. Если вес НЕ заблокирован (или меняем саму Высоту) -> пересчитываем ВЕС
+        // 2. Сценарий: ИЗМЕНЕНИЕ ВЫСОТЫ ПРИ ЗАМОКЕ
+        // "Когда меняем высоту, равномерно меняются высота и ширина" (чтобы сохранить Вес)
+        if (isWeightLocked && source === 'H') {
+            const currentWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
+            const targetVol = (currentWeight * 1000) / density; // Какой объем нам нужен
+            
+            // Формула: V = (L * W) * H * kFactor
+            // Area = V / (H * kFactor)
+            const neededArea = targetVol / (H * shapeState.kFactorRect);
+            
+            // Находим новые L и W, сохраняя пропорции
+            // L * W = Area  =>  L * (L * ratio) = Area  =>  L^2 = Area / ratio
+            const ratioToUse = linkAspect ? shapeState.nativeRatio : (W / L);
+            
+            L = Math.sqrt(neededArea / ratioToUse);
+            W = L * ratioToUse;
+            
+            // Обновляем поля L и W
+            updateInputNoTrigger('inpL', L);
+            updateInputNoTrigger('inpW', W);
+            
+            // Финализируем (Вес не меняется)
+            finalizeCalc(L, W, H, 0, currentWeight);
+        } 
         
-        if (isWeightLocked && source !== 'H') {
-            const targetWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
-            const targetVol = (targetWeight * 1000) / density; // Объем самой фигуры
+        // 3. Сценарий: ЛЮБОЕ ДРУГОЕ ИЗМЕНЕНИЕ
+        // "Когда меняем длину/ширину -> высота остается на месте -> меняется Вес"
+        // (Даже если галочка "Замок" стоит, изменение габаритов приоритетнее веса)
+        else {
+            const fullSheetVol = L * W * H;
+            const shapeVol = fullSheetVol * shapeState.kFactorRect;
+            const newWeight = (shapeVol * density) / 1000;
             
-            // V_фигуры = L * W * H * kFactor
-            // H = V / (L * W * kFactor)
-            const areaBox = L * W;
-            H = targetVol / (areaBox * shapeState.kFactorRect);
+            // Обновляем поле Веса
+            updateInputNoTrigger('inpWeight', newWeight);
             
-            // Обновляем высоту на экране
-            updateInputNoTrigger('inpH', H);
-            
-            // Вес остается старым (3 кг)
-            finalizeCalc(L, W, H, 0, targetWeight);
-            
-        } else {
-            // ФИЗИКА: Размеры заданы -> Считаем реальный вес
-            const fullSheetVol = L * W * H;      // Объем всего противня
-            const shapeVol = fullSheetVol * shapeState.kFactorRect; // Объем фигуры
-            
-            const realWeight = (shapeVol * density) / 1000; // Вес в кг
-            
-            // Обновляем поле веса
-            updateInputNoTrigger('inpWeight', realWeight);
-            
-            finalizeCalc(L, W, H, 0, realWeight);
+            finalizeCalc(L, W, H, 0, newWeight);
         }
-
-    } else {
-        // --- ЛОГИКА ДЛЯ КРУГА ---
-        
-        if (isWeightLocked && source !== 'H') {
-            const targetWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
-            const targetVol = (targetWeight * 1000) / density;
+    } 
+    
+    // ==========================================
+    // ЛОГИКА ДЛЯ КРУГА
+    // ==========================================
+    else {
+        // Сценарий: ИЗМЕНЕНИЕ ВЫСОТЫ ПРИ ЗАМОКЕ
+        if (isWeightLocked && source === 'H') {
+            const currentWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
+            const targetVol = (currentWeight * 1000) / density;
             
-            const areaCircle = Math.PI * Math.pow(D/2, 2);
-            const areaShape = areaCircle * shapeState.kFactorCircle;
+            // V = Area * H * kFactor  =>  Area = V / (H * kFactor)
+            // Area(символа) = (PI * R^2)
+            const neededAreaCircle = targetVol / (H * shapeState.kFactorCircle);
             
-            H = targetVol / areaShape;
-            updateInputNoTrigger('inpH', H);
+            // R = sqrt(Area / PI) -> D = 2*R
+            D = Math.sqrt(neededAreaCircle / Math.PI) * 2;
+            
+            updateInputNoTrigger('inpD', D);
             
             const visualL = D / shapeState.radiusToHeightRatio;
             const visualW = visualL * shapeState.nativeRatio;
-            finalizeCalc(visualL, visualW, H, D, targetWeight);
-            
-        } else {
+            finalizeCalc(visualL, visualW, H, D, currentWeight);
+        } 
+        
+        // Сценарий: ИЗМЕНЕНИЕ ДИАМЕТРА (ВЕС МЕНЯЕТСЯ)
+        else {
             const fullCylinderVol = Math.PI * Math.pow(D/2, 2) * H;
             const shapeVol = fullCylinderVol * shapeState.kFactorCircle;
-            const realWeight = (shapeVol * density) / 1000;
+            const newWeight = (shapeVol * density) / 1000;
             
-            updateInputNoTrigger('inpWeight', realWeight);
+            updateInputNoTrigger('inpWeight', newWeight);
             
             const visualL = D / shapeState.radiusToHeightRatio;
             const visualW = visualL * shapeState.nativeRatio;
-            finalizeCalc(visualL, visualW, H, D, realWeight);
+            finalizeCalc(visualL, visualW, H, D, newWeight);
         }
     }
 }
-
 function finalizeCalc(L, W, H, D, shapeWeight) {
     const density = getDensity();
     let fullSheetVol = 0; // Объем полного противня/формы
@@ -14652,6 +14669,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
