@@ -4327,8 +4327,14 @@ body {
             </div>
 
             <div style="margin-top:20px; text-align:center;">
-                <button class="main-btn" onclick="transferShapeToMain()" style="background:linear-gradient(45deg, #FF9800, #F57C00);">✅ Применить размеры и Начинку</button>
-            </div>
+    <button class="main-btn" onclick="submitShapeOrder()" 
+            style="background:linear-gradient(45deg, #7B1FA2, #E040FB); box-shadow: 0 4px 15px rgba(224, 64, 251, 0.4);">
+        🚀 Рассчитать и Создать Заказ
+    </button>
+    <div style="font-size:11px; color:#666; margin-top:5px;">
+        Автоматически рассчитает бисквит (лист), начинку (внутрь) и покрытие (площадь).
+    </div>
+</div>
         </div>
     </div>
 </div>
@@ -13316,12 +13322,16 @@ function autoAddPackaging(res) {
 // ==========================================
 
 let shapeState = {
-    cleanImgUrl: null, 
+    cleanImgUrl: null,
     nativeRatio: 1,    // W / H
-    kFactorRect: 1,    
-    kFactorCircle: 1,  
+    kFactorRect: 1,    // Коэф. площади (заполнение прямоугольника)
+    kFactorCircle: 1,  // Коэф. площади (заполнение круга)
+    
+    // НОВОЕ: Коэффициент периметра (Отношение длины границы к ширине картинки)
+    perimeterRatio: 0, 
+    
     radiusToHeightRatio: 1, 
-    currentShape: 'rect', // 'rect' | 'circle'
+    currentShape: 'rect', 
     current: { l: 0, w: 0, h: 0, d: 0, weight: 0 }
 };
 
@@ -13338,7 +13348,7 @@ function handleSvgUpload(input) {
     reader.readAsDataURL(file);
 }
 
-// 2. АНАЛИЗ (Smart Crop + White Filter)
+// --- ОБНОВЛЕННАЯ ФУНКЦИЯ АНАЛИЗА ---
 function cropAndAnalyze(img) {
     const MAX_SIDE = 1000;
     let w = img.width; let h = img.height;
@@ -13358,6 +13368,9 @@ function cropAndAnalyze(img) {
     
     let minX=w, minY=h, maxX=0, maxY=0, solidCount=0;
     
+    // Матрица для быстрого поиска краев (0 - пусто, 1 - тело)
+    const grid = new Int8Array(w * h); 
+
     for(let y=0; y<h; y++) {
         for(let x=0; x<w; x++) {
             const i = (y*w+x)*4;
@@ -13369,37 +13382,38 @@ function cropAndAnalyze(img) {
             
             if (isTransparent || isWhite) {
                 data[i+3] = 0; 
+                grid[y*w+x] = 0;
             } else {
                 if(x < minX) minX = x;
                 if(x > maxX) maxX = x;
                 if(y < minY) minY = y;
                 if(y > maxY) maxY = y;
                 solidCount++;
+                grid[y*w+x] = 1;
             }
         }
     }
     
-    if(solidCount === 0) { alert("Фигура не найдена (пустая или белая)!"); return; }
+    if(solidCount === 0) { alert("Фигура не найдена!"); return; }
     
+    // --- НОВОЕ: РАСЧЕТ ПЕРИМЕТРА (ГРАНИЦЫ) ---
+    let edgePixels = 0;
+    for(let y=minY; y<=maxY; y++) {
+        for(let x=minX; x<=maxX; x++) {
+            const idx = y*w+x;
+            if (grid[idx] === 1) {
+                // Если у пикселя есть хотя бы один пустой сосед - это край
+                if (grid[idx-1]===0 || grid[idx+1]===0 || grid[idx-w]===0 || grid[idx+w]===0) {
+                    edgePixels++;
+                }
+            }
+        }
+    }
+
     const realW = maxX - minX;
     const realH = maxY - minY;
     
-    // Круг
-    const centerX = minX + realW / 2;
-    const centerY = minY + realH / 2;
-    let maxDistSq = 0;
-    for(let y=minY; y<=maxY; y++) {
-        for(let x=minX; x<=maxX; x++) {
-            const i = (y*w+x)*4;
-            if (data[i+3] > 0) { 
-                const distSq = (x - centerX)**2 + (y - centerY)**2;
-                if (distSq > maxDistSq) maxDistSq = distSq;
-            }
-        }
-    }
-    const maxRadius = Math.sqrt(maxDistSq);
-
-    // Сохраняем
+    // Сохраняем "чистую" картинку
     ctx.putImageData(imgData, 0, 0); 
     const pad = 2; 
     const cleanCvs = document.createElement('canvas');
@@ -13408,33 +13422,105 @@ function cropAndAnalyze(img) {
     cleanCvs.getContext('2d').drawImage(cvs, minX, minY, realW, realH, pad, pad, realW, realH);
     
     shapeState.cleanImgUrl = cleanCvs.toDataURL();
-    shapeState.nativeRatio = realW / realH; // Правильная пропорция
+    shapeState.nativeRatio = realW / realH; 
     
+    // Расчет коэффициентов площади
+    const maxRadius = Math.sqrt((realW/2)**2 + (realH/2)**2); // Грубая оценка для круга
     const areaRect = realW * realH;
-    const areaCircle = Math.PI * maxRadius * maxRadius;
+    const areaCircle = Math.PI * Math.pow(Math.max(realW, realH)/2, 2); // Описываем круг по большей стороне
     
     shapeState.kFactorRect = solidCount / areaRect;
     shapeState.kFactorCircle = solidCount / areaCircle;
-    shapeState.radiusToHeightRatio = (maxRadius * 2) / realH; 
+    
+    // --- НОВОЕ: КОЭФФИЦИЕНТ ПЕРИМЕТРА ---
+    // Отношение длины контура (в пикселях) к ширине (в пикселях)
+    // Позволит потом посчитать: Периметр(см) = Ширина(см) * perimeterRatio
+    shapeState.perimeterRatio = edgePixels / realW;
+
+    shapeState.radiusToHeightRatio = 1; // Упростили (не критично для визуализации)
 
     // Автовыбор
     let best = 'rect';
     let msg = "Прямоугольник.";
-    if (shapeState.kFactorCircle > shapeState.kFactorRect) {
+    if (shapeState.kFactorCircle > shapeState.kFactorRect + 0.1) { // Чуть увеличим порог для круга
          best = 'circle';
-         msg = "Круг эффективнее!";
+         msg = "Ближе к кругу.";
     }
     
     document.querySelector(`input[name="bakeShape"][value="${best}"]`).checked = true;
-    toggleShapeType(); 
+    toggleShapeType();
     
-    document.getElementById('svgStatusText').innerText = `✅ Анализ: Rect ${Math.round(shapeState.kFactorRect*100)}% / Circle ${Math.round(shapeState.kFactorCircle*100)}%. ${msg}`;
+    document.getElementById('svgStatusText').innerText = `✅ Форма распознана. Заполнение: ${Math.round(shapeState.kFactorRect*100)}%. ${msg}`;
     document.getElementById('shapeCalcBlock').style.display = 'block';
     
     updateShapeRecipes();
     generate3DLayers();
     document.getElementById('linkAspect').checked = true;
     recalcFromWeight();
+}
+
+     // Хелпер: Масштабирует рецепт под нужный вес и фильтрует блоки по имени
+// targetWeight - вес в ГРАММАХ
+// filterFn - функция фильтрации (возвращает true, если блок нужен)
+function getScaledRecipeComponents(recipeId, targetWeight, filterFn) {
+    const r = myRecipes.find(x => x.id === recipeId);
+    if (!r) return [];
+
+    // 1. Анализ рецепта (выход)
+    const outputW = parseFloat(r.outputWeight) || 1000;
+    
+    // 2. Коэффициент масштабирования
+    const scale = targetWeight / outputW;
+    
+    let resultBlocks = [];
+
+    if (r.blocks) {
+        r.blocks.forEach(b => {
+            // Применяем фильтр (Бисквит или НЕ Бисквит)
+            if (filterFn(b.name)) {
+                
+                // Копируем ингредиенты с пересчетом
+                const scaledIngs = b.ingredients.map(ingLink => {
+                    const dbIng = myIngredients.find(i => i.id === ingLink.id);
+                    if (!dbIng) return null;
+
+                    let rawW = parseFloat(ingLink.weight) * scale;
+                    let cost = 0;
+                    
+                    // Расчет стоимости
+                    if (dbIng.unit === 'шт') {
+                        // Если шт, считаем кратно штукам или весу
+                        const pcs = rawW / (dbIng.singleWeight || 1); // примерный пересчет в штуки, если вес дан
+                        cost = pcs * (dbIng.packPrice / dbIng.packWeight); // упрощенно, надо допиливать под шт
+                        // Для простоты в фигурных тортах считаем всё в граммах/пропорциях, 
+                        // так как мы печем большой пласт.
+                        cost = (rawW / dbIng.packWeight) * dbIng.packPrice;
+                    } else {
+                        cost = (rawW / dbIng.packWeight) * dbIng.packPrice;
+                    }
+
+                    return {
+                        id: dbIng.id,
+                        name: dbIng.name,
+                        amount: parseFloat(rawW.toFixed(1)),
+                        unit: dbIng.unit,
+                        cost: Math.ceil(cost)
+                    };
+                }).filter(i => i !== null);
+
+                // Добавляем блок
+                let blockCost = scaledIngs.reduce((acc, i) => acc + i.cost, 0);
+                
+                resultBlocks.push({
+                    name: b.name,
+                    type: r.type, // filling
+                    ingredients: scaledIngs,
+                    totalCost: blockCost
+                });
+            }
+        });
+    }
+    return resultBlocks;
 }
 
 function updateShapeRecipes() { 
@@ -13770,34 +13856,170 @@ function stepWeight(delta) {
     recalcFromWeight();
 }
 
-function transferShapeToMain() {
-    const { l, w, h, d } = shapeState.current;
-    if (h === 0) return;
+// --- ОСНОВНАЯ ЛОГИКА РАСЧЕТА 3-В-1 ---
+function calculateShapeComplete() {
+    const { l, w, h, d, weight } = shapeState.current; // weight в КГ
+    const targetWeightG = weight * 1000;
     
-    const recId = document.getElementById('shapeRecipeSelect').value;
-    const isCircle = (shapeState.currentShape === 'circle');
+    const recipeId = document.getElementById('shapeRecipeSelect').value;
+    const coatingId = document.getElementById('coatingIdSelect').value; // Общий селект покрытия из шапки
     
-    const newTier = {
-        id: Date.now(),
-        weight: 0, 
-        recipeId: recId,
-        isGeometryMode: true,
-        fixedDiameter: isCircle ? parseFloat(d.toFixed(1)) : parseFloat(l.toFixed(1)), 
-        fixedWidth: isCircle ? null : parseFloat(w.toFixed(1)),
-        fixedHeight: parseFloat(h.toFixed(1)) 
+    if (!recipeId) { alert("Выберите начинку!"); return; }
+    if (!coatingId) { alert("Выберите покрытие (в блоке калькулятора сверху)!"); return; }
+
+    const fillingRec = myRecipes.find(r => r.id === recipeId);
+    const coatingRec = myRecipes.find(r => r.id === coatingId);
+
+    // ==========================
+    // 1. РАСЧЕТ БИСКВИТА (ПОЛНЫЙ ПРЯМОУГОЛЬНИК)
+    // ==========================
+    // Ищем плотность рецепта начинки
+    let fillDensity = 0.8; 
+    const selOpt = document.getElementById('shapeRecipeSelect').selectedOptions[0];
+    if (selOpt && selOpt.dataset.density) fillDensity = parseFloat(selOpt.dataset.density);
+
+    // Объем описанного параллелепипеда (L x W x H)
+    let rectVol = 0;
+    if (shapeState.currentShape === 'circle') {
+        // Если круг, считаем описанный квадрат (D x D x H)
+        rectVol = d * d * h;
+    } else {
+        rectVol = l * w * h;
+    }
+    
+    // Вес полного прямоугольного торта
+    const rectWeight = rectVol * fillDensity; // в граммах
+    
+    // Получаем блоки БИСКВИТА для полного веса
+    const biscuitBlocks = getScaledRecipeComponents(recipeId, rectWeight, (name) => {
+        return name.toLowerCase().includes('бисквит');
+    });
+
+    // ==========================
+    // 2. РАСЧЕТ ПОКРЫТИЯ (ПЛОЩАДЬ + ПЕРИМЕТР)
+    // ==========================
+    // Площадь верха (Фигуры) = (L*W) * kFactorRect
+    const topArea = (l * w) * shapeState.kFactorRect;
+    
+    // Площадь боков = Периметр * Высота
+    // Периметр(см) = Ширина(см) * perimeterRatio
+    const widthCm = (shapeState.currentShape === 'circle') ? d : w;
+    const perimeterCm = widthCm * shapeState.perimeterRatio;
+    const sideArea = perimeterCm * h;
+    
+    const totalArea = topArea + sideArea;
+    
+    // Расход покрытия (берем из рецепта или стандарт 0.8 г/см2 для слоя 5мм)
+    // Лучше взять стандартный расчет: вес рецепта покрытия / площадь эталона
+    let coatConsumption = 1.2; // г/см2 (дефолт толстый слой)
+    
+    if (coatingRec) {
+        // Считаем эталонную площадь покрытия
+        const calD = coatingRec.calibrationD || 16;
+        const calH = coatingRec.calibrationH || 10;
+        const calArea = (Math.PI * calD * calH) + (Math.PI * Math.pow(calD/2, 2)); // Бок + Верх
+        const calWeight = coatingRec.outputWeight || 500;
+        coatConsumption = calWeight / calArea;
+    }
+    
+    // Итоговый вес покрытия
+    const neededCoatingWeight = totalArea * coatConsumption * 1.1; // +10% запас на выравнивание сложной формы
+    
+    // Получаем блоки ПОКРЫТИЯ
+    // Фильтр: берем всё из рецепта покрытия
+    const coatingBlocks = getScaledRecipeComponents(coatingId, neededCoatingWeight, () => true);
+    // Дописываем в название, что это покрытие
+    coatingBlocks.forEach(b => b.type = 'coating'); 
+
+    // ==========================
+    // 3. РАСЧЕТ НАЧИНКИ (ОСТАТОК)
+    // ==========================
+    // Вес начинки = Общий вес (заказ) - Вес покрытия
+    let neededFillingWeight = targetWeightG - neededCoatingWeight;
+    
+    if (neededFillingWeight < 100) {
+        console.warn("Вес начинки слишком мал, корректируем...");
+        neededFillingWeight = 100; // Мин. порог
+    }
+
+    // Получаем блоки НАЧИНКИ (Всё, кроме Бисквита)
+    const fillingBlocks = getScaledRecipeComponents(recipeId, neededFillingWeight, (name) => {
+        return !name.toLowerCase().includes('бисквит');
+    });
+
+    // ==========================
+    // 4. СБОРКА ЗАКАЗА
+    // ==========================
+    const allDetailedBlocks = [
+        ...biscuitBlocks.map(b => ({...b, name: `🍱 ${b.name} (Полный лист)`})), 
+        ...fillingBlocks.map(b => ({...b, name: `🍓 ${b.name} (В фигуру)`})), 
+        ...coatingBlocks.map(b => ({...b, name: `🎨 ${b.name} (Покрытие)`}))
+    ];
+
+    // Собираем общий ShoppingList для склада
+    let finalShoppingList = [];
+    allDetailedBlocks.forEach(block => {
+        block.ingredients.forEach(ing => {
+            const existing = finalShoppingList.find(i => i.id === ing.id);
+            if (existing) {
+                existing.amount += ing.amount;
+                existing.cost += ing.cost;
+            } else {
+                finalShoppingList.push({...ing}); // Клон
+            }
+        });
+    });
+
+    // Расчет финансов
+    const totalCost = finalShoppingList.reduce((sum, i) => sum + i.cost, 0);
+    const laborRate = parseFloat(document.getElementById('hourlyRate').value) || 0;
+    // Добавляем работу: Фигурный торт сложный, ставим коэфф 2.0 и 3 часа
+    const laborCost = 3 * 2.0 * laborRate; 
+    const finalPrice = Math.ceil((totalCost + laborCost) * 1.5); // +50% маржа (пример)
+
+    // Формируем объект результата (совместимый с orderData)
+    const shapeResult = {
+        tiers: [{
+            id: 1,
+            recipeName: fillingRec.name + " (Фигура)",
+            d: (shapeState.currentShape === 'circle' ? d : Math.max(l,w)),
+            h: h,
+            w: (shapeState.currentShape === 'rect' ? Math.min(l,w) : d),
+            weight: targetWeightG
+        }],
+        geometry: { shape: shapeState.currentShape, d: d, h: h },
+        weights: { total: targetWeightG, filling: neededFillingWeight, coating: neededCoatingWeight },
+        costs: { totalProductionCost: totalCost, laborCost: laborCost, finalPrice: finalPrice, urgency: 0 },
+        shoppingList: finalShoppingList,
+        detailedBlocks: allDetailedBlocks
     };
 
-    document.getElementById('globalShape').value = isCircle ? 'cylinder' : 'rectangle';
-    updateTierUI();
+    return shapeResult;
+}
+
+// --- ОТПРАВКА В ПЛАН ---
+function submitShapeOrder() {
+    // 1. Выполняем расчет
+    const resData = calculateShapeComplete();
+    if (!resData) return;
+
+    // 2. Подменяем глобальный результат (чтобы addToQueue подхватил его)
+    // Используем 'Right' сторону как буфер, так как модуль фигур независим
+    appState.results['Right'] = resData;
+    appState.activeSide = 'Right'; // Говорим системе "бери данные отсюда"
+
+    // 3. Вызываем стандартное окно оформления
+    addToQueue();
     
-    appState.tiers = [newTier];
-    switchTab('calc');
-    renderTierRows();
-    
+    // 4. Добавляем авто-комментарий
     setTimeout(() => {
-        calculateInitial(); 
-        const shapeName = isCircle ? `Круг D${Math.round(d)}` : `Прямоугольник ${Math.round(l)}x${Math.round(w)}`;
-        alert(`✅ Перенесено!\nФорма: ${shapeName} см.\nВысота: ${h} см.`);
+        const commArea = document.getElementById('orderComment');
+        const dimStr = (shapeState.currentShape === 'rect') 
+            ? `${Math.round(shapeState.current.l)}x${Math.round(shapeState.current.w)} см` 
+            : `D${Math.round(shapeState.current.d)} см`;
+            
+        commArea.value = `🔢 ФИГУРНЫЙ ТОРТ\nРазмеры: ${dimStr}, H${shapeState.current.h}\n` + 
+                         `Форма вырезается из полного бисквита.\n` + commArea.value;
     }, 200);
 }
 
@@ -14235,6 +14457,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
