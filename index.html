@@ -24,7 +24,12 @@
     // Пытаемся сразу вспомнить почту
     let CURRENT_USER_EMAIL = localStorage.getItem('user_email') || "";
     let USER_DB_ID = localStorage.getItem('cake_db_id');
+      let shape3DState = {
+    currentImg: null,
+    layersCreated: false
+};
       let currentStockShelf = 'all'; // 'all', 'food', 'pack'
+      
 
     // 1. Загрузка GAPI (Google API)
     function gapiLoaded() {
@@ -3003,7 +3008,23 @@ body {
 .rv-type-filling { border-left-color: #42A5F5; } /* Начинка - Синий */
 .rv-type-coating { border-left-color: #795548; } /* Покрытие - Коричневый */
 .rv-type-extra   { border-left-color: #FF9800; } /* Декор - Оранжевый */
-      
+
+
+/* Слои для псевдо-3D */
+.shape-layer {
+    position: absolute;
+    top: 0; left: 0;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    pointer-events: none;
+    backface-visibility: hidden; /* Оптимизация производительности */
+    opacity: 0.9;
+}
+
+/* Боковины темнее, верх светлее - для объема */
+.shape-layer.side { filter: brightness(0.85) sepia(0.2) hue-rotate(320deg); } /* Чуть "бисквитный" оттенок */
+.shape-layer.top  { filter: brightness(1.1); }
+  
     </style>
     
 
@@ -4219,6 +4240,27 @@ body {
 
             <hr style="border:0; border-top:1px dashed #ccc; margin-bottom:20px;">
 
+<div class="visual-container" style="height: 320px; background: radial-gradient(circle, #fff 20%, #f0f2f5 100%); border: 1px solid #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; perspective: 1200px; overflow: hidden; margin-bottom: 20px; position: relative;">
+    
+    <div id="dimLabelW" style="position: absolute; color: #1565C0; font-weight: bold; font-size: 12px; pointer-events: none;"></div>
+    <div id="dimLabelL" style="position: absolute; color: #1565C0; font-weight: bold; font-size: 12px; pointer-events: none;"></div>
+    
+    <div id="shapeStage" style="position: relative; transform-style: preserve-3d; transform: rotateX(60deg) rotateZ(-30deg); transition: transform 0.5s;">
+        
+        <div id="shapeGhostBox" style="position: absolute; border: 2px dashed rgba(33, 150, 243, 0.5); transform-style: preserve-3d; pointer-events: none;">
+            <div style="position:absolute; top:-1px; left:-1px; width:10px; height:10px; border-top:2px solid #1565C0; border-left:2px solid #1565C0;"></div>
+            <div style="position:absolute; bottom:-1px; right:-1px; width:10px; height:10px; border-bottom:2px solid #1565C0; border-right:2px solid #1565C0;"></div>
+        </div>
+
+        <div id="shape3DStack" style="position: absolute; top: 0; left: 0; transform-style: preserve-3d; pointer-events: none;"></div>
+        
+    </div>
+    
+    <div style="position: absolute; bottom: 10px; right: 10px; font-size: 10px; color: #999;">
+        🟦 Рамка = Бисквит | 🍰 Фигура = Начинка
+    </div>
+</div>
+          
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
                 <div class="form-group">
                     <span class="form-label">⚖️ Целевой Вес (кг)</span>
@@ -14215,8 +14257,8 @@ function processShapeCanvas(img) {
     const cvs = document.getElementById('shapeAnalysisCanvas');
     const ctx = cvs.getContext('2d');
     
-    // Ресайз для анализа (не нужно огромное разрешение)
-    const w = 200;
+    // 1. Рисуем оригинал во внутреннюю память для анализа
+    const w = 300; // Чуть повысим разрешение для точности
     const h = Math.round(w * (img.height / img.width));
     cvs.width = w;
     cvs.height = h;
@@ -14229,11 +14271,11 @@ function processShapeCanvas(img) {
     let solidPixels = 0;
     let minX=w, maxX=0, minY=h, maxY=0;
     
-    // Проход 1: Считаем площадь и границы
+    // 2. Ищем границы (Твой алгоритм)
     for(let i=0; i<data.length; i+=4) {
         const alpha = data[i+3];
         const r = data[i], g = data[i+1], b = data[i+2];
-        const isWhite = (r>240 && g>240 && b>240);
+        const isWhite = (r>230 && g>230 && b>230); // Порог белого
         
         if (alpha > 50 && !isWhite) {
             solidPixels++;
@@ -14245,47 +14287,69 @@ function processShapeCanvas(img) {
             if(y < minY) minY = y;
             if(y > maxY) maxY = y;
         } else {
-            // Делаем прозрачным для красоты
+            // Делаем фон прозрачным
             data[i+3] = 0; 
         }
     }
     
-    // Обновляем канвас (показываем только фигуру)
-    ctx.putImageData(imgData, 0, 0);
-    
     const realW = maxX - minX;
     const realH = maxY - minY;
     
-    if (realW <= 0 || realH <= 0) { alert("Фигура не найдена!"); return; }
+    if (realW <= 0 || realH <= 0) { alert("Фигура не найдена (картинка пустая или белая)!"); return; }
     
-    // Расчет коэффициентов
+    // 3. ВИЗУАЛЬНОЕ ОБРЕЗАНИЕ (CROP)
+    // Создаем временный канвас, чтобы вырезать только полезную часть
+    const tempCvs = document.createElement('canvas');
+    tempCvs.width = realW;
+    tempCvs.height = realH;
+    const tempCtx = tempCvs.getContext('2d');
+    
+    // Кладем туда обработанные данные (уже с прозрачным фоном), но только нужный кусок
+    tempCtx.putImageData(imgData, -minX, -minY); // Сдвигаем влево и вверх
+    
+    // 4. Возвращаем обрезанное на главный экран
+    // Меняем размер главного канваса под пропорции фигуры
+    cvs.width = realW;
+    cvs.height = realH;
+    // Рисуем чистый результат
+    ctx.drawImage(tempCvs, 0, 0);
+
+    // 5. Сохраняем чистую картинку для 3D модели
+    shapeState.cleanImgUrl = cvs.toDataURL();
+
+    // 6. Считаем математику
     const boundingArea = realW * realH;
     const fillRate = solidPixels / boundingArea;
     const aspectRatio = realW / realH;
     
-    // Оценка периметра (упрощенная: считаем пиксели на границе)
-    // (Для скорости просто берем коэффициент сложности: 
-    // для круга ~1, для звезды ~1.5 от периметра прямоугольника)
-    // Тут используем эмпирический коэффициент на основе fillRate (чем меньше заполнение, тем "дырявее" фигура -> больше периметр)
+    // Эвристика периметра (чем меньше заливка, тем сложнее фигура)
     let perimeterFactor = 1.0; 
-    if (fillRate < 0.5) perimeterFactor = 1.4; // Тонкая буква
-    else if (fillRate < 0.8) perimeterFactor = 1.2;
+    if (fillRate < 0.4) perimeterFactor = 1.5; 
+    else if (fillRate < 0.7) perimeterFactor = 1.3;
     
     shapeCalcState.fillRate = fillRate;
     shapeCalcState.aspectRatio = aspectRatio;
     shapeCalcState.perimeterRatio = perimeterFactor;
     
-    // UI Update
+    // Обновляем UI
     document.getElementById('lblFillRate').innerText = Math.round(fillRate * 100) + '%';
     document.getElementById('lblAspectRatio').innerText = aspectRatio.toFixed(2);
-    document.getElementById('lblPerimFactor').innerText = perimeterFactor.toFixed(2); // Для отладки
+    document.getElementById('lblPerimFactor').innerText = perimeterFactor.toFixed(2);
     
     document.getElementById('shapeAnalysisBlock').style.display = 'block';
     
-    // Заполняем селекты рецептов (если еще не заполнены)
+    // Сбрасываем выбор типа (Круг/Квадрат) на основе формы
+    // Если фигура квадратная (ratio ~1) и плотная -> rect
+    // Если фигура круглая -> circle
+    // Тут простая логика: если заливка высокая (>78% это круг или квадрат), оставляем rect по умолчанию
+    // Но если загрузили "5", это явно rect (рамка)
+    
     fillShapeRecipes();
+      generateShapeLayers(shapeState.cleanImgUrl);
+    
+    // Сразу запускаем пересчет, чтобы обновить цифры
+    calculateShapeOrder();
 }
-
 function fillShapeRecipes() {
     const selMain = document.getElementById('shapeRecipeSelectMain');
     const selCoat = document.getElementById('shapeCoatingSelect');
@@ -14394,6 +14458,7 @@ function calculateShapeOrder() {
     }
     
     shapeCalcState.lastResult = finalData;
+          updateShape3DScene(finalData.L, finalData.W, finalData.H);
     renderShapeResult(finalData, recipe, coating);
 }
 
@@ -14429,6 +14494,7 @@ function renderShapeResult(d, rec, coat) {
 }
 
 // 4. ДОБАВЛЕНИЕ В ПЛАН (САМОЕ ВАЖНОЕ)
+// 4. ДОБАВЛЕНИЕ В ПЛАН (ИСПРАВЛЕННАЯ ЛОГИКА: БИСКВИТ vs НАЧИНКА + ФИКС ЯИЦ)
 function addShapeToQueue() {
     const res = shapeCalcState.lastResult;
     if(!res) return;
@@ -14442,39 +14508,90 @@ function addShapeToQueue() {
     const shoppingList = [];
     let totalPrice = 0;
     
-    // А. Внутренности (Бисквит + Начинка) - Считаем на GROSS вес (Прямоугольник)
-    // Почему? Потому что печь будем прямоугольник.
-    const grossScale = res.grossWeight / parseFloat(recipe.outputWeight);
+    // 1. Считаем коэффициенты масштабирования
+    const recOutput = parseFloat(recipe.outputWeight) || 1000;
+    
+    // Scale для Бисквита (Печем полный прямоугольник)
+    const scaleSponge = res.grossWeight / recOutput;
+    
+    // Scale для Начинки (Собираем только фигуру)
+    // res.weightInner - это чистый вес начинки+бисквита внутри фигуры.
+    const scaleFilling = res.weightInner / recOutput;
     
     if(recipe.blocks) {
         recipe.blocks.forEach(b => {
+            // ОПРЕДЕЛЯЕМ ТИП БЛОКА ПО НАЗВАНИЮ
+            // Если "Бисквит", "Корж", "Тесто" -> берем коэффициент Прямоугольника
+            // Иначе (Крем, Пропитка, Конфи) -> берем коэффициент Фигуры
+            const bName = b.name.toLowerCase();
+            const isSpongeBlock = bName.includes('бисквит') || bName.includes('корж') || bName.includes('тесто');
+            
+            const currentScale = isSpongeBlock ? scaleSponge : scaleFilling;
+
             b.ingredients.forEach(i => {
                 const ing = myIngredients.find(x => x.id === i.id);
                 if(ing) {
-                    const amount = i.weight * grossScale;
+                    // --- ФИКС ЯИЦ (ГРАММЫ -> ШТУКИ) ---
+                    let rawWeight = parseFloat(i.weight);
+                    
+                    // Если ингредиент в "шт", но в рецепте указан вес в граммах (например > 20),
+                    // то конвертируем граммы в штуки.
+                    if (ing.unit === 'шт') {
+                        const singleW = ing.singleWeight || 55; // Дефолт 55г
+                        // Если стоит галочка "в граммах" ИЛИ число похоже на граммы (больше 20)
+                        if (ing.useWeightInRecipe || rawWeight > 20) {
+                            rawWeight = rawWeight / singleW;
+                        }
+                    }
+                    // ----------------------------------
+
+                    const amount = rawWeight * currentScale;
                     const price = amount * (ing.packPrice / ing.packWeight);
-                    shoppingList.push({
-                        id: ing.id, name: ing.name, amount: amount, unit: ing.unit, cost: price
-                    });
+                    
+                    // Проверяем, есть ли уже такой ингредиент в списке (суммируем)
+                    const existing = shoppingList.find(x => x.id === ing.id);
+                    if (existing) {
+                        existing.amount += amount;
+                        existing.cost += price;
+                    } else {
+                        shoppingList.push({
+                            id: ing.id, name: ing.name, amount: amount, unit: ing.unit, cost: price
+                        });
+                    }
                     totalPrice += price;
                 }
             });
         });
     }
     
-    // Б. Покрытие - Считаем на NET вес покрытия
+    // Б. Покрытие (Считаем отдельно, как и раньше)
     if(coating) {
-        const coatScale = res.weightCoat / parseFloat(coating.outputWeight);
+        const coatOutput = parseFloat(coating.outputWeight) || 500;
+        const coatScale = res.weightCoat / coatOutput;
+        
         if(coating.blocks) {
             coating.blocks.forEach(b => {
                 b.ingredients.forEach(i => {
                     const ing = myIngredients.find(x => x.id === i.id);
                     if(ing) {
-                        const amount = i.weight * coatScale;
+                        // Тот же фикс яиц для покрытия (на всякий случай)
+                        let rawWeight = parseFloat(i.weight);
+                        if (ing.unit === 'шт' && (ing.useWeightInRecipe || rawWeight > 20)) {
+                            rawWeight = rawWeight / (ing.singleWeight || 55);
+                        }
+
+                        const amount = rawWeight * coatScale;
                         const price = amount * (ing.packPrice / ing.packWeight);
-                        shoppingList.push({
-                            id: ing.id, name: ing.name, amount: amount, unit: ing.unit, cost: price
-                        });
+                        
+                        const existing = shoppingList.find(x => x.id === ing.id);
+                        if (existing) {
+                            existing.amount += amount;
+                            existing.cost += price;
+                        } else {
+                            shoppingList.push({
+                                id: ing.id, name: ing.name, amount: amount, unit: ing.unit, cost: price
+                            });
+                        }
                         totalPrice += price;
                     }
                 });
@@ -14482,35 +14599,37 @@ function addShapeToQueue() {
         }
     }
     
-    // В. Формируем "Псевдо-объект расчета" для совместимости с системой заказов
-    // Нам нужно обмануть систему, чтобы она думала, что это обычный торт, 
-    // но с нашими кастомными данными.
-    
+    // В. Округляем итоговый список покупок (до сотых)
+    shoppingList.forEach(item => {
+        item.amount = Math.round(item.amount * 100) / 100;
+        item.cost = Math.ceil(item.cost);
+    });
+
+    // Г. Собираем объект для Плана
     const hourlyRate = parseFloat(document.getElementById('hourlyRate').value) || 0;
     const laborCost = (currentLaborList || []).reduce((s,l) => s + (l.realHours*l.coeff*hourlyRate), 0);
     const totalCost = totalPrice + laborCost;
     
     const shapeData = {
-        isShapeCake: true, // Флаг
+        isShapeCake: true, 
         geometry: {
-            shape: 'custom_shape', // Условное название
-            d: Math.round(res.L),  // Записываем Длину как D
-            w: Math.round(res.W),  // Ширину как W
+            shape: 'custom_shape', 
+            d: Math.round(res.L),  
+            w: Math.round(res.W),  
             h: res.H
         },
         weights: {
             total: res.weightTotal,
-            filling: res.weightInner, // Чистый вес внутри
+            filling: res.weightInner, 
             coating: res.weightCoat,
-            grossSponge: res.grossWeight // Сохраняем вес выпечки справочно
+            grossSponge: res.grossWeight 
         },
         costs: {
             totalProductionCost: Math.ceil(totalPrice),
             laborCost: laborCost,
-            finalPrice: Math.ceil(totalCost * 2), // Примерная наценка x2 (или по вашей формуле)
+            finalPrice: Math.ceil(totalCost * 3), // Наценка x3 (примерная, для старта)
             urgency: 0
         },
-        // Массив ярусов (один ярус - наша фигура)
         tiers: [{
             id: 1,
             recipeName: "Фигура: " + recipe.name,
@@ -14518,17 +14637,23 @@ function addShapeToQueue() {
             weight: res.weightTotal,
             totalCost: Math.ceil(totalPrice)
         }],
-        // Список покупок (УЖЕ рассчитан правильно: бисквит с запасом, крем по площади)
         shoppingList: shoppingList,
         
-        // Детализация для отчета (Важно для су-шефа)
+        // Детализация для отчета (разделяем для су-шефа)
         detailedBlocks: [
             { 
                 name: "🍰 Выпечка (На лист)", 
                 type: 'filling', 
                 totalCost: 0, 
-                // Собираем ингредиенты бисквита... (упрощенно весь рецепт)
-                ingredients: shoppingList.filter(i => !coating || !coating.blocks.some(b=>b.ingredients.some(x=>x.id===i.id)))
+                // Сюда фильтруем только бисквиты
+                ingredients: shoppingList.filter(i => recipe.blocks.some(b => (b.name.toLowerCase().includes('бисквит') || b.name.toLowerCase().includes('корж')) && b.ingredients.some(x=>x.id===i.id)))
+            },
+            {
+                name: "🥣 Сборка (Только фигура)",
+                type: 'filling',
+                totalCost: 0,
+                // Сюда остальное из рецепта
+                ingredients: shoppingList.filter(i => recipe.blocks.some(b => (!b.name.toLowerCase().includes('бисквит') && !b.name.toLowerCase().includes('корж')) && b.ingredients.some(x=>x.id===i.id)))
             }
         ]
     };
@@ -14542,11 +14667,107 @@ function addShapeToQueue() {
         });
     }
 
-    // Сохраняем во временное хранилище результата (как будто мы посчитали в главном калькуляторе)
     appState.results[appState.activeSide] = shapeData;
-    
-    // Вызываем стандартное добавление в очередь
     addToQueue();
+}
+
+ 
+
+// 1. ГЕНЕРАЦИЯ СЛОЕВ (Вызывается 1 раз при загрузке новой картинки)
+function generateShapeLayers(imgUrl) {
+    const stack = document.getElementById('shape3DStack');
+    if (!stack) return;
+    
+    // Если картинка та же, не пересоздаем DOM (Оптимизация)
+    if (shape3DState.currentImg === imgUrl && shape3DState.layersCreated) return;
+    
+    stack.innerHTML = '';
+    const layerCount = 40; // Количество слоев (чем больше, тем глаже, но тяжелее)
+    
+    for(let i=0; i<layerCount; i++) {
+        const div = document.createElement('div');
+        // Верхний слой светлее, остальные - боковины
+        div.className = (i === layerCount - 1) ? 'shape-layer top' : 'shape-layer side';
+        div.style.backgroundImage = `url('${imgUrl}')`;
+        // Важно: сохраняем индекс, чтобы потом двигать
+        div.dataset.zIdx = i; 
+        div.dataset.total = layerCount;
+        stack.appendChild(div);
+    }
+    
+    shape3DState.currentImg = imgUrl;
+    shape3DState.layersCreated = true;
+}
+
+// 2. ОБНОВЛЕНИЕ ГЕОМЕТРИИ (Вызывается при каждом изменении веса/размера)
+function updateShape3DScene(L, W, H) {
+    const ghost = document.getElementById('shapeGhostBox');
+    const layers = document.querySelectorAll('.shape-layer');
+    const stage = document.getElementById('shapeStage');
+    const dimL = document.getElementById('dimLabelL');
+    const dimW = document.getElementById('dimLabelW');
+    
+    if (!ghost || layers.length === 0) return;
+
+    // --- МАСШТАБИРОВАНИЕ ---
+    // Нам нужно вписать торт в контейнер 300x300px
+    // Находим максимальную сторону
+    const maxDim = Math.max(L, W);
+    // Коэффициент пикселей на см (чтобы влезало с отступами)
+    const pxScale = 180 / maxDim; 
+    
+    const pxW = W * pxScale; // Ширина в пикселях
+    const pxL = L * pxScale; // Длина (глубина) в пикселях
+    const pxH = H * pxScale; // Высота в пикселях
+    
+    // 1. Настраиваем РАМКУ (Ghost Box)
+    ghost.style.width = pxW + 'px';
+    ghost.style.height = pxL + 'px';
+    // Центрируем рамку относительно точки вращения (0,0)
+    ghost.style.top = (-pxL / 2) + 'px';
+    ghost.style.left = (-pxW / 2) + 'px';
+    // Поднимаем рамку на уровень дна (или верха, как удобнее, пусть будет дно)
+    ghost.style.transform = `translateZ(0px)`;
+
+    // 2. Настраиваем СЛОИ (Торт)
+    layers.forEach(layer => {
+        const idx = parseInt(layer.dataset.zIdx);
+        const total = parseInt(layer.dataset.total);
+        
+        // Растягиваем слой под размер рамки
+        layer.style.width = pxW + 'px';
+        layer.style.height = pxL + 'px';
+        
+        // Центрируем слой так же, как рамку
+        layer.style.top = (-pxL / 2) + 'px';
+        layer.style.left = (-pxW / 2) + 'px';
+        
+        // Считаем Z-позицию (высоту)
+        // Распределяем слои от 0 до pxH
+        const zPos = (idx / (total - 1)) * pxH;
+        
+        layer.style.transform = `translateZ(${zPos}px)`;
+    });
+    
+    // 3. Обновляем подписи размеров (двигаем их за рамкой)
+    if(dimW) {
+        dimW.innerText = `↔ ${Math.round(W)} см`;
+        // Позиционируем подпись ширины (внизу рамки)
+        // transform работает в 2D плоскости экрана, но мы внутри 3D.
+        // Проще всего задать статично или использовать CSS 3D для подписей, но это сложно читать.
+        // Оставим их статичными по краям экрана, так чище.
+        dimW.innerText = `Ширина: ${Math.round(W)} см`;
+        dimW.style.bottom = "10px";
+        dimW.style.left = "50%";
+        dimW.style.transform = "translateX(-50%)";
+    }
+    
+    if(dimL) {
+        dimL.innerText = `↕ ${Math.round(L)} см`;
+        dimL.style.top = "50%";
+        dimL.style.right = "10px";
+        dimL.style.transform = "translateY(-50%)";
+    }
 }
      
     </script>
@@ -14562,6 +14783,7 @@ function addShapeToQueue() {
   </body>
 
 </html>
+
 
 
 
