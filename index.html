@@ -13661,37 +13661,67 @@ function getDensity() {
     return selectedOpt ? parseFloat(selectedOpt.dataset.density) : 0.8; 
 }
 
-function recalcFromWeight() {
-    // 1. Берем желаемый вес ФИГУРЫ
-    const targetFigWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
+
+function validateShapeInputs() {
+    const recipeId = document.getElementById('shapeRecipeSelect').value;
+    const coatingId = document.getElementById('shapeCoatingSelect').value;
+    const weight = parseFloat(document.getElementById('inpWeight').value);
     
-    // 2. Берем текущие габариты (L, W или D)
+    // Для прямоугольника нужны L и W
+    // Для круга нужен D
+    const isRect = (shapeState.currentShape === 'rect');
+    const L = parseFloat(document.getElementById('inpL').value);
+    const W = parseFloat(document.getElementById('inpW').value);
+    const D = parseFloat(document.getElementById('inpD').value);
+    
+    let isValid = false;
+
+    if (recipeId && coatingId && weight > 0) {
+        if (isRect && L > 0 && W > 0) isValid = true;
+        if (!isRect && D > 0) isValid = true;
+    }
+
+    if (!isValid) {
+        // Скрываем результаты, если данных не хватает
+        document.getElementById('shapeRecipePreview').style.display = 'none';
+        document.getElementById('infoTotal').innerText = '...';
+        document.getElementById('infoWaste').innerText = '...';
+        return false;
+    }
+    
+    return true;
+}
+  
+function recalcFromWeight() {
+    // 1. Сначала проверяем, всё ли заполнено
+    if (!validateShapeInputs()) return;
+
+    // 2. Берем данные
+    const targetFigWeight = parseFloat(document.getElementById('inpWeight').value);
     const L = parseFloat(document.getElementById('inpL').value) || 20;
     const W = parseFloat(document.getElementById('inpW').value) || 15;
     const D = parseFloat(document.getElementById('inpD').value) || 20;
     
     const density = getDensity();
     
-    // 3. Вычисляем вес ПОЛНОГО торта (Прямоугольника/Цилиндра)
-    // Если фигура занимает 60% (k=0.6) и весит 3кг, то полный = 3 / 0.6 = 5кг
+    // 3. Вычисляем вес ПОЛНОГО ПРЯМОУГОЛЬНИКА
+    // Если фигура 3кг (60%), то полный = 3 / 0.6 = 5кг
     let targetFullWeight = 0;
     
     if (shapeState.currentShape === 'rect') {
-        // Защита от деления на 0
         const k = shapeState.kFactorRect > 0 ? shapeState.kFactorRect : 1;
         targetFullWeight = targetFigWeight / k;
         
         // V = Weight / Density
         const targetVol = (targetFullWeight * 1000) / density;
         
-        // V = Area * H  =>  H = V / Area
+        // H = V / (L * W)
         const areaBox = L * W;
         const newH = targetVol / areaBox;
         
-        // Обновляем высоту на экране
+        // Ставим новую высоту
         updateInputNoTrigger('inpH', newH);
         
-        // Запускаем финал
         finalizeCalc(L, W, newH, 0, targetFigWeight);
         
     } else {
@@ -13706,7 +13736,6 @@ function recalcFromWeight() {
         
         updateInputNoTrigger('inpH', newH);
         
-        // Восстанавливаем визуальные размеры для 3D
         const visualL = D / shapeState.radiusToHeightRatio;
         const visualW = visualL * shapeState.nativeRatio;
         
@@ -13715,7 +13744,10 @@ function recalcFromWeight() {
 }
      
 function recalcFromDimensions(source) {
-    // 1. Считываем текущие значения из полей
+    // 1. Проверка заполненности (если полей нет, не считаем)
+    // Но здесь мы разрешаем расчет, даже если покрытия еще нет, просто геометрию двигаем
+    // Однако, финальный рецепт не покажется, если validateShapeInputs вернет false внутри finalizeCalc
+    
     let L = parseFloat(document.getElementById('inpL').value) || 20;
     let W = parseFloat(document.getElementById('inpW').value) || 15;
     let H = parseFloat(document.getElementById('inpH').value) || 10;
@@ -13723,17 +13755,14 @@ function recalcFromDimensions(source) {
 
     const density = getDensity();
     const linkAspect = document.getElementById('linkAspect').checked;
-    
-    // Галочка "Вес зафиксирован"
     const isWeightLocked = document.getElementById('lockWeight').checked;
 
-    // ==========================================
-    // ЛОГИКА ДЛЯ ПРЯМОУГОЛЬНИКА
-    // ==========================================
+    // ------------------------------------------
+    // ПРЯМОУГОЛЬНИК
+    // ------------------------------------------
     if (shapeState.currentShape === 'rect') {
         
-        // 1. Связка Длины и Ширины (Пропорции)
-        // Работает всегда, если стоит галочка "Пропорции"
+        // А. Связка пропорций (меняем L -> W меняется сама)
         if (linkAspect) {
             if (source === 'L') { 
                 W = L * shapeState.nativeRatio; 
@@ -13744,112 +13773,123 @@ function recalcFromDimensions(source) {
             }
         }
 
-        // 2. Сценарий: ИЗМЕНЕНИЕ ВЫСОТЫ ПРИ ЗАМОКЕ
-        // "Когда меняем высоту, равномерно меняются высота и ширина" (чтобы сохранить Вес)
-        if (isWeightLocked && source === 'H') {
+        // Б. ЛОГИКА ЗАМКА
+        if (isWeightLocked) {
+            // ВЕС НЕИЗМЕНЕН!
             const currentWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
-            const targetVol = (currentWeight * 1000) / density; // Какой объем нам нужен
             
-            // Формула: V = (L * W) * H * kFactor
-            // Area = V / (H * kFactor)
-            const neededArea = targetVol / (H * shapeState.kFactorRect);
-            
-            // Находим новые L и W, сохраняя пропорции
-            // L * W = Area  =>  L * (L * ratio) = Area  =>  L^2 = Area / ratio
-            const ratioToUse = linkAspect ? shapeState.nativeRatio : (W / L);
-            
-            L = Math.sqrt(neededArea / ratioToUse);
-            W = L * ratioToUse;
-            
-            // Обновляем поля L и W
-            updateInputNoTrigger('inpL', L);
-            updateInputNoTrigger('inpW', W);
-            
-            // Финализируем (Вес не меняется)
+            // Нам нужно сохранить этот вес.
+            // Полный вес = Вес фигуры / k
+            const targetFullWeight = currentWeight / shapeState.kFactorRect;
+            const targetVol = (targetFullWeight * 1000) / density; 
+
+            if (source === 'H') {
+                // Если юзер меняет ВЫСОТУ -> Подгоняем Длину/Ширину
+                const neededArea = targetVol / H;
+                const ratioToUse = linkAspect ? shapeState.nativeRatio : (W / L);
+                L = Math.sqrt(neededArea / ratioToUse);
+                W = L * ratioToUse;
+                updateInputNoTrigger('inpL', L);
+                updateInputNoTrigger('inpW', W);
+            } 
+            else {
+                // Если юзер меняет ДЛИНУ или ШИРИНУ -> Подгоняем ВЫСОТУ
+                const areaBox = L * W;
+                if (areaBox > 0) {
+                    H = targetVol / areaBox; // Вот она, автоматическая высота!
+                    updateInputNoTrigger('inpH', H);
+                }
+            }
+            // Передаем СТАРЫЙ вес (он не изменился)
             finalizeCalc(L, W, H, 0, currentWeight);
-        } 
-        
-        // 3. Сценарий: ЛЮБОЕ ДРУГОЕ ИЗМЕНЕНИЕ
-        // "Когда меняем длину/ширину -> высота остается на месте -> меняется Вес"
-        // (Даже если галочка "Замок" стоит, изменение габаритов приоритетнее веса)
-        else {
-            const fullSheetVol = L * W * H;
-            const shapeVol = fullSheetVol * shapeState.kFactorRect;
-            const newWeight = (shapeVol * density) / 1000;
             
-            // Обновляем поле Веса
-            updateInputNoTrigger('inpWeight', newWeight);
+        } else {
+            // ВЕС МЕНЯЕТСЯ! (Высота стоит на месте)
+            // Мы просто пересчитываем вес для новых габаритов
+            const rectVol = L * W * H;
+            const fullWeight = (rectVol * density) / 1000;
+            const figWeight = fullWeight * shapeState.kFactorRect;
             
-            finalizeCalc(L, W, H, 0, newWeight);
+            updateInputNoTrigger('inpWeight', figWeight);
+            finalizeCalc(L, W, H, 0, figWeight);
         }
     } 
-    
-    // ==========================================
-    // ЛОГИКА ДЛЯ КРУГА
-    // ==========================================
+    // ------------------------------------------
+    // КРУГ
+    // ------------------------------------------
     else {
-        // Сценарий: ИЗМЕНЕНИЕ ВЫСОТЫ ПРИ ЗАМОКЕ
-        if (isWeightLocked && source === 'H') {
+        if (isWeightLocked) {
             const currentWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
-            const targetVol = (currentWeight * 1000) / density;
-            
-            // V = Area * H * kFactor  =>  Area = V / (H * kFactor)
-            // Area(символа) = (PI * R^2)
-            const neededAreaCircle = targetVol / (H * shapeState.kFactorCircle);
-            
-            // R = sqrt(Area / PI) -> D = 2*R
-            D = Math.sqrt(neededAreaCircle / Math.PI) * 2;
-            
-            updateInputNoTrigger('inpD', D);
+            const targetFullWeight = currentWeight / shapeState.kFactorCircle;
+            const targetVol = (targetFullWeight * 1000) / density;
+
+            if (source === 'H') {
+                // Меняем H -> Подгоняем D
+                const areaCircle = targetVol / H;
+                D = 2 * Math.sqrt(areaCircle / Math.PI);
+                updateInputNoTrigger('inpD', D);
+            } else {
+                // Меняем D -> Подгоняем H
+                const areaCircle = Math.PI * Math.pow(D/2, 2);
+                H = targetVol / areaCircle;
+                updateInputNoTrigger('inpH', H);
+            }
             
             const visualL = D / shapeState.radiusToHeightRatio;
             const visualW = visualL * shapeState.nativeRatio;
             finalizeCalc(visualL, visualW, H, D, currentWeight);
-        } 
-        
-        // Сценарий: ИЗМЕНЕНИЕ ДИАМЕТРА (ВЕС МЕНЯЕТСЯ)
-        else {
-            const fullCylinderVol = Math.PI * Math.pow(D/2, 2) * H;
-            const shapeVol = fullCylinderVol * shapeState.kFactorCircle;
-            const newWeight = (shapeVol * density) / 1000;
+
+        } else {
+            // Вес меняется, H стоит
+            const cylVol = Math.PI * Math.pow(D/2, 2) * H;
+            const fullWeight = (cylVol * density) / 1000;
+            const figWeight = fullWeight * shapeState.kFactorCircle;
             
-            updateInputNoTrigger('inpWeight', newWeight);
+            updateInputNoTrigger('inpWeight', figWeight);
             
             const visualL = D / shapeState.radiusToHeightRatio;
             const visualW = visualL * shapeState.nativeRatio;
-            finalizeCalc(visualL, visualW, H, D, newWeight);
+            finalizeCalc(visualL, visualW, H, D, figWeight);
         }
     }
 }
-function finalizeCalc(L, W, H, D, shapeWeight) {
+
+     
+function finalizeCalc(L, W, H, D, weight) {
     const density = getDensity();
     let fullSheetVol = 0; // Объем полного противня/формы
     
+    // 1. Считаем объем (Круг или Квадрат)
     if (shapeState.currentShape === 'rect') {
         fullSheetVol = L * W * H;
     } else {
         fullSheetVol = Math.PI * Math.pow(D/2, 2) * H;
     }
     
-    // Вес полного листа (для выпечки)
+    // 2. Вес полного листа (для выпечки)
     const fullSheetWeight = (fullSheetVol * density) / 1000;
     
-    // Отходы (разница между полным листом и весом фигуры)
-    const waste = fullSheetWeight - shapeWeight;
+    // 3. Отходы (разница между полным листом и весом фигуры)
+    const waste = fullSheetWeight - weight;
     const wastePct = fullSheetWeight > 0 ? (waste / fullSheetWeight) * 100 : 0;
     
     // --- ОБНОВЛЕНИЕ ИНФО-БЛОКА ---
-    // Теперь тут честный вес полного бисквита (6.09 кг)
+    // Используем fullSheetWeight, так как он уже посчитан правильно для любой формы
     document.getElementById('infoTotal').innerText = `${fullSheetWeight.toFixed(2)} кг`;
     document.getElementById('infoWaste').innerText = `${waste.toFixed(2)} кг (${Math.round(wastePct)}%)`;
     
-    // Сохраняем состояние
-    shapeState.current = { l: L, w: W, h: H, d: D, weight: shapeWeight };
+    // 4. Сохраняем состояние
+    shapeState.current = { l: L, w: W, h: H, d: D, weight: weight };
     
-    // Обновляем картинку
+    // 5. Обновляем картинку 3D
     update3DScene(L, W, H, D);
 
-    // Запускаем пересчет рецепта (Тихий режим)
+    // 6. Проверяем валидацию (заполнены ли поля Начинка/Покрытие)
+    if (!validateShapeInputs()) {
+        return; // Если чего-то нет, выходим, не рисуя рецепт
+    }
+
+    // 7. Если всё ок — считаем рецепт на лету
     const previewData = calculateShapeComplete(false); 
     renderShapeRecipePreview(previewData);
 }
@@ -14739,6 +14779,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
