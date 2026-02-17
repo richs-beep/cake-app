@@ -4373,6 +4373,7 @@ const TABS_CONFIG = [
     { id: 'shapes',     icon: '🔢', label: 'Фигуры' },
     { id: 'archive',    icon: '🗄️', label: 'Архив' }
 ];
+     const DEFAULT_TAB_ORDER = ['calc', 'stock', 'recipes', 'production', 'clients', 'colors', 'shapes', 'archive'];
 
 // Порядок по умолчанию (просто массив ID)
 const DEFAULT_TAB_ORDER = ['calc', 'stock', 'recipes', 'production', 'clients', 'colors', 'shapes', 'archive'];
@@ -9403,6 +9404,17 @@ function openSettingsModal() {
                 <div class="form-group"><span class="form-label">Налог</span><input type="number" id="finTax" onchange="saveFinance()"></div>
                 <div class="form-group"><span class="form-label">Банк</span><input type="number" id="finBank" onchange="saveFinance()"></div>
                 <div class="form-group"><span class="form-label">Аморт.</span><input type="number" id="finOverhead" onchange="saveFinance()"></div>
+            </div>
+        </div>
+        <div style="background:#f3e5f5; padding:15px; border-radius:8px; border:1px solid #e1bee7; margin-bottom:15px;">
+            <h4 style="margin-top:0; color:#6a1b9a;">🧾 Умный Чек (Словарь)</h4>
+            <div class="form-group" style="margin-bottom:10px;">
+                <span class="form-label" style="color:#2E7D32;">Всегда показывать отдельно:</span>
+                <input type="text" id="finForceShow" onchange="saveFinance()" placeholder="ярус, фигур, доставка..." style="border:1px solid #4CAF50;">
+            </div>
+            <div class="form-group">
+                <span class="form-label" style="color:#E65100;">Прятать в стоимость торта:</span>
+                <input type="text" id="finForceHide" onchange="saveFinance()" placeholder="замес, выпечка, сборка..." style="border:1px solid #FF9800;">
             </div>
         </div>
 
@@ -14788,6 +14800,7 @@ function applySettingsFromCloud(s) {
   </body>
 
 </html>
+
 
 
 
