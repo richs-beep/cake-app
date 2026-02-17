@@ -13757,8 +13757,7 @@ function stepWeight(delta) {
     recalcFromWeight();
 }
 
-// --- ГЕНЕРАЦИЯ СЛОЖНОГО ЗАКАЗА (БИСКВИТ-ЛИСТ + НАЧИНКА-ФИГУРА) ---
-// --- ФИНАЛЬНАЯ СБОРКА ЗАКАЗА (ИСПОЛЬЗУЕТ ОБЩУЮ ЛОГИКУ) ---
+// --- ФИНАЛЬНАЯ СБОРКА ЗАКАЗА (С ПРОВЕРКОЙ РИСКОВ) ---
 function transferShapeToMain() {
     // 1. Берем готовый расчет
     const finalBlocks = getShapeCalculation();
@@ -13767,6 +13766,20 @@ function transferShapeToMain() {
         alert("Ошибка расчета. Проверьте, выбрана ли начинка и есть ли в ней слой 'Бисквит'.");
         return;
     }
+
+    // --- БЛОК ПРОВЕРКИ (Safety Check) ---
+    if (finalBlocks.meta && finalBlocks.meta.coatingRatio > 0.35) {
+        const { coatWeight, bodyWeight, coatingRatio } = finalBlocks.meta;
+        const msg = `⚠️ ВНИМАНИЕ: СЛОЖНАЯ ГЕОМЕТРИЯ!\n\n` + 
+                    `Вес покрытия (~${Math.round(coatWeight)}г) занимает ${Math.round(coatingRatio*100)}% от всего торта.\n` + 
+                    `Начинки останется очень мало (~${Math.round(bodyWeight)}г)!\n\n` + 
+                    `Нажмите ОК, чтобы создать заказ как есть.\n` +
+                    `Нажмите ОТМЕНА, чтобы вернуться и увеличить общий вес.`;
+        
+        // Если нажали "Отмена" — выходим из функции, остаемся на экране настройки
+        if (!confirm(msg)) return; 
+    }
+    // ------------------------------------
 
     const { l, w, h, weight } = shapeState.current;
     const fillRecipeId = document.getElementById('shapeRecipeSelect').value;
@@ -13801,6 +13814,7 @@ function transferShapeToMain() {
 }
 
 // --- ХЕЛПЕР: МАТЕМАТИКА ФИГУРНОГО ТОРТА (ИСПРАВЛЕНО v3 - Точный периметр) ---
+// --- ХЕЛПЕР: МАТЕМАТИКА ФИГУРНОГО ТОРТА (ИСПРАВЛЕНО v4 - Без назойливых алертов) ---
 function getShapeCalculation() {
     const { l, w, h, weight } = shapeState.current;
     if (h === 0 || weight === 0) return null;
@@ -13813,7 +13827,7 @@ function getShapeCalculation() {
 
     if (!fillRecipe) return null;
 
-    // 1. БИСКВИТ (Полный лист по размеру рамки)
+    // 1. БИСКВИТ
     const volRect = l * w * h; 
     const refVolFill = Math.PI * Math.pow(fillRecipe.calibrationD/2, 2) * fillRecipe.calibrationH;
     const rectScale = volRect / refVolFill; 
@@ -13834,10 +13848,8 @@ function getShapeCalculation() {
         });
     }
 
-    // 2. ПОКРЫТИЕ (По геометрии фигуры)
+    // 2. ПОКРЫТИЕ
     const scale = w / shapeState.pixelWidth;
-    
-    // shapeState.perimeterFactor теперь точный (спасибо Marching Squares)
     const perimeterCm = shapeState.perimeterFactor * scale;
     const areaSides = perimeterCm * h;
     const areaTop = (l * w) * shapeState.kFactorRect;
@@ -13850,23 +13862,15 @@ function getShapeCalculation() {
         const refVol = _calcRefSurface(coatRecipe);
         const consumption = (parseFloat(coatRecipe.outputWeight) || 500) / refVol;
         
-        // [ИЗМЕНЕНИЕ]: Вернули 1.1 (10% тех. запас), так как периметр теперь точный
+        // Коэффициент 1.1 (так как периметр теперь точный)
         neededCoatWeight = totalSurfaceArea * consumption * 1; 
         
         const coatScale = neededCoatWeight / (parseFloat(coatRecipe.outputWeight) || 1);
         coatingBlock = _generateBlockFromRecipe(coatRecipe, coatScale, "🎨 Покрытие (Фигура)", "coating");
     }
 
-    // Предупреждение, если крем занимает слишком много места ( > 35% )
+    // 3. НАЧИНКА
     const totalWeightGrams = weight * 1000;
-    const coatingRatio = neededCoatWeight / totalWeightGrams;
-    
-    if (coatingRatio > 0.35) {
-        // Округляем до целых для красоты сообщения
-        alert(`⚠️ ВНИМАНИЕ: СЛОЖНАЯ ГЕОМЕТРИЯ!\n\nВес покрытия (~${Math.round(neededCoatWeight)}г) занимает ${Math.round(coatingRatio*100)}% от веса торта.\n\nНачинки останется мало (${Math.round(totalWeightGrams - neededCoatWeight)}г)! Рекомендуется увеличить общий вес заказа.`);
-    }
-
-    // 3. НАЧИНКА (Чистый вес - Покрытие)
     let bodyWeight = totalWeightGrams - neededCoatWeight; 
     if (bodyWeight < 0) bodyWeight = 0; 
 
@@ -13891,6 +13895,13 @@ function getShapeCalculation() {
     // Сборка
     const finalBlocks = [...biscuitBlocks, ...fillingBlocks];
     if (coatingBlock) finalBlocks.push(coatingBlock);
+
+    // --- НОВОЕ: Сохраняем данные о рисках прямо в массив (как свойство), чтобы проверить позже ---
+    finalBlocks.meta = {
+        coatingRatio: neededCoatWeight / totalWeightGrams,
+        coatWeight: neededCoatWeight,
+        bodyWeight: bodyWeight
+    };
 
     return finalBlocks;
 }
@@ -14441,6 +14452,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
