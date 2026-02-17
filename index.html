@@ -535,18 +535,18 @@ class CakeCalculator {
     let finalPrice = 0;
 
     // --- РАЗВИЛКА РЕЖИМОВ ---
+    // --- РАЗВИЛКА РЕЖИМОВ ---
     if (this.data.calculationMode === 'fixed') {
-        // РЕЖИМ 1: ФИКСИРОВАННАЯ ЦЕНА (Сумма по ярусам)
+        // РЕЖИМ 1: ФИКСИРОВАННАЯ ЦЕНА
         let totalCakesPrice = 0;
 
-        // Пробегаем по рассчитанным ярусам
+        // А. Торты (Ярусы)
         this.calculatedTiers.forEach(tier => {
-            // Цена яруса = (Вес яруса в кг) * (Цена рецепта за кг)
             const tierPrice = (tier.weight / 1000) * (tier.salePricePerKg || 0);
             totalCakesPrice += tierPrice;
         });
 
-        // Б. Платные допы
+        // Б. Платный декор (Топперы, Ягоды - из списка Extras)
         let paidExtrasCost = 0;
         if (this.data.extras) {
             this.data.extras.forEach(ex => {
@@ -560,12 +560,37 @@ class CakeCalculator {
             });
         }
 
-        // ИТОГ: Торты (по своим ценам) + Платный декор + Работа
-        finalPrice = Math.ceil(totalCakesPrice + paidExtrasCost + laborCost);
+        // В. ВЕЛЮР / ДОП. ПОКРЫТИЕ (Умный расчет: Цена или Себестоимость)
+        let velourCost = 0;
+        this.detailedBlocks.forEach(block => {
+            // Ищем блоки велюра
+            if (block.name.startsWith('Велюр')) {
+                // 1. Пытаемся найти рецепт этого блока
+                const rec = this.recipes.find(r => r.id === block.recipeId);
+                const salePrice = rec ? (parseFloat(rec.salePricePerKg) || 0) : 0;
+
+                if (salePrice > 0) {
+                    // ВАРИАНТ 1: Есть цена продажи (напр. 20 000 тг/кг)
+                    // Считаем вес покрытия (суммируем вес ингредиентов в блоке)
+                    let blockWeight = block.ingredients.reduce((sum, i) => sum + i.amount, 0);
+                    // Считаем цену: Вес(кг) * Цена
+                    velourCost += (blockWeight / 1000) * salePrice;
+                } else {
+                    // ВАРИАНТ 2: Цены нет -> Берем Себестоимость ингредиентов
+                    velourCost += block.totalCost;
+                }
+            }
+        });
+
+        // ИТОГ: Торты + Декор + Велюр + Работа
+        finalPrice = Math.ceil(totalCakesPrice + paidExtrasCost + velourCost + laborCost);
         
     } else {
+        // РЕЖИМ 2: АВТО (КАЛЬКУЛЯЦИЯ) - Тут всё по старому (себестоимость + наценка)
+        finalPrice = Math.ceil((this.totalCost + laborCost) * (1 + (this.data.urgencyPercent || 0) / 100));
+    } else {
         // РЕЖИМ 2: АВТО (КАЛЬКУЛЯЦИЯ)
-        // (Себестоимость + Работа) * Наценку
+        // Тут Велюр уже сидит внутри this.totalCost, поэтому ничего менять не надо
         finalPrice = Math.ceil((this.totalCost + laborCost) * (1 + (this.data.urgencyPercent || 0) / 100));
     }
 
@@ -15127,6 +15152,7 @@ function toggleCalcMode() {
   </body>
 
 </html>
+
 
 
 
