@@ -13247,128 +13247,122 @@ function handleSvgUpload(input) {
 }
 
 // 2. АНАЛИЗ (Smart Crop + White Filter)
-// --- ОБНОВЛЕННЫЙ АНАЛИЗАТОР (ПЛОЩАДЬ + ПЕРИМЕТР) ---
-// --- НОВЫЙ УМНЫЙ АНАЛИЗАТОР (Marching Squares) ---
+// --- УЛУЧШЕННЫЙ АНАЛИЗАТОР (Сжатие + Сглаживание) ---
 function cropAndAnalyze(img) {
-    const MAX_SIDE = 1000;
-    let w = img.width; let h = img.height;
-    if (w > MAX_SIDE || h > MAX_SIDE) {
-        const ratio = w / h;
-        if (w > h) { w = MAX_SIDE; h = w / ratio; } else { h = MAX_SIDE; w = h * ratio; }
-    }
-    w = Math.floor(w); h = Math.floor(h);
-
-    const cvs = document.createElement('canvas');
-    const ctx = cvs.getContext('2d');
-    cvs.width = w; cvs.height = h;
-    ctx.drawImage(img, 0, 0, w, h);
+    // 1. Сначала работаем с оригиналом, чтобы найти границы (Crop)
+    const rawCvs = document.createElement('canvas');
+    const rawCtx = rawCvs.getContext('2d');
+    rawCvs.width = img.width; 
+    rawCvs.height = img.height;
+    rawCtx.drawImage(img, 0, 0);
     
-    const imgData = ctx.getImageData(0,0,w,h);
-    const data = imgData.data;
-    
-    // Битовая карта: 1 - торт, 0 - пусто
-    // Делаем +2 пикселя запаса по краям, чтобы не вылететь за границы
-    const gridW = w + 2;
-    const gridH = h + 2;
-    const grid = new Uint8Array(gridW * gridH); // Заполнен нулями
+    const rawData = rawCtx.getImageData(0, 0, img.width, img.height).data;
+    let minX=img.width, minY=img.height, maxX=0, maxY=0, hasContent=false;
 
-    let minX=w, minY=h, maxX=0, maxY=0, solidCount=0;
-
-    // 1. Заполняем сетку (Grid) и считаем Площадь
-    for(let y=0; y<h; y++) {
-        for(let x=0; x<w; x++) {
-            const i = (y*w+x)*4;
-            const a = data[i+3];
-            // Простейший фильтр белого фона (R>230 & G>230 & B>230)
-            const r=data[i], g=data[i+1], b=data[i+2];
-            const isWhite = (r > 230 && g > 230 && b > 230);
-
-            if (a > 50 && !isWhite) {
-                // Смещаем на +1, так как сетка больше на 2 пикселя
-                grid[(y+1)*gridW + (x+1)] = 1;
-                
+    // Быстрый проход для поиска границ (bounding box)
+    for(let y=0; y<img.height; y+=5) { // Шагаем через 5 пикселей для скорости
+        for(let x=0; x<img.width; x+=5) {
+            const a = rawData[(y*img.width+x)*4+3];
+            if (a > 50) {
                 if(x < minX) minX = x;
                 if(x > maxX) maxX = x;
                 if(y < minY) minY = y;
                 if(y > maxY) maxY = y;
-                solidCount++;
-            } else {
-                // Визуально стираем фон для "чистой" картинки
-                data[i+3] = 0; 
-            }
-        }
-    }
-    
-    if(solidCount === 0) { alert("Фигура не найдена! Попробуйте картинку с прозрачным фоном или контрастным цветом."); return; }
-
-    // 2. УМНЫЙ РАСЧЕТ ПЕРИМЕТРА (Marching Squares)
-    let perimeter = 0;
-    
-    // Проходим по "межпиксельным" квадратам
-    for(let y=0; y<gridH-1; y++) {
-        for(let x=0; x<gridW-1; x++) {
-            // Берем квадрат 2x2
-            const tl = grid[y*gridW + x];         // Top-Left
-            const tr = grid[y*gridW + (x+1)];     // Top-Right
-            const bl = grid[(y+1)*gridW + x];     // Bot-Left
-            const br = grid[(y+1)*gridW + (x+1)]; // Bot-Right
-            
-            // Индекс состояния (0-15)
-            const val = (tl << 3) | (tr << 2) | (br << 1) | bl;
-
-            // Таблица весов для периметра
-            // 0 и 15 - это полная пустота или полная заливка (границы нет)
-            // Прямые переходы (1,2,4,8,7,11,13,14) добавляют 1.0
-            // Диагональные седловые точки (6,9) добавляют 1.414 (или 2.0 в зависимости от топологии, берем среднее 1.41)
-            // Угловые переходы внутри квадрата дают гипотенузу
-            
-            switch(val) {
-                case 0: case 15: break; // Нет границы
-                case 1: case 2: case 4: case 8: // Одинокий угол
-                case 7: case 11: case 13: case 14: // Внутренний угол
-                    // В классике это прямая, но для сглаживания "лесенки" лучше брать ~1.0
-                    perimeter += 1.0; 
-                    break;
-                case 3: case 12: // Вертикальная граница
-                case 5: case 10: // Горизонтальная граница
-                    perimeter += 1.0;
-                    break;
-                case 6: case 9: // Диагональ (седловая точка)
-                    perimeter += 1.414; // sqrt(2)
-                    break;
+                hasContent = true;
             }
         }
     }
 
-    // Сохраняем "чистую" картинку для 3D
-    ctx.putImageData(imgData, 0, 0); 
+    if(!hasContent) { alert("Фигура не найдена! Используйте фото на прозрачном или белом фоне."); return; }
+
+    // Добавляем отступы
+    minX = Math.max(0, minX - 10); minY = Math.max(0, minY - 10);
+    maxX = Math.min(img.width, maxX + 10); maxY = Math.min(img.height, maxY + 10);
     const realW = maxX - minX;
     const realH = maxY - minY;
-    const pad = 2; 
-    const cleanCvs = document.createElement('canvas');
-    cleanCvs.width = realW + pad*2;
-    cleanCvs.height = realH + pad*2;
-    cleanCvs.getContext('2d').drawImage(cvs, minX, minY, realW, realH, pad, pad, realW, realH);
+
+    // 2. СОЗДАЕМ "СЖАТУЮ" МАТРИЦУ ДЛЯ РАСЧЕТОВ (Фильтр шума)
+    // Приводим любую картинку к высоте 300px. Это уберет "дрожание" контура.
+    const SCAN_H = 300; 
+    const scaleFactor = SCAN_H / realH;
+    const SCAN_W = Math.floor(realW * scaleFactor);
+
+    const scanCvs = document.createElement('canvas');
+    scanCvs.width = SCAN_W; 
+    scanCvs.height = SCAN_H;
+    const ctx = scanCvs.getContext('2d');
     
-    // СОХРАНЕНИЕ ДАННЫХ
-    shapeState.cleanImgUrl = cleanCvs.toDataURL();
+    // Рисуем обрезанную версию в уменьшенном масштабе
+    ctx.drawImage(img, minX, minY, realW, realH, 0, 0, SCAN_W, SCAN_H);
+    
+    const imgData = ctx.getImageData(0,0,SCAN_W,SCAN_H);
+    const data = imgData.data;
+    
+    // Битовая карта для Marching Squares
+    const gridW = SCAN_W + 2; 
+    const gridH = SCAN_H + 2;
+    const grid = new Uint8Array(gridW * gridH);
+    let solidPixels = 0;
+
+    for(let y=0; y<SCAN_H; y++) {
+        for(let x=0; x<SCAN_W; x++) {
+            const i = (y*SCAN_W+x)*4;
+            const a = data[i+3];
+            const r=data[i], g=data[i+1], b=data[i+2];
+            // Фильтр белого и прозрачного
+            const isSolid = (a > 50) && !(r > 230 && g > 230 && b > 230);
+            
+            if (isSolid) {
+                grid[(y+1)*gridW + (x+1)] = 1;
+                solidPixels++;
+            } else {
+                data[i+3] = 0; // Чистим для визуала
+            }
+        }
+    }
+
+    // 3. СЧИТАЕМ ПЕРИМЕТР (Marching Squares)
+    let perimeter = 0;
+    for(let y=0; y<gridH-1; y++) {
+        for(let x=0; x<gridW-1; x++) {
+            const cell = (grid[y*gridW + x] << 3) | (grid[y*gridW+(x+1)] << 2) | (grid[(y+1)*gridW+(x+1)] << 1) | grid[(y+1)*gridW+x];
+            
+            // Веса для разных типов пересечений (сглаживание диагоналей)
+            switch(cell) {
+                case 0: case 15: break;
+                case 1: case 2: case 4: case 8:  perimeter += 1.0; break;
+                case 3: case 12: case 5: case 10: perimeter += 1.0; break;
+                case 7: case 11: case 13: case 14: perimeter += 1.0; break;
+                case 6: case 9: perimeter += 1.41; break; // Диагонали
+            }
+        }
+    }
+
+    // --- ФИНАЛЬНАЯ КОРРЕКЦИЯ ---
+    // Эффект шпателя: реальный периметр обмазки всегда меньше суммы пикселей
+    perimeter *= 0.90; 
+
+    // Сохраняем "чистую" картинку для 3D (в высоком качестве)
+    ctx.putImageData(imgData, 0, 0); 
+    shapeState.cleanImgUrl = scanCvs.toDataURL();
+    
+    // ЗАПИСЫВАЕМ ПАРАМЕТРЫ
+    // Важно: pixelWidth теперь равен ширине СКАНА (SCAN_W), а не оригинала.
+    // Это нужно, чтобы масштаб (см / пиксель) считался верно.
+    shapeState.pixelWidth = SCAN_W; 
     shapeState.nativeRatio = realW / realH;
     
-    // S = pixelCount. P = smartPerimeter.
-    const areaRect = realW * realH;
-    shapeState.kFactorRect = solidCount / areaRect; 
+    // Коэффициент заполнения площади (S фигуры / S рамки)
+    const areaRect = SCAN_W * SCAN_H;
+    shapeState.kFactorRect = solidPixels / areaRect; 
     
-    // ВАЖНО: perimeterFactor теперь хранит не "кол-во пикселей", а "геометрическую длину"
-    shapeState.perimeterFactor = perimeter;   
-    shapeState.pixelWidth = realW; 
+    shapeState.perimeterFactor = perimeter;
 
-    // Выбор формы (Квадрат или Круг)
-    // Если фигура плотная (>78%), предлагаем квадрат, иначе круг (просто как дефолт)
-    let best = (shapeState.kFactorRect > 0.78) ? 'rect' : 'rect'; 
+    // Выбор формы и обновление UI
     document.querySelector(`input[name="bakeShape"][value="rect"]`).checked = true;
     toggleShapeType();
     
-    document.getElementById('svgStatusText').innerText = `✅ Умный анализ: Периметр сглажен. Заполнение ${Math.round(shapeState.kFactorRect*100)}%`;
+    document.getElementById('svgStatusText').innerText = `✅ Геометрия: Сглаживание включено. Заполнение ${Math.round(shapeState.kFactorRect*100)}%`;
     document.getElementById('shapeCalcBlock').style.display = 'block';
     
     updateShapeRecipes();
@@ -13376,7 +13370,6 @@ function cropAndAnalyze(img) {
     document.getElementById('linkAspect').checked = true;
     recalcFromWeight();
 }
-
 function updateShapeRecipes() { 
     // 1. Начинки
     const selRecipe = document.getElementById('shapeRecipeSelect');
@@ -14453,6 +14446,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
