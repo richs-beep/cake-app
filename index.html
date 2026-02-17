@@ -13248,6 +13248,7 @@ function handleSvgUpload(input) {
 
 // 2. АНАЛИЗ (Smart Crop + White Filter)
 // --- ОБНОВЛЕННЫЙ АНАЛИЗАТОР (ПЛОЩАДЬ + ПЕРИМЕТР) ---
+// --- НОВЫЙ УМНЫЙ АНАЛИЗАТОР (Marching Squares) ---
 function cropAndAnalyze(img) {
     const MAX_SIDE = 1000;
     let w = img.width; let h = img.height;
@@ -13265,84 +13266,109 @@ function cropAndAnalyze(img) {
     const imgData = ctx.getImageData(0,0,w,h);
     const data = imgData.data;
     
+    // Битовая карта: 1 - торт, 0 - пусто
+    // Делаем +2 пикселя запаса по краям, чтобы не вылететь за границы
+    const gridW = w + 2;
+    const gridH = h + 2;
+    const grid = new Uint8Array(gridW * gridH); // Заполнен нулями
+
     let minX=w, minY=h, maxX=0, maxY=0, solidCount=0;
-    
-    // 1. Проход для определения границ и площади
+
+    // 1. Заполняем сетку (Grid) и считаем Площадь
     for(let y=0; y<h; y++) {
         for(let x=0; x<w; x++) {
             const i = (y*w+x)*4;
             const a = data[i+3];
-            // Считаем прозрачным всё, что прозрачнее 50/255
-            // Также можно добавить фильтр белого, если нужно (оставил как в прошлом коде)
+            // Простейший фильтр белого фона (R>230 & G>230 & B>230)
             const r=data[i], g=data[i+1], b=data[i+2];
             const isWhite = (r > 230 && g > 230 && b > 230);
 
-            if (a < 50 || isWhite) {
-                data[i+3] = 0; 
-            } else {
+            if (a > 50 && !isWhite) {
+                // Смещаем на +1, так как сетка больше на 2 пикселя
+                grid[(y+1)*gridW + (x+1)] = 1;
+                
                 if(x < minX) minX = x;
                 if(x > maxX) maxX = x;
                 if(y < minY) minY = y;
                 if(y > maxY) maxY = y;
                 solidCount++;
+            } else {
+                // Визуально стираем фон для "чистой" картинки
+                data[i+3] = 0; 
             }
         }
     }
     
-    if(solidCount === 0) { alert("Фигура не найдена!"); return; }
-    
-    // 2. Расчет ПЕРИМЕТРА (Граничные пиксели)
-    let perimeterPixels = 0;
-    for(let y=minY; y<=maxY; y++) {
-        for(let x=minX; x<=maxX; x++) {
-            const i = (y*w+x)*4;
-            if (data[i+3] > 0) { // Если пиксель цветной
-                // Проверяем 4-х соседей. Если хоть один прозрачный — это край.
-                let isEdge = false;
-                // Верх
-                if (y===0 || data[((y-1)*w+x)*4+3] === 0) isEdge = true;
-                // Низ
-                else if (y===h-1 || data[((y+1)*w+x)*4+3] === 0) isEdge = true;
-                // Лево
-                else if (x===0 || data[(y*w+(x-1))*4+3] === 0) isEdge = true;
-                // Право
-                else if (x===w-1 || data[(y*w+(x+1))*4+3] === 0) isEdge = true;
+    if(solidCount === 0) { alert("Фигура не найдена! Попробуйте картинку с прозрачным фоном или контрастным цветом."); return; }
 
-                if (isEdge) perimeterPixels++;
+    // 2. УМНЫЙ РАСЧЕТ ПЕРИМЕТРА (Marching Squares)
+    let perimeter = 0;
+    
+    // Проходим по "межпиксельным" квадратам
+    for(let y=0; y<gridH-1; y++) {
+        for(let x=0; x<gridW-1; x++) {
+            // Берем квадрат 2x2
+            const tl = grid[y*gridW + x];         // Top-Left
+            const tr = grid[y*gridW + (x+1)];     // Top-Right
+            const bl = grid[(y+1)*gridW + x];     // Bot-Left
+            const br = grid[(y+1)*gridW + (x+1)]; // Bot-Right
+            
+            // Индекс состояния (0-15)
+            const val = (tl << 3) | (tr << 2) | (br << 1) | bl;
+
+            // Таблица весов для периметра
+            // 0 и 15 - это полная пустота или полная заливка (границы нет)
+            // Прямые переходы (1,2,4,8,7,11,13,14) добавляют 1.0
+            // Диагональные седловые точки (6,9) добавляют 1.414 (или 2.0 в зависимости от топологии, берем среднее 1.41)
+            // Угловые переходы внутри квадрата дают гипотенузу
+            
+            switch(val) {
+                case 0: case 15: break; // Нет границы
+                case 1: case 2: case 4: case 8: // Одинокий угол
+                case 7: case 11: case 13: case 14: // Внутренний угол
+                    // В классике это прямая, но для сглаживания "лесенки" лучше брать ~1.0
+                    perimeter += 1.0; 
+                    break;
+                case 3: case 12: // Вертикальная граница
+                case 5: case 10: // Горизонтальная граница
+                    perimeter += 1.0;
+                    break;
+                case 6: case 9: // Диагональ (седловая точка)
+                    perimeter += 1.414; // sqrt(2)
+                    break;
             }
         }
     }
 
+    // Сохраняем "чистую" картинку для 3D
+    ctx.putImageData(imgData, 0, 0); 
     const realW = maxX - minX;
     const realH = maxY - minY;
-    
-    // Сохраняем "чистую" картинку
-    ctx.putImageData(imgData, 0, 0); 
     const pad = 2; 
     const cleanCvs = document.createElement('canvas');
     cleanCvs.width = realW + pad*2;
     cleanCvs.height = realH + pad*2;
     cleanCvs.getContext('2d').drawImage(cvs, minX, minY, realW, realH, pad, pad, realW, realH);
     
+    // СОХРАНЕНИЕ ДАННЫХ
     shapeState.cleanImgUrl = cleanCvs.toDataURL();
     shapeState.nativeRatio = realW / realH;
     
-    // Геометрические факторы
+    // S = pixelCount. P = smartPerimeter.
     const areaRect = realW * realH;
+    shapeState.kFactorRect = solidCount / areaRect; 
     
-    // Сохраняем данные для расчетов
-    shapeState.kFactorRect = solidCount / areaRect; // % заполнения площади
-    shapeState.perimeterFactor = perimeterPixels;   // Периметр в пикселях (сырой)
-    shapeState.pixelWidth = realW;                  // Ширина в пикселях (для масштаба)
+    // ВАЖНО: perimeterFactor теперь хранит не "кол-во пикселей", а "геометрическую длину"
+    shapeState.perimeterFactor = perimeter;   
+    shapeState.pixelWidth = realW; 
 
-    // Определяем лучшую форму (упрощенно: если заполнение < 78% (pi/4), то круг может быть выгоднее, но для сложных фигур лучше rect)
-    let best = 'rect';
-    if (shapeState.kFactorRect > 0.78) best = 'rect'; // Почти квадрат
-    
+    // Выбор формы (Квадрат или Круг)
+    // Если фигура плотная (>78%), предлагаем квадрат, иначе круг (просто как дефолт)
+    let best = (shapeState.kFactorRect > 0.78) ? 'rect' : 'rect'; 
     document.querySelector(`input[name="bakeShape"][value="rect"]`).checked = true;
-    toggleShapeType(); // Принудительно ставим Rect, так как для фигурных тортов мы печем лист
+    toggleShapeType();
     
-    document.getElementById('svgStatusText').innerText = `✅ Анализ: Заполнение ${Math.round(shapeState.kFactorRect*100)}%. Периметр найден.`;
+    document.getElementById('svgStatusText').innerText = `✅ Умный анализ: Периметр сглажен. Заполнение ${Math.round(shapeState.kFactorRect*100)}%`;
     document.getElementById('shapeCalcBlock').style.display = 'block';
     
     updateShapeRecipes();
@@ -13774,9 +13800,7 @@ function transferShapeToMain() {
     addToQueue();
 }
 
-// --- ХЕЛПЕР: МАТЕМАТИКА ФИГУРНОГО ТОРТА ---
-// Возвращает массив блоков (ингредиентов) или null, если ошибка
-// --- ХЕЛПЕР: МАТЕМАТИКА ФИГУРНОГО ТОРТА (ИСПРАВЛЕНО) ---
+// --- ХЕЛПЕР: МАТЕМАТИКА ФИГУРНОГО ТОРТА (ИСПРАВЛЕНО v3 - Точный периметр) ---
 function getShapeCalculation() {
     const { l, w, h, weight } = shapeState.current;
     if (h === 0 || weight === 0) return null;
@@ -13799,20 +13823,21 @@ function getShapeCalculation() {
         fillRecipe.blocks.forEach((blk, idx) => {
             const nameLower = blk.name.toLowerCase();
             if (nameLower.includes('бисквит') || nameLower.includes('корж')) {
-                // !!! ИСПРАВЛЕНИЕ: Передаем 0 вместо idx последним аргументом
                 biscuitBlocks.push(_generateBlockFromRecipe(
-                    {blocks:[blk]}, 
+                    {blocks:[blk], id: fillRecipe.id}, 
                     rectScale, 
                     `🍞 Бисквит (Лист ${Math.round(l)}x${Math.round(w)})`, 
                     "filling", 
-                    0 
+                    idx 
                 ));
             }
         });
     }
 
     // 2. ПОКРЫТИЕ (По геометрии фигуры)
-    const scale = l / shapeState.pixelWidth;
+    const scale = w / shapeState.pixelWidth;
+    
+    // shapeState.perimeterFactor теперь точный (спасибо Marching Squares)
     const perimeterCm = shapeState.perimeterFactor * scale;
     const areaSides = perimeterCm * h;
     const areaTop = (l * w) * shapeState.kFactorRect;
@@ -13824,14 +13849,25 @@ function getShapeCalculation() {
     if (coatRecipe) {
         const refVol = _calcRefSurface(coatRecipe);
         const consumption = (parseFloat(coatRecipe.outputWeight) || 500) / refVol;
+        
+        // [ИЗМЕНЕНИЕ]: Вернули 1.1 (10% тех. запас), так как периметр теперь точный
         neededCoatWeight = totalSurfaceArea * consumption * 1.1; 
         
         const coatScale = neededCoatWeight / (parseFloat(coatRecipe.outputWeight) || 1);
         coatingBlock = _generateBlockFromRecipe(coatRecipe, coatScale, "🎨 Покрытие (Фигура)", "coating");
     }
 
+    // Предупреждение, если крем занимает слишком много места ( > 35% )
+    const totalWeightGrams = weight * 1000;
+    const coatingRatio = neededCoatWeight / totalWeightGrams;
+    
+    if (coatingRatio > 0.35) {
+        // Округляем до целых для красоты сообщения
+        alert(`⚠️ ВНИМАНИЕ: СЛОЖНАЯ ГЕОМЕТРИЯ!\n\nВес покрытия (~${Math.round(neededCoatWeight)}г) занимает ${Math.round(coatingRatio*100)}% от веса торта.\n\nНачинки останется мало (${Math.round(totalWeightGrams - neededCoatWeight)}г)! Рекомендуется увеличить общий вес заказа.`);
+    }
+
     // 3. НАЧИНКА (Чистый вес - Покрытие)
-    let bodyWeight = (weight * 1000) - neededCoatWeight; 
+    let bodyWeight = totalWeightGrams - neededCoatWeight; 
     if (bodyWeight < 0) bodyWeight = 0; 
 
     const bodyScale = bodyWeight / (parseFloat(fillRecipe.outputWeight) || 1000);
@@ -13841,13 +13877,12 @@ function getShapeCalculation() {
         fillRecipe.blocks.forEach((blk, idx) => {
             const nameLower = blk.name.toLowerCase();
             if (!nameLower.includes('бисквит') && !nameLower.includes('корж')) {
-                // !!! ИСПРАВЛЕНИЕ: Передаем 0 вместо idx последним аргументом
                 fillingBlocks.push(_generateBlockFromRecipe(
-                    {blocks:[blk]}, 
+                    {blocks:[blk], id: fillRecipe.id}, 
                     bodyScale, 
                     `🥣 Наполнение (${blk.name})`, 
                     "filling", 
-                    0 
+                    idx 
                 ));
             }
         });
@@ -14406,6 +14441,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
