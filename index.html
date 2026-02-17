@@ -5747,10 +5747,11 @@ function renderStockTable() {
               ${(i.packPrice/i.packWeight).toLocaleString('ru-RU', {maximumFractionDigits: 1})}
           </td>
           
-          <td>
+          <td style="text-align:center;"> 
             <input type="text" value="${parseFloat(stockVal).toLocaleString('ru-RU')}" 
                    onchange="updIng(${x},'stock',this.value)" 
-                   style="${stockStyle} ${opacityStyle} text-align:right;" 
+                   /* Убрали text-align:right отсюда, чтобы цифра была по центру плашки */
+                   style="${stockStyle} ${opacityStyle}" 
                    ${disabledAttr}>
           </td>
           
@@ -15126,6 +15127,7 @@ function toggleCalcMode() {
   </body>
 
 </html>
+
 
 
 
