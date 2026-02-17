@@ -3073,19 +3073,7 @@ body {
 
     <div class="container">
       <div class="navbar">
-    <div class="nav-group">
-        <button class="tab-btn active" onclick="switchTab('calc')">🍰 Калькулятор</button>
-        <button class="tab-btn" onclick="switchTab('stock')">📦 Склад</button>
-        <button class="tab-btn" onclick="switchTab('recipes')">📖 Рецепты</button>
-        <button class="tab-btn" onclick="switchTab('production')">🏭 План <span id="badgeQueue" style="background:red; color:white; border-radius:10px; padding:2px 6px; font-size:10px; display:none;">0</span></button>
-        <button class="tab-btn" onclick="switchTab('clients')">👥 Клиенты</button>
-        <button class="tab-btn" onclick="switchTab('colors')">🎨 Лаборатория цвета</button>
-        <button class="tab-btn" onclick="switchTab('shapes')">🔢 Фигуры (SVG)</button>
-        <button class="tab-btn" onclick="switchTab('archive')">🗄️ Архив</button>
-      
-        
-        <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div>
-        <button class="tab-btn settings-btn" onclick="openSettingsModal()">⚙️ Настройки</button>
+    <div class="nav-group" id="navGroup">
     </div>
 
     <div class="tools-group">
@@ -3096,11 +3084,7 @@ body {
             <button class="data-btn" onclick="undo()" title="Назад (Ctrl+Z)">↩️</button>
             <button class="data-btn" onclick="redo()" title="Вперед (Ctrl+Y)">↪️</button>
         </div>
-        <select id="currencySelect" onchange="changeCurrency(this.value)" style="width:auto; border:1px solid #ddd; padding:6px; border-radius:6px; font-weight:bold;">
-            <option value="KZT">₸</option>
-            <option value="RUB">₽</option>
-            <option value="USD">$</option>
-        </select>
+       
       
     </div>
 </div>
@@ -4378,6 +4362,20 @@ body {
     <button onclick="executeUndoAction()" style="background:#FF9800; border:none; color:white; padding:5px 12px; border-radius:15px; cursor:pointer; font-weight:bold;">ОТМЕНИТЬ</button>
 </div>
    <script>
+     // --- КОНФИГУРАЦИЯ ВКЛАДОК ---
+const TABS_CONFIG = [
+    { id: 'calc',       icon: '🍰', label: 'Калькулятор' },
+    { id: 'stock',      icon: '📦', label: 'Склад' },
+    { id: 'recipes',    icon: '📖', label: 'Рецепты' },
+    { id: 'production', icon: '🏭', label: 'План' },
+    { id: 'clients',    icon: '👥', label: 'Клиенты' },
+    { id: 'colors',     icon: '🎨', label: 'Цвет' },
+    { id: 'shapes',     icon: '🔢', label: 'Фигуры' },
+    { id: 'archive',    icon: '🗄️', label: 'Архив' }
+];
+
+// Порядок по умолчанию (просто массив ID)
+const DEFAULT_TAB_ORDER = ['calc', 'stock', 'recipes', 'production', 'clients', 'colors', 'shapes', 'archive'];
       // --- 1. GLOBAL VARIABLES & STATE ---
       const DEFAULT_INGS=[{id:"i1",name:"Яйцо С0",unit:"шт",packWeight:10,packPrice:600},{id:"i2",name:"Сахар",unit:"г",packWeight:1000,packPrice:800},{id:"i3",name:"Мука",unit:"г",packWeight:2000,packPrice:900},{id:"i4",name:"Сливки 33%",unit:"г",packWeight:1000,packPrice:2600},{id:"i5",name:"Творожный сыр",unit:"г",packWeight:2200,packPrice:5500},{id:"i6",name:"Шоколад темный",unit:"г",packWeight:1000,packPrice:6000}];
       const DEFAULT_RECS=[{id:"r1",name:"Сникерс",type:"filling",calibrationD:16,calibrationH:15,outputWeight:1410,blocks:[{name:"Основа",ingredients:[{id:"i1",weight:300},{id:"i2",weight:200},{id:"i3",weight:200},{id:"i4",weight:400}]}]},{id:"r2",name:"Ганаш",type:"coating",calibrationD:16,calibrationH:15,outputWeight:490,blocks:[{name:"Состав",ingredients:[{id:"i6",weight:250},{id:"i4",weight:250}]}]}];
@@ -4522,7 +4520,63 @@ function setStockShelf(shelf, btn) {
     
     // Отрисовка ярусов
     renderTierRows();
+        renderNavbar();
 }
+
+function renderNavbar() {
+    const container = document.getElementById('navGroup');
+    if (!container) return;
+    
+    container.innerHTML = ''; // Очищаем
+
+    // 1. Получаем сохраненный порядок или берем дефолтный
+    let order = JSON.parse(localStorage.getItem('cakeTabOrder'));
+    if (!order || order.length !== TABS_CONFIG.length) {
+        order = DEFAULT_TAB_ORDER;
+    }
+
+    // 2. Рисуем кнопки в нужном порядке
+    order.forEach(tabId => {
+        const conf = TABS_CONFIG.find(t => t.id === tabId);
+        if (!conf) return;
+
+        const btn = document.createElement('button');
+        btn.className = 'tab-btn';
+        // Если вкладка сейчас открыта, добавляем класс active (проверка по display блока)
+        const contentDiv = document.getElementById('tab-' + tabId);
+        if (contentDiv && contentDiv.style.display === 'block') {
+            btn.classList.add('active');
+        } else if (tabId === 'calc' && !document.querySelector('.tab-content[style*="block"]')) {
+             // Если ни одна не открыта (старт), подсвечиваем первую
+             btn.classList.add('active');
+        }
+
+        btn.onclick = () => switchTab(tabId);
+        btn.innerHTML = `${conf.icon} ${conf.label}`;
+        
+        // Для вкладки Плана добавляем бейдж
+        if (tabId === 'production') {
+            btn.innerHTML += ` <span id="badgeQueue" style="background:red; color:white; border-radius:10px; padding:2px 6px; font-size:10px; display:none;">0</span>`;
+        }
+
+        container.appendChild(btn);
+    });
+
+    // 3. Добавляем разделитель и Настройки (они всегда в конце, фиксированно)
+    const divider = document.createElement('div');
+    divider.style.cssText = "width:1px; height:20px; background:#ddd; margin:0 5px; flex-shrink:0;";
+    container.appendChild(divider);
+
+    const settingsBtn = document.createElement('button');
+    settingsBtn.className = 'tab-btn settings-btn';
+    settingsBtn.onclick = openSettingsModal;
+    settingsBtn.innerHTML = '⚙️ Настройки';
+    container.appendChild(settingsBtn);
+    
+    // Обновляем бейдж, если он нужен
+    updateQueueBadge();
+}
+     
 
      function switchTab(t) {
     document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
@@ -6703,6 +6757,7 @@ function filterOrders() {
 }
 
 // --- 🚦 ПРОВЕРКА ЗАГРУЖЕННОСТИ ДАТЫ ---
+// --- 🚦 ПРОВЕРКА ЗАГРУЖЕННОСТИ ДАТЫ (С НАСТРОЙКАМИ) ---
 function checkDateLoad() {
     const dateInput = document.getElementById('orderDeadline');
     const indicator = document.getElementById('dateLoadIndicator');
@@ -6715,27 +6770,36 @@ function checkDateLoad() {
         return;
     }
 
-    // Считаем заказы на эту дату (исключая тот, который мы сейчас редактируем, если это правка)
-    // editingOrderId - это переменная из нашего прошлого шага
+    // 1. Считаем заказы на эту дату
+    // (editingOrderId - глобальная переменная, чтобы не считать сам себя при редактировании)
     const count = productionQueue.filter(o => o.date === selectedDate && o.id !== editingOrderId).length;
+
+    // 2. Получаем настройки (или дефолт)
+    const limitGreen = parseInt(localStorage.getItem('cakeLoadGreen') || 2);
+    const txtGreen = localStorage.getItem('cakeTxtGreen') || "✅ Свободно";
+    
+    const limitYellow = parseInt(localStorage.getItem('cakeLoadYellow') || 4);
+    const txtYellow = localStorage.getItem('cakeTxtYellow') || "⚠️ Плотная запись";
+    
+    const txtRed = localStorage.getItem('cakeTxtRed') || "🔥 ПЕРЕГРУЗ!";
 
     indicator.style.display = 'block';
 
-    if (count === 0) {
-        indicator.style.background = '#E8F5E9'; // Светло-зеленый
+    // 3. Проверяем диапазоны
+    if (count <= limitGreen) {
+        indicator.style.background = '#E8F5E9'; // Зеленый
         indicator.style.color = '#2E7D32';
-        indicator.innerHTML = `✅ Свободно (Заказов: 0)`;
+        indicator.innerHTML = `${txtGreen} (Заказов: ${count})`;
     } 
-    else if (count <= 2) {
-        indicator.style.background = '#FFF3E0'; // Светло-оранжевый
+    else if (count <= limitYellow) {
+        indicator.style.background = '#FFF3E0'; // Оранжевый
         indicator.style.color = '#EF6C00';
-        indicator.innerHTML = `⚠️ Плотная запись (Уже есть: ${count})`;
+        indicator.innerHTML = `${txtYellow} (Уже есть: ${count})`;
     } 
     else {
-        indicator.style.background = '#FFEBEE'; // Светло-красный
+        indicator.style.background = '#FFEBEE'; // Красный
         indicator.style.color = '#C62828';
-        indicator.innerHTML = `🔥 ПЕРЕГРУЗ! (Уже заказов: ${count})`;
-        // Можно добавить вибрацию, чтобы привлечь внимание
+        indicator.innerHTML = `${txtRed} (Уже заказов: ${count})`;
         if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
     }
 }
@@ -8945,30 +9009,30 @@ function changeCurrency(val) {
     // 1. Обновляем глобальную переменную
     currentCurrency = val;
     
-    // 2. Сохраняем выбор пользователя в память браузера
+    // 2. Сохраняем
     localStorage.setItem('cakeCurrency', val);
     
-    // 3. Находим все элементы с классом 'curr-sym' и меняем их текст (напр. ₸ на ₽)
+    // 3. Меняем символы везде (₸, ₽, $)
     const symbol = SYMBOLS[val] || '';
     document.querySelectorAll('.curr-sym').forEach(el => {
         el.innerText = symbol;
     });
     
-    // 4. Обновляем селект в шапке, чтобы он соответствовал значению (актуально при загрузке бэкапа)
-    const sel = document.getElementById('currencySelect');
-    if (sel) sel.value = val;
+    // 4. Обновляем селект ВНУТРИ НАСТРОЕК (если они открыты), чтобы он не "отставал"
+    const settingsSel = document.getElementById('settingCurrency');
+    if (settingsSel) settingsSel.value = val;
 
-    // 5. Перерисовываем основные таблицы, где есть расчеты цен
+    // 5. Перерисовываем таблицы
     renderStockTable();
     renderLaborTable();
     
-    // 6. Если уже есть рассчитанные результаты в калькуляторе - обновляем статистику
+    // 6. Если есть расчеты - обновляем
     if (appState.results) {
         if (appState.results.Left) updateStats('Left');
         if (appState.results.Right) updateStats('Right');
     }
     
-    // 7. Обновляем список заказов в плане
+    // 7. Обновляем план
     renderQueue();
 }
 
@@ -9259,11 +9323,166 @@ function generateCustomHtml(rows, total) {
 }
 
 function openSettingsModal() {
-    // При открытии подгружаем актуальные данные (на всякий случай)
+    // Подгружаем актуальные данные
     loadFinance(); 
     loadHourlyRate();
     loadStatusSettings();
+    
+    // Загрузка настроек загруженности
+    const limGreen = localStorage.getItem('cakeLoadGreen') || 2;
+    const txtGreen = localStorage.getItem('cakeTxtGreen') || "✅ Свободно";
+    
+    const limYellow = localStorage.getItem('cakeLoadYellow') || 4;
+    const txtYellow = localStorage.getItem('cakeTxtYellow') || "⚠️ Плотная запись";
+    
+    const txtRed = localStorage.getItem('cakeTxtRed') || "🔥 ПЕРЕГРУЗ!";
+
+    // Текущая валюта
+    const curr = currentCurrency; 
+
     document.getElementById('settingsModal').style.display = 'flex';
+    const modalBox = document.querySelector('#settingsModal .modal-box');
+    
+    modalBox.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid #eee; padding-bottom:10px;">
+            <h2 style="margin:0; border:none; padding:0;">⚙️ Настройки</h2>
+            <button class="del-btn" onclick="document.getElementById('settingsModal').style.display='none'" style="font-size:24px;">×</button>
+        </div>
+
+        <div style="background:#E3F2FD; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #BBDEFB;">
+            <h4 style="margin-top:0; color:#1565C0;">🌍 Основные</h4>
+            <div class="form-group">
+                <span class="form-label">Валюта учета:</span>
+                <select id="settingCurrency" onchange="changeCurrency(this.value)" style="width:100%; font-weight:bold; padding:8px; border-radius:6px; border:1px solid #90CAF9;">
+                    <option value="KZT" ${curr==='KZT'?'selected':''}>₸ (Тенге)</option>
+                    <option value="RUB" ${curr==='RUB'?'selected':''}>₽ (Рубль)</option>
+                    <option value="USD" ${curr==='USD'?'selected':''}>$ (Доллар)</option>
+                    <option value="EUR" ${curr==='EUR'?'selected':''}>€ (Евро)</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="background:#E8F5E9; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #C8E6C9;">
+            <h4 style="margin-top:0; color:#2E7D32;">📅 Контроль загрузки (в день)</h4>
+            
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <span style="width:20px;">🟢</span>
+                <span style="font-size:12px;">До:</span>
+                <input type="number" id="setLoadGreen" value="${limGreen}" style="width:50px; text-align:center;">
+                <input type="text" id="setTxtGreen" value="${txtGreen}" style="flex:1;" placeholder="Текст (Ок)">
+            </div>
+
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <span style="width:20px;">🟡</span>
+                <span style="font-size:12px;">До:</span>
+                <input type="number" id="setLoadYellow" value="${limYellow}" style="width:50px; text-align:center;">
+                <input type="text" id="setTxtYellow" value="${txtYellow}" style="flex:1;" placeholder="Текст (Плотно)">
+            </div>
+
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="width:20px;">🔴</span>
+                <span style="font-size:12px;">Выше:</span>
+                <div style="width:50px; text-align:center; font-size:20px;">∞</div>
+                <input type="text" id="setTxtRed" value="${txtRed}" style="flex:1;" placeholder="Текст (Перегруз)">
+            </div>
+        </div>
+
+        <div style="background:#e0f2f1; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #80cbc4;">
+            <h4 style="margin-top:0; color:#00695c;">💰 Стоимость работы</h4>
+            <div class="form-row">
+                <div class="form-group">
+                    <span class="form-label">Ставка в час (База)</span>
+                    <input type="number" id="hourlyRate" placeholder="0" style="font-weight:bold; font-size:16px;" onchange="saveHourlyRate()">
+                </div>
+            </div>
+        </div>
+
+        <div style="background:#fff3e0; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #ffe0b2;">
+            <h4 style="margin-top:0; color:#e65100;">📊 Накладные расходы (%)</h4>
+            <div class="form-row">
+                <div class="form-group"><span class="form-label">Налог</span><input type="number" id="finTax" onchange="saveFinance()"></div>
+                <div class="form-group"><span class="form-label">Банк</span><input type="number" id="finBank" onchange="saveFinance()"></div>
+                <div class="form-group"><span class="form-label">Аморт.</span><input type="number" id="finOverhead" onchange="saveFinance()"></div>
+            </div>
+        </div>
+
+        <div style="background:#fff8e1; padding:15px; border-radius:8px; border:1px solid #ffe0b2; margin-bottom:15px;">
+            <h4 style="margin-top:0; color:#F57C00;">📝 Списки выбора</h4>
+            <div class="form-group" style="margin-bottom:10px;">
+                <span class="form-label">Банки:</span>
+                <input type="text" id="settingBanks" onchange="saveListSettings()">
+            </div>
+            <div class="form-group">
+                <span class="form-label">Источники:</span>
+                <input type="text" id="settingSources" onchange="saveListSettings()">
+            </div>
+        </div>
+
+        <div style="background:#F3E5F5; padding:15px; border-radius:8px; border:1px solid #E1BEE7; margin-bottom:15px;">
+            <h4 style="margin-top:0; color:#7B1FA2;">🎨 Меню и Вкладки</h4>
+            <div style="font-size:11px; color:#555; margin-bottom:10px;">Нажимайте стрелки, чтобы менять порядок кнопок.</div>
+            <div id="tabsSortContainer"></div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:20px;">
+            <button class="main-btn" onclick="saveAllSettingsAndClose()">💾 Сохранить настройки</button>
+        </div>
+    `;
+    
+    // Заполняем поля значениями (потому что мы перезаписали HTML)
+    loadHourlyRate();
+    loadFinance();
+    loadListSettings();
+  renderTabsSorter();
+}
+
+     // Временный массив для сортировки (пока окно настроек открыто)
+let tempTabOrder = [];
+
+function renderTabsSorter() {
+    const container = document.getElementById('tabsSortContainer');
+    if (!container) return;
+    
+    // Загружаем текущий порядок
+    if (tempTabOrder.length === 0) {
+        const saved = JSON.parse(localStorage.getItem('cakeTabOrder'));
+        tempTabOrder = (saved && saved.length === TABS_CONFIG.length) ? saved : [...DEFAULT_TAB_ORDER];
+    }
+
+    container.innerHTML = '';
+
+    tempTabOrder.forEach((tabId, index) => {
+        const conf = TABS_CONFIG.find(t => t.id === tabId);
+        if(!conf) return;
+
+        const isFirst = index === 0;
+        const isLast = index === tempTabOrder.length - 1;
+
+        const row = document.createElement('div');
+        row.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:#fff; padding:8px; border-radius:6px; margin-bottom:5px; border:1px solid #ddd;";
+        
+        row.innerHTML = `
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:18px;">${conf.icon}</span>
+                <span style="font-weight:bold; color:#444;">${conf.label}</span>
+            </div>
+            <div style="display:flex; gap:5px;">
+                ${!isFirst ? `<button onclick="moveTabSort(${index}, -1)" style="cursor:pointer; border:1px solid #ccc; background:#f5f5f5; border-radius:4px; padding:2px 8px;">⬆️</button>` : '<div style="width:28px;"></div>'}
+                ${!isLast ? `<button onclick="moveTabSort(${index}, 1)" style="cursor:pointer; border:1px solid #ccc; background:#f5f5f5; border-radius:4px; padding:2px 8px;">⬇️</button>` : '<div style="width:28px;"></div>'}
+            </div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+function moveTabSort(index, dir) {
+    // Меняем местами в массиве
+    const temp = tempTabOrder[index];
+    tempTabOrder[index] = tempTabOrder[index + dir];
+    tempTabOrder[index + dir] = temp;
+    
+    // Перерисовываем список
+    renderTabsSorter();
 }
 
 function printSticker() {
@@ -12593,17 +12812,10 @@ function forceLoadFromCloud() {
         if (data.history_stock) stockHistory = data.history_stock;
 
         // 7. Обновляем Настройки
-        if (data.settings) {
-            if (data.settings.hourlyRate) document.getElementById('hourlyRate').value = data.settings.hourlyRate;
-            if (data.settings.tax) document.getElementById('finTax').value = data.settings.tax;
-            if (data.settings.bank) document.getElementById('finBank').value = data.settings.bank;
-            if (data.settings.overhead) document.getElementById('finOverhead').value = data.settings.overhead;
-            if (data.settings.currency) changeCurrency(data.settings.currency);
-            
-            // Сохраняем настройки локально
-            saveHourlyRate();
-            saveFinance();
-        }
+        // 7. Обновляем Настройки
+if (data.settings) {
+    applySettingsFromCloud(data.settings);
+}
 
         // 8. Перерисовываем ВЕСЬ интерфейс
         updateUI(); 
@@ -12654,11 +12866,9 @@ function initializeApp() {
                 if(data.archive) { archiveOrders = data.archive; }
                 if(data.history_stock) { stockHistory = data.history_stock; }
                 // Настройки
-                if(data.settings) {
-                   if(data.settings.hourlyRate) localStorage.setItem('cakeHourlyRate', data.settings.hourlyRate);
-                   if(data.settings.tax) localStorage.setItem('cakeFinTax', data.settings.tax);
-                   loadHourlyRate(); loadFinance();
-                }
+               if(data.settings) {
+    applySettingsFromCloud(data.settings); // <--- Одна строка делает всё!
+}
 
                 document.getElementById('dbStatus').innerHTML = "🟢 Облако активно";
             }).apiLoadAllData();
@@ -14473,6 +14683,98 @@ function repeatOrder(id) {
     alert("✅ Заказ скопирован в План! Теперь вы можете его отредактировать (дату и детали).");
     switchTab('production'); // Переходим в план
 }
+
+     function saveAllSettingsAndClose() {
+    // 1. Считываем значения из полей
+    const loadGreen = document.getElementById('setLoadGreen').value;
+    const txtGreen = document.getElementById('setTxtGreen').value;
+    const loadYellow = document.getElementById('setLoadYellow').value;
+    const txtYellow = document.getElementById('setTxtYellow').value;
+    const txtRed = document.getElementById('setTxtRed').value;
+    const banks = document.getElementById('settingBanks').value;
+    const sources = document.getElementById('settingSources').value;
+
+    // 2. Сохраняем в LocalStorage (для мгновенного доступа)
+    localStorage.setItem('cakeLoadGreen', loadGreen);
+    localStorage.setItem('cakeTxtGreen', txtGreen);
+    localStorage.setItem('cakeLoadYellow', loadYellow);
+    localStorage.setItem('cakeTxtYellow', txtYellow);
+    localStorage.setItem('cakeTxtRed', txtRed);
+    
+    // Сохраняем порядок вкладок (если он менялся)
+    if (typeof tempTabOrder !== 'undefined' && tempTabOrder.length > 0) {
+        localStorage.setItem('cakeTabOrder', JSON.stringify(tempTabOrder));
+        renderNavbar(); // Перерисовываем меню
+        tempTabOrder = []; // Сброс
+    }
+
+    // Вызываем сохранения подсистем (финансы, списки)
+    saveHourlyRate();
+    saveFinance();
+    // saveListSettings мы заменим ниже ручным сохранением в объект, чтобы не дублировать вызовы
+
+    document.getElementById('settingsModal').style.display='none';
+    
+    // 3. ФОРМИРУЕМ ПОЛНЫЙ ПАКЕТ ДЛЯ ОБЛАКА
+    const settingsObj = {
+        // Финансы
+        tax: document.getElementById('finTax').value,
+        bank: document.getElementById('finBank').value,
+        overhead: document.getElementById('finOverhead').value,
+        hourlyRate: document.getElementById('hourlyRate').value,
+        currency: currentCurrency, // Валюта
+
+        // Загруженность (Лимиты + Тексты)
+        loadGreen: loadGreen,
+        txtGreen: txtGreen,
+        loadYellow: loadYellow,
+        txtYellow: txtYellow,
+        txtRed: txtRed,
+
+        // Списки
+        banksList: banks,
+        sourcesList: sources,
+
+        // Интерфейс (Порядок вкладок)
+        tabOrder: JSON.parse(localStorage.getItem('cakeTabOrder') || '[]')
+    };
+
+    // 4. Отправляем в Google Таблицу (лист 'settings')
+    saveToCloud('settings', settingsObj);
+    
+    alert("✅ Все настройки (включая интерфейс) сохранены в Облако!");
+}
+     // --- НОВАЯ ФУНКЦИЯ: ПРИМЕНЕНИЕ НАСТРОЕК ИЗ ОБЛАКА ---
+function applySettingsFromCloud(s) {
+    if (!s) return;
+
+    // 1. Валюта
+    if (s.currency) changeCurrency(s.currency);
+
+    // 2. Финансы
+    if (s.hourlyRate) { localStorage.setItem('cakeHourlyRate', s.hourlyRate); loadHourlyRate(); }
+    if (s.tax) localStorage.setItem('cakeFinTax', s.tax);
+    if (s.bank) localStorage.setItem('cakeFinBank', s.bank);
+    if (s.overhead) localStorage.setItem('cakeFinOverhead', s.overhead);
+    loadFinance(); // Обновляем переменные в памяти
+
+    // 3. Загруженность
+    if (s.loadGreen) localStorage.setItem('cakeLoadGreen', s.loadGreen);
+    if (s.txtGreen) localStorage.setItem('cakeTxtGreen', s.txtGreen);
+    if (s.loadYellow) localStorage.setItem('cakeLoadYellow', s.loadYellow);
+    if (s.txtYellow) localStorage.setItem('cakeTxtYellow', s.txtYellow);
+    if (s.txtRed) localStorage.setItem('cakeTxtRed', s.txtRed);
+
+    // 4. Списки
+    if (s.banksList) localStorage.setItem('cakeBanksList', s.banksList);
+    if (s.sourcesList) localStorage.setItem('cakeSourcesList', s.sourcesList);
+
+    // 5. Интерфейс (Вкладки)
+    if (s.tabOrder && Array.isArray(s.tabOrder) && s.tabOrder.length > 0) {
+        localStorage.setItem('cakeTabOrder', JSON.stringify(s.tabOrder));
+        renderNavbar(); // Перестраиваем меню
+    }
+}
     </script>
 
 <script>
@@ -14486,6 +14788,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
