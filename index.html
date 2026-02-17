@@ -13878,6 +13878,7 @@ function transferShapeToMain() {
 
 // --- ХЕЛПЕР: МАТЕМАТИКА ФИГУРНОГО ТОРТА ---
 // Возвращает массив блоков (ингредиентов) или null, если ошибка
+// --- ХЕЛПЕР: МАТЕМАТИКА ФИГУРНОГО ТОРТА (ИСПРАВЛЕНО) ---
 function getShapeCalculation() {
     const { l, w, h, weight } = shapeState.current;
     if (h === 0 || weight === 0) return null;
@@ -13886,7 +13887,7 @@ function getShapeCalculation() {
     const coatRecId = document.getElementById('shapeCoatingSelect').value;
     
     const fillRecipe = myRecipes.find(r => r.id === fillRecId);
-    const coatRecipe = myRecipes.find(r => r.id === coatRecId); // Может быть undefined
+    const coatRecipe = myRecipes.find(r => r.id === coatRecId); 
 
     if (!fillRecipe) return null;
 
@@ -13900,12 +13901,13 @@ function getShapeCalculation() {
         fillRecipe.blocks.forEach((blk, idx) => {
             const nameLower = blk.name.toLowerCase();
             if (nameLower.includes('бисквит') || nameLower.includes('корж')) {
+                // !!! ИСПРАВЛЕНИЕ: Передаем 0 вместо idx последним аргументом
                 biscuitBlocks.push(_generateBlockFromRecipe(
                     {blocks:[blk]}, 
                     rectScale, 
                     `🍞 Бисквит (Лист ${Math.round(l)}x${Math.round(w)})`, 
                     "filling", 
-                    idx
+                    0 
                 ));
             }
         });
@@ -13924,7 +13926,7 @@ function getShapeCalculation() {
     if (coatRecipe) {
         const refVol = _calcRefSurface(coatRecipe);
         const consumption = (parseFloat(coatRecipe.outputWeight) || 500) / refVol;
-        neededCoatWeight = totalSurfaceArea * consumption * 1.1; // +10% запас
+        neededCoatWeight = totalSurfaceArea * consumption * 1.1; 
         
         const coatScale = neededCoatWeight / (parseFloat(coatRecipe.outputWeight) || 1);
         coatingBlock = _generateBlockFromRecipe(coatRecipe, coatScale, "🎨 Покрытие (Фигура)", "coating");
@@ -13932,7 +13934,7 @@ function getShapeCalculation() {
 
     // 3. НАЧИНКА (Чистый вес - Покрытие)
     let bodyWeight = (weight * 1000) - neededCoatWeight; 
-    if (bodyWeight < 0) bodyWeight = 0; // Защита от минуса для превью
+    if (bodyWeight < 0) bodyWeight = 0; 
 
     const bodyScale = bodyWeight / (parseFloat(fillRecipe.outputWeight) || 1000);
     const fillingBlocks = [];
@@ -13941,12 +13943,13 @@ function getShapeCalculation() {
         fillRecipe.blocks.forEach((blk, idx) => {
             const nameLower = blk.name.toLowerCase();
             if (!nameLower.includes('бисквит') && !nameLower.includes('корж')) {
+                // !!! ИСПРАВЛЕНИЕ: Передаем 0 вместо idx последним аргументом
                 fillingBlocks.push(_generateBlockFromRecipe(
                     {blocks:[blk]}, 
                     bodyScale, 
                     `🥣 Наполнение (${blk.name})`, 
                     "filling", 
-                    idx
+                    0 
                 ));
             }
         });
@@ -13958,7 +13961,6 @@ function getShapeCalculation() {
 
     return finalBlocks;
 }
-
      // --- ОТРИСОВКА ПРЕВЬЮ СОСТАВА (ДИНАМИЧЕСКАЯ) ---
 function renderShapeRealtimePreview() {
     const container = document.getElementById('shapeIngredientsPreview');
@@ -14506,6 +14508,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
