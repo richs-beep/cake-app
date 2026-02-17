@@ -3618,8 +3618,8 @@ body {
             <th style="width:7%" onclick="setSort('stock','packWeight')">Упак. <span id="sort_stock_packWeight"></span></th>
             <th style="width:7%" onclick="setSort('stock','packPrice')">Цена <span id="sort_stock_packPrice"></span></th>
             <th style="width:6%">За ед.</th>
-            
             <th style="width:12%; color:#1565C0;" onclick="setSort('stock','stock')">Остаток <span id="sort_stock_stock"></span></th>
+            <th style="width:5%" title="Авто-добавление в заказ">⚡</th> 
             <th style="width:4%"></th>
         </tr>
     </thead>
@@ -5248,6 +5248,9 @@ function modifyTier(side, idx, axis, delta) {
 
 
 function calculateSide(side) {
+  if (extrasList.length === 0) {
+        loadAutoExtras();
+    }
     // 1. Берем данные конкретной стороны
     const sourceTiers = (side === 'Left') ? appState.leftTiers : appState.rightTiers;
     
@@ -5657,10 +5660,10 @@ function renderStockTable() {
     // 2. Фильтрация ПОИСК
     list = list.filter(wrapper => wrapper.data.name.toLowerCase().includes(search));
 
-    // 3. Фильтрация ПОЛКИ (НОВОЕ!)
+    // 3. Фильтрация ПОЛКИ
     if (currentStockShelf !== 'all') {
         list = list.filter(wrapper => {
-            const cat = wrapper.data.category || 'food'; // Если категории нет, считаем Продуктом
+            const cat = wrapper.data.category || 'food'; 
             return cat === currentStockShelf;
         });
     }
@@ -5692,23 +5695,25 @@ function renderStockTable() {
 
         const disabledAttr = isInventoryMode ? '' : 'disabled';
         const opacityStyle = isInventoryMode ? '' : 'opacity:0.8; cursor:not-allowed;';
-        
-        // Определение иконки категории
         const isPack = (i.category === 'pack');
         
-        tb.innerHTML += `<tr>
-         
+        // --- НОВОЕ: Иконка авто-добавления ---
+        // Если isAutoAdd = true, то иконка яркая, иначе блеклая
+        const autoIcon = i.isAutoAdd ? '⚡' : '⚪';
+        const autoTitle = i.isAutoAdd ? 'Убрать из авто-добавления' : 'Добавлять в каждый торт';
+        const autoStyle = i.isAutoAdd ? 'opacity:1; transform:scale(1.2);' : 'opacity:0.3; filter:grayscale(100%);';
 
-<td style="display: flex; align-items: center; gap: 5px; padding: 5px;">
-     <select onchange="updIng(${x}, 'category', this.value); renderStockTable();" 
-             style="font-size: 16px; border: none; background: transparent; cursor: pointer; width: 30px; padding: 0; appearance: none; -webkit-appearance: none; text-align: center;" 
-             title="Сменить полку">
-         <option value="food" ${!isPack ? 'selected' : ''}>🍎</option>
-         <option value="pack" ${isPack ? 'selected' : ''}>📦</option>
-     </select>
-     
-     <input value="${i.name}" onchange="updIng(${x},'name',this.value)" style="flex: 1; min-width: 0;">
-</td>
+        tb.innerHTML += `<tr>
+          <td style="display: flex; align-items: center; gap: 5px; padding: 5px;">
+             <select onchange="updIng(${x}, 'category', this.value); renderStockTable();" 
+                     style="font-size: 16px; border: none; background: transparent; cursor: pointer; width: 30px; padding: 0; appearance: none; -webkit-appearance: none; text-align: center;" 
+                     title="Сменить полку">
+                 <option value="food" ${!isPack ? 'selected' : ''}>🍎</option>
+                 <option value="pack" ${isPack ? 'selected' : ''}>📦</option>
+             </select>
+             
+             <input value="${i.name}" onchange="updIng(${x},'name',this.value)" style="flex: 1; min-width: 0;">
+          </td>
           
           <td><select onchange="updIng(${x},'unit',this.value); renderStockTable();">
             <option value="г" ${i.unit==='г'?'selected':''}>г</option>
@@ -5748,6 +5753,13 @@ function renderStockTable() {
                    style="${stockStyle} ${opacityStyle} text-align:right;" 
                    ${disabledAttr}>
           </td>
+          
+          <td style="text-align:center;">
+             <button onclick="toggleAutoAdd(${x})" title="${autoTitle}" 
+                     style="background:none; border:none; cursor:pointer; font-size:16px; transition:0.2s; ${autoStyle}">
+                 ${autoIcon}
+             </button>
+          </td>
 
           <td><button class="del-btn" onclick="delIng(${x})">✕</button></td>
         </tr>`;
@@ -5755,7 +5767,6 @@ function renderStockTable() {
     
     updateSortArrows('stock');
 }
-
      
       function toggleNewWeightInput() {
           const u = document.getElementById('newIngUnit').value;
@@ -5776,6 +5787,42 @@ function renderStockTable() {
     
     saveIngs(); 
     saveToHistory(); 
+}
+
+     function toggleAutoAdd(idx) {
+    // Переключаем true/false
+    myIngredients[idx].isAutoAdd = !myIngredients[idx].isAutoAdd;
+    saveIngs();        // Сохраняем в базу
+    renderStockTable(); // Перерисовываем иконку
+    saveToHistory();
+    
+    if (navigator.vibrate) navigator.vibrate(10); // Вибрация для кайфа
+}
+  function loadAutoExtras() {
+    // 1. Ищем на складе всё, что отмечено "Авто"
+    const autoItems = myIngredients.filter(i => i.isAutoAdd);
+    let addedCount = 0;
+
+    autoItems.forEach(ing => {
+        // Проверяем, нет ли уже такого товара в списке (чтобы не дублировать)
+        const exists = extrasList.find(ex => ex.id === ing.id);
+        
+        if (!exists) {
+            extrasList.push({
+                id: ing.id,
+                name: ing.name,
+                amount: (ing.unit === 'шт') ? 1 : 0, // Если шт - 1, если гр - 0 (пусть вводят)
+                unit: ing.unit,
+                type: 'extra',
+                isPaid: false // <--- ВАЖНО! По умолчанию "Включено в стоимость" (бесплатно для клиента)
+            });
+            addedCount++;
+        }
+    });
+
+    if (addedCount > 0) {
+        renderExtras();
+    }
 }
 function delIng(x) { 
     if (confirm('Удалить продукт со склада?')) {
@@ -15079,6 +15126,7 @@ function toggleCalcMode() {
   </body>
 
 </html>
+
 
 
 
