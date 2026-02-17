@@ -3508,7 +3508,7 @@ body {
            <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
              <h2>📦 Склад и Услуги</h2>
              <div class="data-panel" style="margin:0; padding:0; background:none;">
-                <button class="data-btn blue" onclick="openImportModal('ingredients')">Импорт ингридиентов/работ из таблицы</button>
+                <button id="btnImportStock" class="data-btn blue" onclick="openImportModal('ingredients')">Импорт Excel</button>
                 <input type="file" id="fileInput" style="display:none;" onchange="loadBackupFile(this)">
              </div>
            </div>
@@ -3630,7 +3630,7 @@ body {
         <div class="card">
           <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
               <h2>📖 Техкарты</h2>
-              <button class="data-btn blue" onclick="openImportModal('recipes')">Импорт Excel</button>
+              <button id="btnImportRecipes" class="data-btn blue" onclick="openImportModal('recipes')">Импорт Excel</button>
           </div>
           <div class="recipe-layout">
            <div class="recipe-list">
@@ -8217,28 +8217,61 @@ function loadBackupFile(el) {
 // --- 3. УМНЫЙ ИМПОРТ (EXCEL) ---
 
 // Переключаем режим кнопки Импорт при смене вкладки склада
+// --- ИСПРАВЛЕННОЕ ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК СКЛАДА ---
 function switchStockView(mode) {
     const ingBlock = document.getElementById('ingredientsStockBlock');
     const laborBlock = document.getElementById('laborStockBlock');
-    // Кнопка импорта (находим её по тексту или классу, лучше добавить ID в HTML, но можно и так)
-    const importBtn = document.querySelector("button[onclick^='openImportModal']");
+    
+    // Ищем кнопку КОНКРЕТНО по ID, чтобы не путать с кнопкой в рецептах
+    const importBtn = document.getElementById('btnImportStock');
     
     if (mode === 'ingredients') {
         ingBlock.style.display = 'block';
         laborBlock.style.display = 'none';
         renderStockTable();
-        if(importBtn) importBtn.setAttribute('onclick', "openImportModal('ingredients')");
+        
+        // Меняем действие кнопки
+        if(importBtn) {
+            importBtn.setAttribute('onclick', "openImportModal('ingredients')");
+            importBtn.innerText = "Импорт продуктов (Excel)";
+        }
     } else {
         ingBlock.style.display = 'none';
         laborBlock.style.display = 'block';
         renderLaborTable();
-        if(importBtn) importBtn.setAttribute('onclick', "openImportModal('labor')");
+        
+        // Меняем действие кнопки
+        if(importBtn) {
+            importBtn.setAttribute('onclick', "openImportModal('labor')");
+            importBtn.innerText = "Импорт работ (Excel)";
+        }
     }
 }
 
+     // --- УНИВЕРСАЛЬНОЕ ОТКРЫТИЕ ОКНА ИМПОРТА ---
 function openImportModal(mode) {
     impMode = mode;
-    document.getElementById('importModal').style.display = 'flex';
+    
+    // 1. Проверяем, существует ли модалка. Если нет — создаем её заново.
+    let modal = document.getElementById('importModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'importModal';
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+         <div class="modal-box">
+           <h3 id="importTitle">📥 Импорт</h3>
+           <p id="importDesc" style="font-size:14px; color:#666;"></p>
+           <textarea id="importText" rows="10" placeholder="Вставьте данные..." style="width:100%; margin-bottom:10px; border:1px solid #ddd; padding:10px;"></textarea>
+           <div class="modal-actions">
+              <button class="tab-btn" onclick="document.getElementById('importModal').style.display='none'">Отмена</button>
+              <button class="main-btn" onclick="processImport()" style="width:auto;">Обработать</button>
+           </div>
+         </div>`;
+        document.body.appendChild(modal);
+    }
+
+    // 2. Настраиваем тексты
     const titleEl = document.getElementById('importTitle');
     const descEl = document.getElementById('importDesc');
     const area = document.getElementById('importText');
@@ -8248,11 +8281,11 @@ function openImportModal(mode) {
     if (mode === 'ingredients') {
         titleEl.innerText = '🍎 Импорт продуктов';
         descEl.innerHTML = 'Копируйте из Excel (без шапки).<br>Порядок: <b>Название | Ед.изм | Б | Ж | У | Ккал | Вес пачки | Цена пачки</b>';
-        area.placeholder = "Мука\tг\t1000\t500\nСахар\tг\t1000\t600...";
+        area.placeholder = "Мука\tг\t10\t1\t70\t330\t2000\t800...";
     } 
     else if (mode === 'labor') {
         titleEl.innerText = '🛠️ Импорт видов работ';
-        descEl.innerHTML = 'Копируйте из Excel (без шапки).<br>Порядок колонок: <b>Название работы | Коэффициент (1.0 - 2.0)</b>';
+        descEl.innerHTML = 'Копируйте из Excel.<br>Порядок: <b>Название работы | Коэффициент (1.0 - 2.0)</b>';
         area.placeholder = "Лепка фигурки\t1.5\nСборка яруса\t1.2...";
     }
     else if (mode === 'recipes') {
@@ -8260,6 +8293,9 @@ function openImportModal(mode) {
         descEl.innerHTML = 'Структура (4 колонки):<br><b>Рецепт | Блок (Слой) | Продукт | Вес (г)</b>';
         area.placeholder = "Сникерс\tБисквит\tЯйцо\t200\nСникерс\tБисквит\tМука\t150...";
     }
+
+    // 3. Показываем
+    modal.style.display = 'flex';
 }
 
 function closeImportModal() {
@@ -14446,6 +14482,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
