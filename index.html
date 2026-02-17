@@ -8249,53 +8249,57 @@ function switchStockView(mode) {
 }
 
      // --- УНИВЕРСАЛЬНОЕ ОТКРЫТИЕ ОКНА ИМПОРТА ---
+// --- ИСПРАВЛЕННАЯ ФУНКЦИЯ ИМПОРТА ---
 function openImportModal(mode) {
+    console.log("Запуск окна импорта, режим:", mode); // Для проверки в консоли
     impMode = mode;
     
-    // 1. Проверяем, существует ли модалка. Если нет — создаем её заново.
-    let modal = document.getElementById('importModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'importModal';
-        modal.className = 'modal-overlay';
-        modal.innerHTML = `
-         <div class="modal-box">
-           <h3 id="importTitle">📥 Импорт</h3>
-           <p id="importDesc" style="font-size:14px; color:#666;"></p>
-           <textarea id="importText" rows="10" placeholder="Вставьте данные..." style="width:100%; margin-bottom:10px; border:1px solid #ddd; padding:10px;"></textarea>
-           <div class="modal-actions">
-              <button class="tab-btn" onclick="document.getElementById('importModal').style.display='none'">Отмена</button>
-              <button class="main-btn" onclick="processImport()" style="width:auto;">Обработать</button>
-           </div>
-         </div>`;
-        document.body.appendChild(modal);
-    }
+    // 1. УДАЛЯЕМ старое окно, если оно есть (чтобы избежать конфликтов)
+    const existing = document.getElementById('importModal');
+    if (existing) existing.remove();
 
-    // 2. Настраиваем тексты
-    const titleEl = document.getElementById('importTitle');
-    const descEl = document.getElementById('importDesc');
-    const area = document.getElementById('importText');
-    
-    area.value = ''; // Очистка
+    // 2. СОЗДАЕМ новое окно с нуля
+    const modal = document.createElement('div');
+    modal.id = 'importModal';
+    modal.className = 'modal-overlay';
+    // Принудительно ставим высокий Z-Index и Flex, чтобы окно точно появилось
+    modal.style.cssText = 'display: flex; z-index: 10005;'; 
 
+    let title = 'Импорт';
+    let desc = '';
+    let placeholder = '';
+
+    // Настраиваем тексты в зависимости от режима
     if (mode === 'ingredients') {
-        titleEl.innerText = '🍎 Импорт продуктов';
-        descEl.innerHTML = 'Копируйте из Excel (без шапки).<br>Порядок: <b>Название | Ед.изм | Б | Ж | У | Ккал | Вес пачки | Цена пачки</b>';
-        area.placeholder = "Мука\tг\t10\t1\t70\t330\t2000\t800...";
+        title = '🍎 Импорт продуктов';
+        desc = 'Копируйте из Excel (без шапки).<br>Порядок: <b>Название | Ед.изм | Б | Ж | У | Ккал | Вес пачки | Цена пачки</b>';
+        placeholder = "Мука\tг\t10\t1\t70\t330\t2000\t800...";
     } 
     else if (mode === 'labor') {
-        titleEl.innerText = '🛠️ Импорт видов работ';
-        descEl.innerHTML = 'Копируйте из Excel.<br>Порядок: <b>Название работы | Коэффициент (1.0 - 2.0)</b>';
-        area.placeholder = "Лепка фигурки\t1.5\nСборка яруса\t1.2...";
+        title = '🛠️ Импорт видов работ';
+        desc = 'Копируйте из Excel.<br>Порядок: <b>Название работы | Коэффициент (1.0 - 2.0)</b>';
+        placeholder = "Лепка фигурки\t1.5\nСборка яруса\t1.2...";
     }
     else if (mode === 'recipes') {
-        titleEl.innerText = '📖 Импорт рецептов';
-        descEl.innerHTML = 'Структура (4 колонки):<br><b>Рецепт | Блок (Слой) | Продукт | Вес (г)</b>';
-        area.placeholder = "Сникерс\tБисквит\tЯйцо\t200\nСникерс\tБисквит\tМука\t150...";
+        title = '📖 Импорт рецептов';
+        desc = 'Структура (4 колонки):<br><b>Рецепт | Блок (Слой) | Продукт | Вес (г)</b>';
+        placeholder = "Сникерс\tБисквит\tЯйцо\t200\nСникерс\tБисквит\tМука\t150...";
     }
 
-    // 3. Показываем
-    modal.style.display = 'flex';
+    // 3. Наполняем HTML
+    modal.innerHTML = `
+     <div class="modal-box" style="z-index: 10006;">
+       <h3 id="importTitle">${title}</h3>
+       <p id="importDesc" style="font-size:14px; color:#666;">${desc}</p>
+       <textarea id="importText" rows="10" placeholder="${placeholder}" style="width:100%; margin-bottom:10px; border:1px solid #ddd; padding:10px;"></textarea>
+       <div class="modal-actions">
+          <button class="tab-btn" onclick="document.getElementById('importModal').remove()">Отмена</button>
+          <button class="main-btn" onclick="processImport()" style="width:auto;">Обработать</button>
+       </div>
+     </div>`;
+
+    // 4. Добавляем на страницу
+    document.body.appendChild(modal);
 }
 
 function closeImportModal() {
@@ -14482,6 +14486,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
