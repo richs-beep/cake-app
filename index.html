@@ -17,8 +17,7 @@
     // Права доступа: чтение и запись таблиц + доступ к файлам + email + профиль
     const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
 
-    // Глобальные 
-    let isShapeCalculated = false; // Блокиратор расчетов
+    // Глобальные переменные
     let tokenClient;
     let gapiInited = false;
     let gisInited = false;
@@ -4219,23 +4218,11 @@ body {
 
         <div id="shapeCalcBlock" style="display:none; margin-top:20px;">
             
-            <div class="form-row">
-    <div class="form-group" style="flex:1;">
-        <span class="form-label">🍰 Начинка (Бисквит + Мусс)</span>
-        <select id="shapeRecipeSelect" onchange="recalcFromWeight()" 
-                style="font-weight:bold; background:#fff3e0;">
-        </select>
-    </div>
-    
-    <div class="form-group" style="flex:1;">
-        <span class="form-label">🎨 Покрытие (Ганаш)</span>
-        <select id="shapeCoatingSelect" 
-        onchange="recalcFromWeight()" 
-        style="font-weight:bold; background:#EFEBE9;">
-    <option value="">-- Выберите --</option>
-</select>
-    </div>
-</div>
+            <div class="form-group" style="margin-bottom:15px;">
+                <span class="form-label">🍰 Начинка (Плотность)</span>
+                <select id="shapeRecipeSelect" onchange="recalcFromWeight()" style="font-weight:bold; background:#fff3e0;">
+                    </select>
+            </div>
 
             <div style="margin-bottom:15px; background:#fff; padding:8px; border-radius:8px; border:1px solid #ddd; display:flex; justify-content:center; gap:15px;">
                 <span class="form-label" style="align-self:center; margin:0;">Форма:</span>
@@ -4274,7 +4261,7 @@ body {
                             <span class="form-label">Длина (Вертикаль)</span>
                             <div class="stepper">
                                 <button class="step-btn" onmousedown="startChange('inpL', -1, 'L')" ontouchstart="startChange('inpL', -1, 'L')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">−</button>
-                                <input type="number" id="inpL" value="25" oninput="recalcFromDimensions('L')">
+                                <input type="number" id="inpL" value="25" onchange="recalcFromDimensions('L')">
                                 <button class="step-btn" onmousedown="startChange('inpL', 1, 'L')" ontouchstart="startChange('inpL', 1, 'L')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">+</button>
                             </div>
                         </div>
@@ -4282,7 +4269,7 @@ body {
                             <span class="form-label">Ширина (Горизонталь)</span>
                             <div class="stepper">
                                 <button class="step-btn" onmousedown="startChange('inpW', -1, 'W')" ontouchstart="startChange('inpW', -1, 'W')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">−</button>
-                                <input type="number" id="inpW" value="18" oninput="recalcFromDimensions('W')">
+                                <input type="number" id="inpW" value="18" onchange="recalcFromDimensions('W')">
                                 <button class="step-btn" onmousedown="startChange('inpW', 1, 'W')" ontouchstart="startChange('inpW', 1, 'W')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">+</button>
                             </div>
                             <div style="font-size:10px; text-align:center; margin-top:2px;">
@@ -4296,7 +4283,7 @@ body {
                             <span class="form-label" style="color:#E91E63;">Диаметр (см)</span>
                             <div class="stepper">
                                 <button class="step-btn" onmousedown="startChange('inpD', -1, 'D')" ontouchstart="startChange('inpD', -1, 'D')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">−</button>
-                                <input type="number" id="inpD" value="20" style="color:#E91E63;" oninput="recalcFromDimensions('D')">
+                                <input type="number" id="inpD" value="20" style="color:#E91E63;" onchange="recalcFromDimensions('D')">
                                 <button class="step-btn" onmousedown="startChange('inpD', 1, 'D')" ontouchstart="startChange('inpD', 1, 'D')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">+</button>
                             </div>
                         </div>
@@ -4306,7 +4293,7 @@ body {
                         <span class="form-label">Высота (Толщина)</span>
                         <div class="stepper">
                             <button class="step-btn" onmousedown="startChange('inpH', -0.5, 'H')" ontouchstart="startChange('inpH', -0.5, 'H')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">−</button>
-                            <input type="number" id="inpH" value="10" oninput="recalcFromDimensions('H')">
+                            <input type="number" id="inpH" value="10" onchange="recalcFromDimensions('H')">
                             <button class="step-btn" onmousedown="startChange('inpH', 0.5, 'H')" ontouchstart="startChange('inpH', 0.5, 'H')" onmouseup="stopChange()" onmouseleave="stopChange()" ontouchend="stopChange()">+</button>
                         </div>
                     </div>
@@ -4339,43 +4326,9 @@ body {
                 </div>
             </div>
 
-            <div style="margin-top:20px;">
-    
-    <div style="display:flex; gap:10px; justify-content:center;">
-        <button class="main-btn" onclick="calculateInitialShape()" 
-                style="background:#1976D2; flex:1;">
-            🧮 Рассчитать
-        </button>
-        
-        <button id="btnCreateShapeOrder" class="main-btn" onclick="submitShapeOrder()" 
-                style="background:linear-gradient(45deg, #7B1FA2, #E040FB); flex:1; display:none; box-shadow: 0 4px 15px rgba(224, 64, 251, 0.4);">
-            🚀 Создать Заказ
-        </button>
-    </div>
-
-    <div style="font-size:11px; color:#666; margin-top:5px; text-align:center; margin-bottom: 15px;">
-        Сначала укажите вес и размеры, затем нажмите <b>"Рассчитать"</b>.<br>
-        После этого можно менять параметры — пересчет будет автоматическим.
-    </div>
-
-    <div id="shapeRecipePreview" style="display:none; border-top:2px dashed #eee; padding-top:20px;">
-        <h3 style="font-size:16px; color:#444; margin-bottom:10px;">📋 Предварительный состав</h3>
-        
-        <div style="display:flex; gap:10px; margin-bottom:15px;">
-            <div style="flex:1; background:#E8F5E9; padding:10px; border-radius:6px; text-align:center;">
-                <div style="font-size:10px; color:#2E7D32;">ИТОГО ВЕС</div>
-                <div id="previewWeight" style="font-weight:bold; font-size:16px;">0 кг</div>
+            <div style="margin-top:20px; text-align:center;">
+                <button class="main-btn" onclick="transferShapeToMain()" style="background:linear-gradient(45deg, #FF9800, #F57C00);">✅ Применить размеры и Начинку</button>
             </div>
-            <div style="flex:1; background:#E3F2FD; padding:10px; border-radius:6px; text-align:center;">
-                <div style="font-size:10px; color:#1565C0;">СЕБЕСТОИМОСТЬ</div>
-                <div id="previewCost" style="font-weight:bold; font-size:16px;">0</div>
-            </div>
-        </div>
-
-        <div id="shapePreviewList"></div>
-    </div>
-
-</div>
         </div>
     </div>
 </div>
@@ -13363,16 +13316,12 @@ function autoAddPackaging(res) {
 // ==========================================
 
 let shapeState = {
-    cleanImgUrl: null,
+    cleanImgUrl: null, 
     nativeRatio: 1,    // W / H
-    kFactorRect: 1,    // Коэф. площади (заполнение прямоугольника)
-    kFactorCircle: 1,  // Коэф. площади (заполнение круга)
-    
-    // НОВОЕ: Коэффициент периметра (Отношение длины границы к ширине картинки)
-    perimeterRatio: 0, 
-    
+    kFactorRect: 1,    
+    kFactorCircle: 1,  
     radiusToHeightRatio: 1, 
-    currentShape: 'rect', 
+    currentShape: 'rect', // 'rect' | 'circle'
     current: { l: 0, w: 0, h: 0, d: 0, weight: 0 }
 };
 
@@ -13389,7 +13338,7 @@ function handleSvgUpload(input) {
     reader.readAsDataURL(file);
 }
 
-// --- ОБНОВЛЕННАЯ ФУНКЦИЯ АНАЛИЗА ---
+// 2. АНАЛИЗ (Smart Crop + White Filter)
 function cropAndAnalyze(img) {
     const MAX_SIDE = 1000;
     let w = img.width; let h = img.height;
@@ -13409,9 +13358,6 @@ function cropAndAnalyze(img) {
     
     let minX=w, minY=h, maxX=0, maxY=0, solidCount=0;
     
-    // Матрица для быстрого поиска краев (0 - пусто, 1 - тело)
-    const grid = new Int8Array(w * h); 
-
     for(let y=0; y<h; y++) {
         for(let x=0; x<w; x++) {
             const i = (y*w+x)*4;
@@ -13423,38 +13369,37 @@ function cropAndAnalyze(img) {
             
             if (isTransparent || isWhite) {
                 data[i+3] = 0; 
-                grid[y*w+x] = 0;
             } else {
                 if(x < minX) minX = x;
                 if(x > maxX) maxX = x;
                 if(y < minY) minY = y;
                 if(y > maxY) maxY = y;
                 solidCount++;
-                grid[y*w+x] = 1;
             }
         }
     }
     
-    if(solidCount === 0) { alert("Фигура не найдена!"); return; }
+    if(solidCount === 0) { alert("Фигура не найдена (пустая или белая)!"); return; }
     
-    // --- НОВОЕ: РАСЧЕТ ПЕРИМЕТРА (ГРАНИЦЫ) ---
-    let edgePixels = 0;
-    for(let y=minY; y<=maxY; y++) {
-        for(let x=minX; x<=maxX; x++) {
-            const idx = y*w+x;
-            if (grid[idx] === 1) {
-                // Если у пикселя есть хотя бы один пустой сосед - это край
-                if (grid[idx-1]===0 || grid[idx+1]===0 || grid[idx-w]===0 || grid[idx+w]===0) {
-                    edgePixels++;
-                }
-            }
-        }
-    }
-
     const realW = maxX - minX;
     const realH = maxY - minY;
     
-    // Сохраняем "чистую" картинку
+    // Круг
+    const centerX = minX + realW / 2;
+    const centerY = minY + realH / 2;
+    let maxDistSq = 0;
+    for(let y=minY; y<=maxY; y++) {
+        for(let x=minX; x<=maxX; x++) {
+            const i = (y*w+x)*4;
+            if (data[i+3] > 0) { 
+                const distSq = (x - centerX)**2 + (y - centerY)**2;
+                if (distSq > maxDistSq) maxDistSq = distSq;
+            }
+        }
+    }
+    const maxRadius = Math.sqrt(maxDistSq);
+
+    // Сохраняем
     ctx.putImageData(imgData, 0, 0); 
     const pad = 2; 
     const cleanCvs = document.createElement('canvas');
@@ -13463,175 +13408,51 @@ function cropAndAnalyze(img) {
     cleanCvs.getContext('2d').drawImage(cvs, minX, minY, realW, realH, pad, pad, realW, realH);
     
     shapeState.cleanImgUrl = cleanCvs.toDataURL();
-    shapeState.nativeRatio = realW / realH; 
+    shapeState.nativeRatio = realW / realH; // Правильная пропорция
     
-    // Расчет коэффициентов площади
-    const maxRadius = Math.sqrt((realW/2)**2 + (realH/2)**2); // Грубая оценка для круга
     const areaRect = realW * realH;
-    const areaCircle = Math.PI * Math.pow(Math.max(realW, realH)/2, 2); // Описываем круг по большей стороне
+    const areaCircle = Math.PI * maxRadius * maxRadius;
     
     shapeState.kFactorRect = solidCount / areaRect;
     shapeState.kFactorCircle = solidCount / areaCircle;
-    
-    // --- НОВОЕ: КОЭФФИЦИЕНТ ПЕРИМЕТРА ---
-    // Отношение длины контура (в пикселях) к ширине (в пикселях)
-    // Позволит потом посчитать: Периметр(см) = Ширина(см) * perimeterRatio
-    shapeState.perimeterRatio = edgePixels / realW;
-
-    shapeState.radiusToHeightRatio = 1; // Упростили (не критично для визуализации)
+    shapeState.radiusToHeightRatio = (maxRadius * 2) / realH; 
 
     // Автовыбор
     let best = 'rect';
     let msg = "Прямоугольник.";
-    if (shapeState.kFactorCircle > shapeState.kFactorRect + 0.1) { // Чуть увеличим порог для круга
+    if (shapeState.kFactorCircle > shapeState.kFactorRect) {
          best = 'circle';
-         msg = "Ближе к кругу.";
+         msg = "Круг эффективнее!";
     }
     
     document.querySelector(`input[name="bakeShape"][value="${best}"]`).checked = true;
-    toggleShapeType();
+    toggleShapeType(); 
     
-    document.getElementById('svgStatusText').innerText = `✅ Форма распознана. Заполнение: ${Math.round(shapeState.kFactorRect*100)}%. ${msg}`;
+    document.getElementById('svgStatusText').innerText = `✅ Анализ: Rect ${Math.round(shapeState.kFactorRect*100)}% / Circle ${Math.round(shapeState.kFactorCircle*100)}%. ${msg}`;
     document.getElementById('shapeCalcBlock').style.display = 'block';
     
     updateShapeRecipes();
     generate3DLayers();
     document.getElementById('linkAspect').checked = true;
-   document.getElementById('btnCreateShapeOrder').style.display = 'none';
-    isShapeCalculated = false;
-
-  
-}
-
-     // Хелпер: Масштабирует рецепт под нужный вес и фильтрует блоки по имени
-function getScaledRecipeComponents(recipeId, targetWeight, filterFn) {
-    const r = myRecipes.find(x => x.id === recipeId);
-    if (!r) return [];
-
-    const outputW = parseFloat(r.outputWeight) || 1000;
-    const scale = targetWeight / outputW;
-    
-    let resultBlocks = [];
-
-    if (r.blocks) {
-        r.blocks.forEach(b => {
-            if (filterFn(b.name)) {
-                
-                const scaledIngs = b.ingredients.map(ingLink => {
-                    const dbIng = myIngredients.find(i => i.id === ingLink.id);
-                    if (!dbIng) return null;
-
-                    // Сырой вес (граммы)
-                    let rawW = parseFloat(ingLink.weight) * scale;
-                    
-                    let finalAmount = rawW;
-                    let finalUnit = dbIng.unit;
-                    let cost = 0;
-
-                    const useWeightMode = dbIng.useWeightInRecipe === true || dbIng.useWeightInRecipe === "true";
-
-                    // --- ИСПРАВЛЕНИЕ: ПРИОРИТЕТ ГРАММОВ ---
-                    if (useWeightMode) {
-                        // Если стоит галочка "Использовать вес", то ВСЕГДА возвращаем граммы
-                        finalAmount = parseFloat(rawW.toFixed(1));
-                        finalUnit = 'г'; // Принудительно ставим граммы
-                        
-                        // Цена считается от веса (через перевод в штуки или граммы в зависимости от пачки)
-                        if (dbIng.unit === 'шт') {
-                            // Цена = (Вес / Вес одной) * Цена за 1 шт
-                            const singleW = parseFloat(dbIng.singleWeight) || 55; // 55г дефолт для яйца
-                            const pcs = rawW / singleW;
-                            cost = pcs * (dbIng.packPrice / dbIng.packWeight);
-                        } else {
-                            cost = (rawW / dbIng.packWeight) * dbIng.packPrice;
-                        }
-                    } 
-                    else if (dbIng.unit === 'шт') {
-                        // Режим "Штуки": вес в рецепте означает штуки (например, 2 яйца)
-                        // Но здесь rawW уже масштабирован. 
-                        // Если в рецепте 2 яйца, а торт в 2 раза больше -> 4 яйца.
-                        finalAmount = parseFloat(rawW.toFixed(1));
-                        cost = finalAmount * (dbIng.packPrice / dbIng.packWeight);
-                    } 
-                    else {
-                        // Обычные граммы/мл
-                        finalAmount = parseFloat(rawW.toFixed(1));
-                        cost = (rawW / dbIng.packWeight) * dbIng.packPrice;
-                    }
-
-                    return {
-                        id: dbIng.id,
-                        name: dbIng.name,
-                        amount: finalAmount,
-                        unit: finalUnit,
-                        cost: Math.ceil(cost)
-                    };
-                }).filter(i => i !== null);
-
-                let blockCost = scaledIngs.reduce((acc, i) => acc + i.cost, 0);
-                
-                resultBlocks.push({
-                    name: b.name,
-                    type: r.type,
-                    ingredients: scaledIngs,
-                    totalCost: blockCost
-                });
-            }
-        });
-    }
-    return resultBlocks;
+    recalcFromWeight();
 }
 
 function updateShapeRecipes() { 
-    // 1. Заполняем Начинки (Фильтр: без слова "бомба")
-    const selFilling = document.getElementById('shapeRecipeSelect');
-    if (selFilling) {
-        selFilling.innerHTML = '';
-        
-        const fillings = myRecipes.filter(r => {
-            const n = r.name.toLowerCase();
-            return r.type === 'filling' && !n.includes('бомба');
-        });
-
-        fillings.forEach(r => {
-            const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
-            const density = r.outputWeight / vol; 
-            
-            const opt = document.createElement('option');
-            opt.value = r.id; 
-            opt.dataset.density = density; 
-            opt.innerText = `${r.name}`;
-            selFilling.appendChild(opt);
-        });
-    }
-
-    // 2. Заполняем Покрытия 
-    // УСЛОВИЕ: Только тип 'coating' (Крем/Ганаш) и без слова "бомба"
-    const selCoating = document.getElementById('shapeCoatingSelect');
-    if (selCoating) {
-        selCoating.innerHTML = '<option value="">-- Выберите --</option>';
-        
-        const coatings = myRecipes.filter(r => {
-            const n = r.name.toLowerCase();
-            
-            // Строго тип coating (исключаем 'extra' - велюр)
-            const isTypeOk = (r.type === 'coating');
-            
-            // Исключаем слово "бомба"
-            const isNameOk = !n.includes('бомба');
-            
-            return isTypeOk && isNameOk;
-        });
-
-        coatings.forEach(r => {
-            const opt = document.createElement('option');
-            opt.value = r.id;
-            opt.innerText = r.name;
-            selCoating.appendChild(opt);
-        });
-    }
+    const sel = document.getElementById('shapeRecipeSelect');
+    if (!sel) return;
+    sel.innerHTML = '';
+    const fillings = myRecipes.filter(r => r.type === 'filling');
+    fillings.forEach(r => {
+        const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
+        const density = r.outputWeight / vol; 
+        const opt = document.createElement('option');
+        opt.value = r.id; 
+        opt.dataset.density = density; 
+        opt.innerText = `${r.name} (~${density.toFixed(2)} г/см³)`;
+        sel.appendChild(opt);
+    });
 }
-     
+
 function generate3DLayers() { 
     const stack = document.getElementById('cakeStack');
     if (!stack) return;
@@ -13677,369 +13498,121 @@ function getDensity() {
     return selectedOpt ? parseFloat(selectedOpt.dataset.density) : 0.8; 
 }
 
-
-function validateShapeInputs() {
-    const recipeId = document.getElementById('shapeRecipeSelect').value;
-    const coatingId = document.getElementById('shapeCoatingSelect').value;
-    const weight = parseFloat(document.getElementById('inpWeight').value);
-    
-    // Для прямоугольника нужны L и W
-    // Для круга нужен D
-    const isRect = (shapeState.currentShape === 'rect');
-    const L = parseFloat(document.getElementById('inpL').value);
-    const W = parseFloat(document.getElementById('inpW').value);
-    const D = parseFloat(document.getElementById('inpD').value);
-    
-    let isValid = false;
-
-    if (recipeId && coatingId && weight > 0) {
-        if (isRect && L > 0 && W > 0) isValid = true;
-        if (!isRect && D > 0) isValid = true;
-    }
-
-    if (!isValid) {
-        // Скрываем результаты, если данных не хватает
-        document.getElementById('shapeRecipePreview').style.display = 'none';
-        document.getElementById('infoTotal').innerText = '...';
-        document.getElementById('infoWaste').innerText = '...';
-        return false;
-    }
-    
-    return true;
-}
-  
 function recalcFromWeight() {
-    if (!isShapeCalculated) return; // ⛔ БЛОКИРОВКА до нажатия "Рассчитать"
-    
-    // ... далее старый код из прошлого ответа (где мы подгоняем H под вес)
-    // Копирую его сюда для целостности:
-    
-    const targetFigWeight = parseFloat(document.getElementById('inpWeight').value);
-    const L = parseFloat(document.getElementById('inpL').value) || 20;
-    const W = parseFloat(document.getElementById('inpW').value) || 15;
-    const D = parseFloat(document.getElementById('inpD').value) || 20;
+    const weightKg = parseFloat(document.getElementById('inpWeight').value) || 2;
+    const h = parseFloat(document.getElementById('inpH').value) || 10;
     const density = getDensity();
     
+    const volSymbol = (weightKg * 1000) / density;
+    const areaSymbol = volSymbol / h;
+    
     if (shapeState.currentShape === 'rect') {
-        const k = shapeState.kFactorRect || 1;
-        const targetFullWeight = targetFigWeight / k;
-        const targetVol = (targetFullWeight * 1000) / density;
-        const newH = targetVol / (L * W);
+        const areaBox = areaSymbol / shapeState.kFactorRect;
+        const ratio = shapeState.nativeRatio; 
+        const L = Math.sqrt(areaBox / ratio);
+        const W = L * ratio;
         
-        updateInputNoTrigger('inpH', newH);
-        finalizeCalc(L, W, newH, 0, targetFigWeight);
+        updateInputNoTrigger('inpL', L);
+        updateInputNoTrigger('inpW', W);
+        finalizeCalc(L, W, h, 0, weightKg);
     } else {
-        const k = shapeState.kFactorCircle || 1;
-        const targetFullWeight = targetFigWeight / k;
-        const targetVol = (targetFullWeight * 1000) / density;
-        const newH = targetVol / (Math.PI * Math.pow(D/2, 2));
+        const areaBox = areaSymbol / shapeState.kFactorCircle; 
+        const radius = Math.sqrt(areaBox / Math.PI);
+        const D = radius * 2;
         
-        updateInputNoTrigger('inpH', newH);
         const visualL = D / shapeState.radiusToHeightRatio;
         const visualW = visualL * shapeState.nativeRatio;
-        finalizeCalc(visualL, visualW, newH, D, targetFigWeight);
+
+        updateInputNoTrigger('inpD', D);
+        finalizeCalc(visualL, visualW, h, D, weightKg);
     }
 }
 
 function recalcFromDimensions(source) {
-    if (!isShapeCalculated) return; // ⛔ БЛОКИРОВКА
-    
-    // Стандартное чтение полей
-    let L = parseFloat(document.getElementById('inpL').value) || 20;
-    let W = parseFloat(document.getElementById('inpW').value) || 15;
-    let H = parseFloat(document.getElementById('inpH').value) || 10;
-    let D = parseFloat(document.getElementById('inpD').value) || 20;
+    const isLocked = document.getElementById('lockWeight').checked;
     const density = getDensity();
+    let H = parseFloat(document.getElementById('inpH').value) || 10;
+    let targetWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
     const linkAspect = document.getElementById('linkAspect').checked;
-    const isWeightLocked = document.getElementById('lockWeight').checked;
 
-    // --- ПРЯМОУГОЛЬНИК ---
     if (shapeState.currentShape === 'rect') {
-        // Пропорции
+        let L = parseFloat(document.getElementById('inpL').value) || 20;
+        let W = parseFloat(document.getElementById('inpW').value) || 15;
+        
         if (linkAspect) {
-            if (source === 'L') { W = L * shapeState.nativeRatio; updateInputNoTrigger('inpW', W); } 
+            if (source === 'L') { W = L * shapeState.nativeRatio; updateInputNoTrigger('inpW', W); }
             else if (source === 'W') { L = W / shapeState.nativeRatio; updateInputNoTrigger('inpL', L); }
         }
 
-        if (isWeightLocked) {
-            // ВЕС СТОИТ НА МЕСТЕ
-            // Берем текущий вес из инпута (не пересчитываем его!)
-            const currentWeight = parseFloat(document.getElementById('inpWeight').value);
-            
-            // Нам нужно подогнать ВЫСОТУ или ДЛИНУ под этот вес
-            const targetFullWeight = currentWeight / shapeState.kFactorRect;
-            const targetVol = (targetFullWeight * 1000) / density;
-
-            if (source === 'H') {
-                // Изменили H -> Подгоняем L/W
-                const neededArea = targetVol / H;
-                const ratio = linkAspect ? shapeState.nativeRatio : (W/L);
-                L = Math.sqrt(neededArea / ratio);
-                W = L * ratio;
-                updateInputNoTrigger('inpL', L);
-                updateInputNoTrigger('inpW', W);
-            } else {
-                // Изменили L/W -> Подгоняем H
-                H = targetVol / (L * W);
-                updateInputNoTrigger('inpH', H);
-            }
-            // Передаем currentWeight - он не изменился!
-            finalizeCalc(L, W, H, 0, currentWeight);
-            
+        if (isLocked) {
+             const targetVol = (targetWeight * 1000) / density;
+             if (source === 'H') {
+                 const neededArea = (targetVol / H) / shapeState.kFactorRect;
+                 const ratioToUse = linkAspect ? shapeState.nativeRatio : (W / L);
+                 L = Math.sqrt(neededArea / ratioToUse); W = L * ratioToUse;
+                 updateInputNoTrigger('inpL', L); updateInputNoTrigger('inpW', W);
+             } else {
+                 const areaBox = L * W;
+                 H = targetVol / (areaBox * shapeState.kFactorRect);
+                 updateInputNoTrigger('inpH', H);
+             }
         } else {
-            // ЗАМОК ОТКРЫТ -> МЕНЯЕМ ВЕС
-            // Высота и Длина стоят как ввел юзер, Вес пересчитывается
-            const rectVol = L * W * H;
-            const fullWeight = (rectVol * density) / 1000;
-            const figWeight = fullWeight * shapeState.kFactorRect;
-            
-            updateInputNoTrigger('inpWeight', figWeight);
-            finalizeCalc(L, W, H, 0, figWeight);
+            const areaSymbol = (L * W) * shapeState.kFactorRect;
+            targetWeight = (areaSymbol * H * density) / 1000;
+            updateInputNoTrigger('inpWeight', targetWeight);
         }
-    } 
-    // --- КРУГ ---
-    else {
-        if (isWeightLocked) {
-            const currentWeight = parseFloat(document.getElementById('inpWeight').value);
-            const targetFullWeight = currentWeight / shapeState.kFactorCircle;
-            const targetVol = (targetFullWeight * 1000) / density;
+        finalizeCalc(L, W, H, 0, targetWeight);
 
+    } else {
+        // КРУГ
+        let D = parseFloat(document.getElementById('inpD').value) || 20;
+        if (isLocked) {
+            const targetVol = (targetWeight * 1000) / density;
             if (source === 'H') {
-                const area = targetVol / H;
-                D = 2 * Math.sqrt(area / Math.PI);
+                const neededAreaSymbol = targetVol / H;
+                const neededAreaCircle = neededAreaSymbol / shapeState.kFactorCircle;
+                D = Math.sqrt(neededAreaCircle / Math.PI) * 2;
                 updateInputNoTrigger('inpD', D);
             } else {
-                const area = Math.PI * Math.pow(D/2, 2);
-                H = targetVol / area;
-                updateInputNoTrigger('inpH', H);
-            }
-            const vL = D / shapeState.radiusToHeightRatio;
-            const vW = vL * shapeState.nativeRatio;
-            finalizeCalc(vL, vW, H, D, currentWeight);
-        } else {
-            const vol = Math.PI * Math.pow(D/2, 2) * H;
-            const fullW = (vol * density) / 1000;
-            const figW = fullW * shapeState.kFactorCircle;
-            updateInputNoTrigger('inpWeight', figW);
-            const vL = D / shapeState.radiusToHeightRatio;
-            const vW = vL * shapeState.nativeRatio;
-            finalizeCalc(vL, vW, H, D, figW);
-        }
-    }
-}
-      
-function recalcFromDimensions(source) {
-    // 1. Проверка заполненности (если полей нет, не считаем)
-    // Но здесь мы разрешаем расчет, даже если покрытия еще нет, просто геометрию двигаем
-    // Однако, финальный рецепт не покажется, если validateShapeInputs вернет false внутри finalizeCalc
-    
-    let L = parseFloat(document.getElementById('inpL').value) || 20;
-    let W = parseFloat(document.getElementById('inpW').value) || 15;
-    let H = parseFloat(document.getElementById('inpH').value) || 10;
-    let D = parseFloat(document.getElementById('inpD').value) || 20;
-
-    const density = getDensity();
-    const linkAspect = document.getElementById('linkAspect').checked;
-    const isWeightLocked = document.getElementById('lockWeight').checked;
-
-    // ------------------------------------------
-    // ПРЯМОУГОЛЬНИК
-    // ------------------------------------------
-    if (shapeState.currentShape === 'rect') {
-        
-        // А. Связка пропорций (меняем L -> W меняется сама)
-        if (linkAspect) {
-            if (source === 'L') { 
-                W = L * shapeState.nativeRatio; 
-                updateInputNoTrigger('inpW', W); 
-            } else if (source === 'W') { 
-                L = W / shapeState.nativeRatio; 
-                updateInputNoTrigger('inpL', L); 
-            }
-        }
-
-        // Б. ЛОГИКА ЗАМКА
-        if (isWeightLocked) {
-            // ВЕС НЕИЗМЕНЕН!
-            const currentWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
-            
-            // Нам нужно сохранить этот вес.
-            // Полный вес = Вес фигуры / k
-            const targetFullWeight = currentWeight / shapeState.kFactorRect;
-            const targetVol = (targetFullWeight * 1000) / density; 
-
-            if (source === 'H') {
-                // Если юзер меняет ВЫСОТУ -> Подгоняем Длину/Ширину
-                const neededArea = targetVol / H;
-                const ratioToUse = linkAspect ? shapeState.nativeRatio : (W / L);
-                L = Math.sqrt(neededArea / ratioToUse);
-                W = L * ratioToUse;
-                updateInputNoTrigger('inpL', L);
-                updateInputNoTrigger('inpW', W);
-            } 
-            else {
-                // Если юзер меняет ДЛИНУ или ШИРИНУ -> Подгоняем ВЫСОТУ
-                const areaBox = L * W;
-                if (areaBox > 0) {
-                    H = targetVol / areaBox; // Вот она, автоматическая высота!
-                    updateInputNoTrigger('inpH', H);
-                }
-            }
-            // Передаем СТАРЫЙ вес (он не изменился)
-            finalizeCalc(L, W, H, 0, currentWeight);
-            
-        } else {
-            // ВЕС МЕНЯЕТСЯ! (Высота стоит на месте)
-            // Мы просто пересчитываем вес для новых габаритов
-            const rectVol = L * W * H;
-            const fullWeight = (rectVol * density) / 1000;
-            const figWeight = fullWeight * shapeState.kFactorRect;
-            
-            updateInputNoTrigger('inpWeight', figWeight);
-            finalizeCalc(L, W, H, 0, figWeight);
-        }
-    } 
-    // ------------------------------------------
-    // КРУГ
-    // ------------------------------------------
-    else {
-        if (isWeightLocked) {
-            const currentWeight = parseFloat(document.getElementById('inpWeight').value) || 2;
-            const targetFullWeight = currentWeight / shapeState.kFactorCircle;
-            const targetVol = (targetFullWeight * 1000) / density;
-
-            if (source === 'H') {
-                // Меняем H -> Подгоняем D
-                const areaCircle = targetVol / H;
-                D = 2 * Math.sqrt(areaCircle / Math.PI);
-                updateInputNoTrigger('inpD', D);
-            } else {
-                // Меняем D -> Подгоняем H
                 const areaCircle = Math.PI * Math.pow(D/2, 2);
-                H = targetVol / areaCircle;
+                const areaSymbol = areaCircle * shapeState.kFactorCircle;
+                H = targetVol / areaSymbol;
                 updateInputNoTrigger('inpH', H);
             }
-            
-            const visualL = D / shapeState.radiusToHeightRatio;
-            const visualW = visualL * shapeState.nativeRatio;
-            finalizeCalc(visualL, visualW, H, D, currentWeight);
-
         } else {
-            // Вес меняется, H стоит
-            const cylVol = Math.PI * Math.pow(D/2, 2) * H;
-            const fullWeight = (cylVol * density) / 1000;
-            const figWeight = fullWeight * shapeState.kFactorCircle;
-            
-            updateInputNoTrigger('inpWeight', figWeight);
-            
-            const visualL = D / shapeState.radiusToHeightRatio;
-            const visualW = visualL * shapeState.nativeRatio;
-            finalizeCalc(visualL, visualW, H, D, figWeight);
+            const areaCircle = Math.PI * Math.pow(D/2, 2);
+            const areaSymbol = areaCircle * shapeState.kFactorCircle;
+            targetWeight = (areaSymbol * H * density) / 1000;
+            updateInputNoTrigger('inpWeight', targetWeight);
         }
-    }
-}
-
-function calculateInitialShape() {
-    // 1. Валидация: проверяем, что все поля заполнены
-    if (!validateShapeInputs()) {
-        alert("⚠️ Пожалуйста, заполните: Начинку, Покрытие, Вес торта и Габариты (Д/Ш)!");
-        return;
-    }
-
-    const targetFigWeight = parseFloat(document.getElementById('inpWeight').value); // 3 кг
-    const density = getDensity();
-    
-    // Габариты, которые задал пользователь
-    let L = parseFloat(document.getElementById('inpL').value) || 20;
-    let W = parseFloat(document.getElementById('inpW').value) || 15;
-    let D = parseFloat(document.getElementById('inpD').value) || 20;
-
-    // 2. Считаем вес ПОЛНОГО ПРЯМОУГОЛЬНИКА
-    // "Если фигура занимает 60% (k=0.6) и весит 3кг, то полный = 3 / 0.6 = 5кг"
-    let targetFullWeight = 0;
-    let newH = 10;
-
-    if (shapeState.currentShape === 'rect') {
-        const k = shapeState.kFactorRect > 0 ? shapeState.kFactorRect : 1;
-        targetFullWeight = targetFigWeight / k; // Например, 5 кг
-        
-        // 3. Рассчитываем Высоту под этот полный вес
-        // V_full = Weight / Density
-        const targetVol = (targetFullWeight * 1000) / density;
-        
-        // V = L * W * H  =>  H = V / (L * W)
-        const areaBox = L * W;
-        if (areaBox > 0) newH = targetVol / areaBox;
-        
-    } else {
-        // Круг
-        const k = shapeState.kFactorCircle > 0 ? shapeState.kFactorCircle : 1;
-        targetFullWeight = targetFigWeight / k;
-        
-        const targetVol = (targetFullWeight * 1000) / density;
-        
-        const areaCircle = Math.PI * Math.pow(D/2, 2);
-        if (areaCircle > 0) newH = targetVol / areaCircle;
-    }
-
-    // 4. Применяем рассчитанную высоту
-    updateInputNoTrigger('inpH', newH);
-    
-    // 5. Разрешаем работу калькулятора
-    isShapeCalculated = true;
-    document.getElementById('btnCreateShapeOrder').style.display = 'block';
-
-    // 6. Запускаем финализацию (рисуем 3D и считаем рецепт)
-    // Важно: в finalizeCalc мы передаем targetFigWeight, а полный вес он посчитает внутри сам
-    if (shapeState.currentShape === 'rect') {
-        finalizeCalc(L, W, newH, 0, targetFigWeight);
-    } else {
         const visualL = D / shapeState.radiusToHeightRatio;
         const visualW = visualL * shapeState.nativeRatio;
-        finalizeCalc(visualL, visualW, newH, D, targetFigWeight);
+        finalizeCalc(visualL, visualW, H, D, targetWeight);
     }
 }
-  
-     
+
 function finalizeCalc(L, W, H, D, weight) {
     const density = getDensity();
-    let fullSheetVol = 0; // Объем полного противня/формы
+    let totalVol = 0;
     
-    // 1. Считаем объем (Круг или Квадрат)
     if (shapeState.currentShape === 'rect') {
-        fullSheetVol = L * W * H;
+        totalVol = L * W * H;
     } else {
-        fullSheetVol = Math.PI * Math.pow(D/2, 2) * H;
+        totalVol = Math.PI * Math.pow(D/2, 2) * H;
     }
     
-    // 2. Вес полного листа (для выпечки)
-    const fullSheetWeight = (fullSheetVol * density) / 1000;
+    const totalWeight = (totalVol * density) / 1000;
+    const waste = totalWeight - weight;
+    const wastePct = totalWeight > 0 ? (waste / totalWeight) * 100 : 0;
     
-    // 3. Отходы (разница между полным листом и весом фигуры)
-    const waste = fullSheetWeight - weight;
-    const wastePct = fullSheetWeight > 0 ? (waste / fullSheetWeight) * 100 : 0;
-    
-    // --- ОБНОВЛЕНИЕ ИНФО-БЛОКА ---
-    // Используем fullSheetWeight, так как он уже посчитан правильно для любой формы
-    document.getElementById('infoTotal').innerText = `${fullSheetWeight.toFixed(2)} кг`;
+    document.getElementById('infoTotal').innerText = `${totalWeight.toFixed(2)} кг`;
     document.getElementById('infoWaste').innerText = `${waste.toFixed(2)} кг (${Math.round(wastePct)}%)`;
     
-    // 4. Сохраняем состояние
     shapeState.current = { l: L, w: W, h: H, d: D, weight: weight };
     
-    // 5. Обновляем картинку 3D
     update3DScene(L, W, H, D);
-
-    // 6. Проверяем валидацию (заполнены ли поля Начинка/Покрытие)
-    if (!validateShapeInputs()) {
-        return; // Если чего-то нет, выходим, не рисуя рецепт
-    }
-
-    // 7. Если всё ок — считаем рецепт на лету
-    const previewData = calculateShapeComplete(false); 
-    renderShapeRecipePreview(previewData);
 }
-     
+
 // 5. ВИЗУАЛИЗАЦИЯ (ИСПРАВЛЕННАЯ ЦЕНТРОВКА)
 function update3DScene(L, W, H, D) {
     const box = document.getElementById('ghostBox');
@@ -14178,38 +13751,14 @@ function stepShape(axis, delta) {
 }
 
 let holdTimer = null, holdInterval = null;
-let lastClickTime = 0; // Защита от двойного клика
-
 function startChange(id, delta, axis) {
-    // 1. Защита от "призрачных" кликов
-    // Если между нажатиями прошло меньше 200мс, считаем это дублем (Touch + Mouse) и игнорируем
-    const now = Date.now();
-    if (now - lastClickTime < 200) return;
-    lastClickTime = now;
-
-    // 2. Сохраняем историю
-    saveToHistory();
-
-    // 3. Делаем первый шаг
+    saveToHistory(); // <--- СОХРАНЯЕМ ПЕРЕД НАЧАЛОМ ИЗМЕНЕНИЯ
     stepShape(axis, delta);
-
-    // 4. Настраиваем таймер удержания
-    // Было 400мс -> Ставим 600мс (надо держать дольше, чтобы цифры побежали)
     holdTimer = setTimeout(() => {
-        // Запускаем непрерывное изменение
-        // Было 100мс -> Ставим 150мс (бегут чуть медленнее, легче поймать нужную цифру)
-        holdInterval = setInterval(() => stepShape(axis, delta), 150); 
-    }, 600); 
+        holdInterval = setInterval(() => stepShape(axis, delta), 100); 
+    }, 400); 
 }
-
-// Функцию stopChange оставляем такой же, но на всякий случай продублирую для проверки:
-function stopChange() { 
-    clearTimeout(holdTimer); 
-    clearInterval(holdInterval); 
-    
-    // Сброс вибрации (если была)
-    if(navigator.vibrate) navigator.vibrate(0);
-}
+function stopChange() { clearTimeout(holdTimer); clearInterval(holdInterval); }
 
 function stepWeight(delta) {
   saveToHistory(); 
@@ -14221,167 +13770,34 @@ function stepWeight(delta) {
     recalcFromWeight();
 }
 
-     // isInteractive = true (нажали кнопку), false (авто-пересчет при вводе)
-function calculateShapeComplete(isInteractive = false) {
-    const { l, w, h, d, weight } = shapeState.current; 
-    const targetFigWeightG = weight * 1000; // Вес фигуры (3000 г)
+function transferShapeToMain() {
+    const { l, w, h, d } = shapeState.current;
+    if (h === 0) return;
     
-    const recipeId = document.getElementById('shapeRecipeSelect').value;
-    const coatingId = document.getElementById('shapeCoatingSelect').value;
+    const recId = document.getElementById('shapeRecipeSelect').value;
+    const isCircle = (shapeState.currentShape === 'circle');
     
-    // --- ПРОВЕРКИ ---
-    if (!recipeId) {
-        if (isInteractive) alert("⚠️ Выберите начинку!"); 
-        return null;
-    }
-    
-    let coatingRec = null;
-    let skipCoating = !coatingId;
-    if (!skipCoating) coatingRec = myRecipes.find(r => r.id === coatingId);
-    const fillingRec = myRecipes.find(r => r.id === recipeId);
-
-
-    // ====================================================================
-    // 1. СЧИТАЕМ ВЕС "ВИРТУАЛЬНОГО" ПРЯМОУГОЛЬНИКА (5 кг)
-    // ====================================================================
-    
-    const kFactor = (shapeState.currentShape === 'circle') 
-        ? (shapeState.kFactorCircle || 1) 
-        : (shapeState.kFactorRect || 1);
-
-    // Если фигура 3 кг = 60%, то полный торт = 5 кг.
-    const fullRectTotalWeight = targetFigWeightG / kFactor; 
-
-
-    // ====================================================================
-    // 2. ПОЛУЧАЕМ РЕЦЕПТ НА ЭТИ 5 КГ
-    // ====================================================================
-    // Просто скалируем ВЕСЬ рецепт на 5 кг. Как в обычном калькуляторе.
-    // Если в рецепте заложено 30% бисквита, он выдаст 1.5 кг бисквита.
-    
-    const fullCakeBlocks = getScaledRecipeComponents(recipeId, fullRectTotalWeight, () => true);
-
-    // 2.1 БИСКВИТ: Берем как есть (100% от рецепта на 5 кг)
-    // Мы печем полный противень, поэтому забираем весь рассчитанный бисквит.
-    const biscuitBlocks = fullCakeBlocks.filter(b => b.name.toLowerCase().includes('бисквит'));
-    
-
-    // 2.2 НАЧИНКА: Берем из рецепта на 5 кг, но нам нужно только 60%
-    // (Потому что 40% бисквита мы отрежем и выкинем, туда начинка не нужна)
-    const fillingBlocksRaw = fullCakeBlocks.filter(b => !b.name.toLowerCase().includes('бисквит'));
-    
-    const fillingBlocks = fillingBlocksRaw.map(block => {
-        // Клонируем блок и уменьшаем ингредиенты на kFactor (0.6)
-        return {
-            ...block,
-            ingredients: block.ingredients.map(ing => ({
-                ...ing,
-                amount: ing.amount * kFactor,
-                cost: ing.cost * kFactor
-            })),
-            totalCost: block.totalCost * kFactor
-        };
-    });
-
-
-    // ====================================================================
-    // 3. ПОКРЫТИЕ (ОТДЕЛЬНО ПО ПЛОЩАДИ)
-    // ====================================================================
-    // Тут ничего не меняем, расчет по площади самый точный для фигур.
-    
-    let neededCoatingWeight = 0;
-    let coatingBlocks = [];
-
-    if (!skipCoating && coatingRec) {
-        // Площадь фигуры (Верх + Бока)
-        const topArea = (shapeState.currentShape === 'circle' ? (Math.PI * Math.pow(d/2, 2)) : (l * w)) * kFactor;
-        const widthRef = (shapeState.currentShape === 'circle') ? d : w;
-        const perimeterCm = widthRef * shapeState.perimeterRatio;
-        const sideArea = perimeterCm * h;
-        
-        let coatConsumption = 1.2;
-        const calArea = (Math.PI * Math.pow(coatingRec.calibrationD/2, 2)) + (Math.PI * coatingRec.calibrationD * coatingRec.calibrationH);
-        if (calArea > 0) coatConsumption = coatingRec.outputWeight / calArea;
-        
-        neededCoatingWeight = (topArea + sideArea) * coatConsumption * 1.1; 
-        
-        coatingBlocks = getScaledRecipeComponents(coatingId, neededCoatingWeight, () => true);
-        coatingBlocks.forEach(b => b.type = 'coating'); 
-    }
-
-
-    // ====================================================================
-    // 4. СБОРКА ИТОГА
-    // ====================================================================
-    const allDetailedBlocks = [
-        ...biscuitBlocks.map(b => ({...b, name: `🍱 ${b.name} (Полный лист)`})), 
-        ...fillingBlocks.map(b => ({...b, name: `🍓 ${b.name} (В фигуру)`})), 
-        ...coatingBlocks.map(b => ({...b, name: `🎨 ${b.name} (Покрытие)`}))
-    ];
-
-    let finalShoppingList = [];
-    allDetailedBlocks.forEach(block => {
-        block.ingredients.forEach(ing => {
-            const existing = finalShoppingList.find(i => i.id === ing.id);
-            if (existing) {
-                existing.amount += ing.amount;
-                existing.cost += ing.cost;
-            } else {
-                finalShoppingList.push({...ing}); 
-            }
-        });
-    });
-
-    const totalCost = finalShoppingList.reduce((sum, i) => sum + i.cost, 0);
-    const laborRate = parseFloat(document.getElementById('hourlyRate').value) || 0;
-    const laborCost = 3 * 2.0 * laborRate; 
-    const finalPrice = Math.ceil((totalCost + laborCost) * 1.5); 
-
-    // Вес начинки для отчета
-    let finalFillingWeight = 0;
-    fillingBlocks.forEach(b => b.ingredients.forEach(i => {
-         let w = i.amount; if (i.unit === 'шт') w *= 55; finalFillingWeight += w;
-    }));
-
-    return {
-        tiers: [{
-            id: 1,
-            recipeName: fillingRec.name + " (Фигура)",
-            d: (shapeState.currentShape === 'circle' ? d : Math.max(l,w)),
-            h: h,
-            w: (shapeState.currentShape === 'rect' ? Math.min(l,w) : d),
-            weight: targetFigWeightG
-        }],
-        geometry: { shape: shapeState.currentShape, d: d, h: h },
-        weights: { total: targetFigWeightG, filling: finalFillingWeight, coating: neededCoatingWeight },
-        costs: { totalProductionCost: totalCost, laborCost: laborCost, finalPrice: finalPrice, urgency: 0 },
-        shoppingList: finalShoppingList,
-        detailedBlocks: allDetailedBlocks
+    const newTier = {
+        id: Date.now(),
+        weight: 0, 
+        recipeId: recId,
+        isGeometryMode: true,
+        fixedDiameter: isCircle ? parseFloat(d.toFixed(1)) : parseFloat(l.toFixed(1)), 
+        fixedWidth: isCircle ? null : parseFloat(w.toFixed(1)),
+        fixedHeight: parseFloat(h.toFixed(1)) 
     };
-}  
-// --- ОТПРАВКА В ПЛАН ---
-function submitShapeOrder() {
-    // 1. Выполняем расчет
-    const resData = calculateShapeComplete(true);
-    if (!resData) return;
 
-    // 2. Подменяем глобальный результат (чтобы addToQueue подхватил его)
-    // Используем 'Right' сторону как буфер, так как модуль фигур независим
-    appState.results['Right'] = resData;
-    appState.activeSide = 'Right'; // Говорим системе "бери данные отсюда"
-
-    // 3. Вызываем стандартное окно оформления
-    addToQueue();
+    document.getElementById('globalShape').value = isCircle ? 'cylinder' : 'rectangle';
+    updateTierUI();
     
-    // 4. Добавляем авто-комментарий
+    appState.tiers = [newTier];
+    switchTab('calc');
+    renderTierRows();
+    
     setTimeout(() => {
-        const commArea = document.getElementById('orderComment');
-        const dimStr = (shapeState.currentShape === 'rect') 
-            ? `${Math.round(shapeState.current.l)}x${Math.round(shapeState.current.w)} см` 
-            : `D${Math.round(shapeState.current.d)} см`;
-            
-        commArea.value = `🔢 ФИГУРНЫЙ ТОРТ\nРазмеры: ${dimStr}, H${shapeState.current.h}\n` + 
-                         `Форма вырезается из полного бисквита.\n` + commArea.value;
+        calculateInitial(); 
+        const shapeName = isCircle ? `Круг D${Math.round(d)}` : `Прямоугольник ${Math.round(l)}x${Math.round(w)}`;
+        alert(`✅ Перенесено!\nФорма: ${shapeName} см.\nВысота: ${h} см.`);
     }, 200);
 }
 
@@ -14806,73 +14222,6 @@ function repeatOrder(id) {
     alert("✅ Заказ скопирован в План! Теперь вы можете его отредактировать (дату и детали).");
     switchTab('production'); // Переходим в план
 }
-
-
-  function renderShapeRecipePreview(data) {
-    const container = document.getElementById('shapeRecipePreview');
-    const list = document.getElementById('shapePreviewList');
-    
-    // Защита от пустых данных
-    if (!data || !data.detailedBlocks) {
-        if(container) container.style.display = 'none';
-        return;
-    }
-    
-    container.style.display = 'block';
-    
-    // Обновляем шапку (Общий вес и Цена)
-    document.getElementById('previewWeight').innerText = (data.weights.total / 1000).toFixed(2) + ' кг';
-    
-    const currencySymbol = (typeof SYMBOLS !== 'undefined' && typeof currentCurrency !== 'undefined') 
-                           ? (SYMBOLS[currentCurrency] || '') 
-                           : '';
-                           
-    document.getElementById('previewCost').innerText = Math.ceil(data.costs.totalProductionCost).toLocaleString() + ' ' + currencySymbol;
-
-    let html = '';
-
-    data.detailedBlocks.forEach(block => {
-        // Определяем стиль в зависимости от типа
-        let icon = '📦';
-        let borderLeft = '#ccc';
-        let bg = '#fff';
-
-        if (block.name.includes('Полный лист')) { 
-            icon = '🍱'; borderLeft = '#FFC107'; bg = '#FFF8E1'; // Бисквит - Желтый
-        } else if (block.name.includes('В фигуру')) { 
-            icon = '🍓'; borderLeft = '#E91E63'; bg = '#FCE4EC'; // Начинка - Розовый
-        } else if (block.name.includes('Покрытие')) { 
-            icon = '🎨'; borderLeft = '#795548'; bg = '#EFEBE9'; // Покрытие - Коричневый
-        }
-
-        // Собираем строки ингредиентов
-        let rows = '';
-        if (block.ingredients) {
-            block.ingredients.forEach(ing => {
-                rows += `
-                <div style="display:flex; justify-content:space-between; font-size:12px; border-bottom:1px dashed rgba(0,0,0,0.05); padding:2px 0;">
-                    <span>${ing.name}</span>
-                    <span style="font-weight:bold;">${ing.amount} ${ing.unit}</span>
-                </div>`;
-            });
-        }
-
-        html += `
-        <div style="margin-bottom:10px; background:${bg}; border-radius:6px; border-left:4px solid ${borderLeft}; padding:8px; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
-            <div style="font-weight:bold; font-size:13px; color:#333; margin-bottom:5px; border-bottom:1px solid rgba(0,0,0,0.1); padding-bottom:3px;">
-                ${icon} ${block.name}
-            </div>
-            <div>${rows}</div>
-            
-            <div style="text-align:right; font-size:11px; color:#666; margin-top:4px;">
-                Себест: <b>${Math.ceil(block.totalCost)}</b>
-            </div>
-        </div>`;
-    });
-
-    list.innerHTML = html;
-}
-     
     </script>
 
 <script>
@@ -14886,23 +14235,6 @@ function repeatOrder(id) {
   </body>
 
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
