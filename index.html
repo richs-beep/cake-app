@@ -505,7 +505,7 @@ class CakeCalculator {
   }
 
   calculate() {
-    // 1. Расчет каждого яруса (Геометрия и вес слоев)
+    // 1. Расчет каждого яруса
     this.tiersData.forEach((tierInput, index) => {
       const isBottom = (index === 0);
       const tierResult = this._calculateSingleTier(tierInput, isBottom);
@@ -514,17 +514,16 @@ class CakeCalculator {
       this.totalWeight += tierResult.weight;
     });
 
-    // 2. Ручные добавки (Extras) - добавляем их в список покупок
-    // (Метод _processExtras сам наполнит this.shoppingList и this.detailedBlocks)
+    // 2. Ручные добавки (Extras)
     if (this.data.extras && this.data.extras.length > 0) {
       this._processExtras(this.data.extras);
     }
 
-    // 3. ФИНАНСЫ И ЦЕНА (НОВАЯ ЛОГИКА)
+    // 3. ФИНАНСЫ И ЦЕНА
     const rate = this.data.hourlyRate || 0;
     let laborCost = 0;
 
-    // Считаем стоимость работы (она нужна для отчетов в обоих режимах)
+    // Считаем работы
     if (this.data.laborList && this.data.laborList.length > 0) {
       this.data.laborList.forEach(task => {
         laborCost += (task.realHours || 0) * (task.coeff || 1) * rate;
@@ -535,38 +534,38 @@ class CakeCalculator {
 
     let finalPrice = 0;
 
-    // --- РАЗВИЛКА: АВТО ИЛИ ФИКС ---
+    // --- РАЗВИЛКА РЕЖИМОВ ---
     if (this.data.calculationMode === 'fixed') {
-        // РЕЖИМ 1: ФИКСИРОВАННАЯ ЦЕНА
-        // А. База: Вес торта * Цена за кг
-        const cakePrice = (this.totalWeight / 1000) * (this.data.fixedPricePerKg || 0);
-        
-        // Б. Платные допы (Топперы, ягоды и т.д.)
-        // Мы ищем их в исходном списке extras, потому что в shoppingList флаг isPaid мог затеряться
+        // РЕЖИМ 1: ФИКСИРОВАННАЯ ЦЕНА (Сумма по ярусам)
+        let totalCakesPrice = 0;
+
+        // Пробегаем по рассчитанным ярусам
+        this.calculatedTiers.forEach(tier => {
+            // Цена яруса = (Вес яруса в кг) * (Цена рецепта за кг)
+            const tierPrice = (tier.weight / 1000) * (tier.salePricePerKg || 0);
+            totalCakesPrice += tierPrice;
+        });
+
+        // Б. Платные допы
         let paidExtrasCost = 0;
-        
         if (this.data.extras) {
             this.data.extras.forEach(ex => {
-                // Если галочка "Платно" (💰) стоит — плюсуем к цене
                 if (ex.isPaid) {
-                     // Находим актуальную цену этого ингредиента
                      const item = this.ingredients.find(i => i.id === ex.id);
                      if (item) {
                          const cost = ex.amount * (item.packPrice / item.packWeight);
                          paidExtrasCost += cost;
                      }
                 }
-                // Если галочки нет (Коробка, Подложка) — к цене НЕ плюсуем (они входят в цену за кг)
             });
         }
 
-        // В. ИТОГ: Торт + Платный декор + Работа
-        // (Работу плюсуем сверху, как договаривались)
-        finalPrice = Math.ceil(cakePrice + paidExtrasCost + laborCost);
+        // ИТОГ: Торты (по своим ценам) + Платный декор + Работа
+        finalPrice = Math.ceil(totalCakesPrice + paidExtrasCost + laborCost);
         
     } else {
-        // РЕЖИМ 2: АВТО (КАЛЬКУЛЯЦИЯ) - Старая логика
-        // (Себестоимость ВСЕГО + Работа) * Наценку
+        // РЕЖИМ 2: АВТО (КАЛЬКУЛЯЦИЯ)
+        // (Себестоимость + Работа) * Наценку
         finalPrice = Math.ceil((this.totalCost + laborCost) * (1 + (this.data.urgencyPercent || 0) / 100));
     }
 
@@ -607,9 +606,9 @@ class CakeCalculator {
             coating: Math.round(this.totalCoatingWeight)
         },
         costs: { 
-            totalProductionCost: Math.ceil(this.totalCost), // Себестоимость (всегда полная)
+            totalProductionCost: Math.ceil(this.totalCost), 
             laborCost: laborCost,
-            finalPrice: finalPrice, // Итоговая цена для клиента (зависит от режима)
+            finalPrice: finalPrice, 
             urgency: this.data.urgencyPercent
         },
         shoppingList: this.shoppingList.map(item => {
@@ -807,6 +806,8 @@ _calculateSingleTier(tierInput, isBottom) {
         .filter(blk => blk.name.includes(`Ярус ${tierInput.id}`))
         .reduce((sum, blk) => sum + (blk.totalCost || 0), 0);
 
+  
+
     return {
         id: tierInput.id,
         d: geom.d,
@@ -815,10 +816,11 @@ _calculateSingleTier(tierInput, isBottom) {
         weight: neededFillWeight + neededCoatWeight,
         totalCost: currentTierCost, 
         recipeName: recipe.name,
+        // НОВОЕ: Передаем цену продажи из рецепта (или 0, если не указана)
+        salePricePerKg: parseFloat(recipe.salePricePerKg) || 0, 
         forceHeight: tierInput.forceHeight 
     };
-  }
-      
+}  
   _processRecipeComponents(recipe, scale, blockPrefix, type) {
       if (!recipe.blocks) return; 
 
@@ -1348,39 +1350,58 @@ async function apiLoadAllDataImpl() {
   // ADAPTER (МОСТ МЕЖДУ СТАРЫМ UI И НОВЫМ API)
   // ============================================
   // Этот код перехватывает вызовы google.script.run и направляет их в наши новые функции
+  // ============================================
+  // ADAPTER (МОСТ МЕЖДУ СТАРЫМ UI И НОВЫМ API)
+  // ============================================
   const runAdapter = {
-    _cb: null,
-    _fail: null,
-    
     withSuccessHandler: function(cb) {
-        this._cb = cb;
-        return this;
+        // Возвращаем объект, который "помнит" именно этот callback (замыкание)
+        return {
+            withFailureHandler: function(failCb) {
+                // Если добавили обработку ошибок, возвращаем объект, помнящий и успех, и ошибку
+                return createRunner(cb, failCb);
+            },
+            ...createRunner(cb, null)
+        };
     },
-    withFailureHandler: function(cb) {
-        this._fail = cb;
-        return this;
+    withFailureHandler: function(failCb) {
+         return {
+            withSuccessHandler: function(cb) {
+                return createRunner(cb, failCb);
+            },
+            ...createRunner(null, failCb)
+         }
     },
-    
-    // Перехват функций
-    apiInitDatabase: async function() {
-        const res = await apiInitDatabaseImpl();
-        if(this._cb) this._cb(res);
-    },
-    apiLoadAllData: async function() {
-        const res = await apiLoadAllDataImpl();
-        if(this._cb) this._cb(res);
-    },
-    apiSaveData: async function(node, data) {
-        // Сохранение асинхронное, UI обычно не ждет ответа, но мы вернем true
-        const res = await apiSaveDataImpl(node, data);
-        if(this._cb) this._cb(res); 
-    },
-    apiCalculateOrder: function(data) {
-        // Расчет теперь мгновенный (синхронный)
-        const res = apiCalculateOrderImpl(data);
-        if(this._cb) this._cb(res);
-    }
+    // Прямые вызовы (без хендлеров)
+    ...createRunner(null, null)
   };
+
+  function createRunner(cb, failCb) {
+      return {
+        apiInitDatabase: async function() {
+            const res = await apiInitDatabaseImpl();
+            if(res.success) { if(cb) cb(res); }
+            else { if(failCb) failCb(res.error); else console.error(res); }
+        },
+        apiLoadAllData: async function() {
+            const res = await apiLoadAllDataImpl();
+            if(cb) cb(res);
+        },
+        apiSaveData: async function(node, data) {
+            const res = await apiSaveDataImpl(node, data);
+            if(cb) cb(res); 
+        },
+        apiCalculateOrder: function(data) {
+            // Синхронный вызов
+            const res = apiCalculateOrderImpl(data);
+            if(res.success) { if(cb) cb(res); }
+            else { if(failCb) failCb(res.error); else console.error(res); }
+        }
+      };
+  }
+
+  // Подменяем объект google.script.run
+  window.google = { script: { run: runAdapter } };
 
   // Подменяем объект google.script.run
   window.google = { script: { run: runAdapter } };
@@ -3385,11 +3406,7 @@ body {
     </label>
 </div>
 
-<div id="fixedPriceBlock" style="display:none; margin-bottom:15px; background:#E8F5E9; padding:10px; border-radius:6px; text-align:center;">
-    <span style="font-weight:bold; color:#2E7D32; margin-right:10px;">Цена продажи:</span>
-    <input type="number" id="fixedPriceInput" placeholder="0" style="width:100px; text-align:center; font-weight:bold;" onchange="calculateInitial()">
-    <span class="curr-sym" style="font-weight:bold; color:#2E7D32;"></span> / кг
-</div>
+
           
           <div class="form-row" style="background:#fff8e1; padding:15px; border-radius:6px; margin-bottom:15px; border:1px solid #ffe0b2; flex-wrap: wrap;">
     <div class="form-group" style="flex:2; min-width: 200px;">
@@ -5231,7 +5248,12 @@ function calculateSide(side) {
     // 1. Берем данные конкретной стороны
     const sourceTiers = (side === 'Left') ? appState.leftTiers : appState.rightTiers;
     
-    // 2. Собираем payload (копия логики calculateInitial, но с sourceTiers)
+    // 2. Считываем выбранный режим (Авто или Фикс)
+    let calcMode = 'auto';
+    const modeEl = document.querySelector('input[name="calcMode"]:checked');
+    if (modeEl) calcMode = modeEl.value;
+
+    // 3. Собираем данные для отправки (payload)
     const payload = {
         tiers: sourceTiers,
         shape: document.getElementById('globalShape').value,
@@ -5240,32 +5262,40 @@ function calculateSide(side) {
         coatingId: document.getElementById('coatingIdSelect').value,
         extraCoatingId: document.getElementById('extraCoatingIdSelect').value,
         coatingMethod: document.getElementById('chkCoatingMethod').checked ? 'proportion' : 'geometry',
-        // --- ИЗМЕНЕНО: БЕРЕМ ИЗ ПОЛЕЙ, ПО УМОЛЧАНИЮ 0 ---
+        
         coatingMarginPercent: parseFloat(document.getElementById('coatingMargin').value) || 0,
         fillingMarginPercent: parseFloat(document.getElementById('fillingMargin').value) || 0,
-        // ------------------------------------------------
         extraMarginPercent: parseFloat(document.getElementById('extraMargin').value)||0,
+        
         extras: extrasList, 
         hourlyRate: parseFloat(document.getElementById('hourlyRate').value)||0,
+        
+        // Считаем часы (для авто-режима и аналитики)
         hoursSpent: currentLaborList.reduce((sum,item)=>sum+(item.realHours*item.coeff),0),
+        
         urgencyPercent: parseFloat(document.getElementById('urgencyPercent').value)||0,
         ingredients: myIngredients,
-        recipes: myRecipes
+        recipes: myRecipes,
+
+        // ВАЖНО: Передаем только режим. Цену программа сама найдет внутри рецептов.
+        calculationMode: calcMode 
     };
 
-    // 3. Визуальный эффект (тихий)
+    // 4. Визуальный эффект (тихий)
     const svgEl = document.getElementById('svg' + side);
-    svgEl.style.opacity = '0.5';
+    if(svgEl) svgEl.style.opacity = '0.5';
 
-    // 4. Запрос на сервер
+    // 5. Запрос на сервер (Локальный адаптер)
     google.script.run.withSuccessHandler(res => {
-        svgEl.style.opacity = '1';
+        if(svgEl) svgEl.style.opacity = '1';
+        
         if(res.success) {
             // Обновляем ТОЛЬКО эту сторону
             appState.results[side] = res.data;
             state = appState.results; // Синхронизация
 
-          if (autoAddPackaging(res.data)) {
+            // Авто-добавление упаковки (если нужно)
+            if (autoAddPackaging(res.data)) {
                 renderExtras();
                 console.log("Упаковка обновлена, перезапуск расчета...");
                 calculateSide(side); 
@@ -5275,16 +5305,19 @@ function calculateSide(side) {
             document.getElementById('svg' + side).innerHTML = res.svg;
             updateStats(side);
             
-            // Перерисовываем кнопки, если поменялась геометрия
+            // Перерисовываем кнопки управления
             if(side === 'Right') renderControls();
-            if(side === 'Left' && typeof renderControlsLeft === 'function') renderControlsLeft();
+            if(side === 'Left' && typeof renderSideControls === 'function') renderSideControls('Left');
             
             setActiveSide(side);
-            forceRepaint();
+            
+            // Если есть функция принудительной перерисовки
+            if(typeof forceRepaint === 'function') forceRepaint();
+        } else {
+             alert('Ошибка расчета: ' + res.error);
         }
     }).apiCalculateOrder(payload);
 }
-
 // --- ОБНОВЛЕНИЕ СТАТИСТИКИ (С РАЗРЯДНОСТЬЮ ЦЕНЫ) ---
 function updateStats(side) {
     const d = appState.results[side];
@@ -14962,26 +14995,7 @@ function applySettingsFromCloud(s) {
 }
 
 function toggleCalcMode() {
-    const mode = document.querySelector('input[name="calcMode"]:checked').value;
-    const block = document.getElementById('fixedPriceBlock');
-    
-    // Если выбрали Фикс - показываем поле ввода цены
-    if (mode === 'fixed') {
-        block.style.display = 'block';
-        
-        // Пытаемся подтянуть цену из выбранного рецепта
-        const recId = document.getElementById('tiersContainer').querySelector('.tier-recipe')?.value;
-        if(recId) {
-            const r = myRecipes.find(x => x.id === recId);
-            if(r && r.salePricePerKg) {
-                document.getElementById('fixedPriceInput').value = r.salePricePerKg;
-            }
-        }
-    } else {
-        block.style.display = 'none';
-    }
-    
-    // Пересчитываем (если уже есть расчет)
+    // Просто пересчитываем (если уже есть расчет на экране)
     if (appState.results[appState.activeSide]) {
         calculateSide(appState.activeSide);
     }
@@ -14999,6 +15013,7 @@ function toggleCalcMode() {
   </body>
 
 </html>
+
 
 
 
