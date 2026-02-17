@@ -7798,6 +7798,10 @@ function generateBatchReport() {
             });
 
             // 3. Инфо о задаче
+            // ... (внутри generateBatchReport, начало цикла ord.data.detailedBlocks.forEach)
+
+            // 3. Инфо о задаче
+            // 3. Инфо о задаче
             let sizeInfo = "";
             let tierHeight = 0;
             let tierObj = null;
@@ -7806,11 +7810,26 @@ function generateBatchReport() {
             
             if (tierObj) {
                 const shape = ord.data.geometry.shape;
-                const d = Math.round(tierObj.d); const w = tierObj.w ? Math.round(tierObj.w) : d;
+                const d = Math.round(tierObj.d); 
+                const w = tierObj.w ? Math.round(tierObj.w) : d;
                 const h = Math.round(tierObj.h);
                 tierHeight = h;
-                sizeInfo = (shape === 'rectangle') ? `${d}x${w} H${h}` : `D${d} H${h}`;
+
+                // --- ЛОГИКА ТОЛЬКО ДЛЯ МУССОВ ---
+                if (nameLower.includes('мусс')) {
+                    if (shape === 'rectangle') {
+                        // Прямоугольник: минус 1 см от длины и ширины
+                        sizeInfo = `<span style="color:#E65100; font-weight:bold;">Размер: ${d-1}x${w-1} см</span>`;
+                    } else {
+                        // Круг: минус 2 см от диаметра (стандарт)
+                        sizeInfo = `<span style="color:#E65100; font-weight:bold;">Кольцо: D${d-2} см</span>`;
+                    }
+                } else {
+                    // Все остальное (бисквит, конфи, кули, крем) — полный размер
+                    sizeInfo = (shape === 'rectangle') ? `${d}x${w} H${h}` : `D${d} H${h}`;
+                }
             } else {
+                // Если это не ярус, а просто фигура или общий декор
                 if (ord.data.geometry.shape === 'custom') {
                     const g = ord.data.geometry;
                     sizeInfo = (g.w && g.l) ? `${Math.round(g.l)}x${Math.round(g.w)}` : `Фигура`;
@@ -7820,8 +7839,6 @@ function generateBatchReport() {
                     tierHeight = ord.data.geometry.h;
                 }
             }
-            if (nameLower.includes('мусс')) sizeInfo += ` <span style="color:#E65100; font-weight:bold;">(d-2см)</span>`;
-
             // 4. HTML задачи
             const totalReadyWeight = taskBaseReadyWeight + taskSpecialItems.reduce((s,i)=>s+i.weight,0);
             
@@ -14852,6 +14869,7 @@ function applySettingsFromCloud(s) {
   </body>
 
 </html>
+
 
 
 
