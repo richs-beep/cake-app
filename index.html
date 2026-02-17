@@ -9337,18 +9337,17 @@ function generateCustomHtml(rows, total) {
 }
 
 function openSettingsModal() {
-    // Подгружаем актуальные данные
+    // 1. Подгружаем все данные
     loadFinance(); 
     loadHourlyRate();
-    loadStatusSettings();
+    loadStatusSettings(); // Загрузка статусов LTV
+    loadListSettings();
     
     // Загрузка настроек загруженности
     const limGreen = localStorage.getItem('cakeLoadGreen') || 2;
     const txtGreen = localStorage.getItem('cakeTxtGreen') || "✅ Свободно";
-    
     const limYellow = localStorage.getItem('cakeLoadYellow') || 4;
     const txtYellow = localStorage.getItem('cakeTxtYellow') || "⚠️ Плотная запись";
-    
     const txtRed = localStorage.getItem('cakeTxtRed') || "🔥 ПЕРЕГРУЗ!";
 
     // Текущая валюта
@@ -9419,6 +9418,7 @@ function openSettingsModal() {
                 <div class="form-group"><span class="form-label">Аморт.</span><input type="number" id="finOverhead" onchange="saveFinance()"></div>
             </div>
         </div>
+
         <div style="background:#f3e5f5; padding:15px; border-radius:8px; border:1px solid #e1bee7; margin-bottom:15px;">
             <h4 style="margin-top:0; color:#6a1b9a;">🧾 Умный Чек (Словарь)</h4>
             <div class="form-group" style="margin-bottom:10px;">
@@ -9443,10 +9443,46 @@ function openSettingsModal() {
             </div>
         </div>
 
+        <div style="background:#fff3e0; padding:15px; border-radius:8px; border:1px solid #ffe0b2; margin-bottom:15px;">
+            <h4 style="margin-top:0; color:#E65100;">🏆 Статусы клиентов (LTV)</h4>
+            <div style="font-size:11px; color:#666; margin-bottom:10px;">
+                Укажите сумму покупок, от которой выдается статус.
+            </div>
+            
+            <div id="statusSettingsContainer"></div>
+            
+            <button class="add-btn-small" onclick="addStatusSettingRow()" style="background:#fb8c00; width:100%; margin-top:10px;">+ Добавить статус</button>
+        </div>
+
         <div style="background:#F3E5F5; padding:15px; border-radius:8px; border:1px solid #E1BEE7; margin-bottom:15px;">
             <h4 style="margin-top:0; color:#7B1FA2;">🎨 Меню и Вкладки</h4>
             <div style="font-size:11px; color:#555; margin-bottom:10px;">Нажимайте стрелки, чтобы менять порядок кнопок.</div>
             <div id="tabsSortContainer"></div>
+        </div>
+
+        <div style="background:#ECEFF1; padding:15px; border-radius:8px; border:1px solid #CFD8DC; margin-bottom:15px;">
+            <h4 style="margin-top:0; color:#455A64;">🛠️ Сервис и База данных</h4>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <button class="tab-btn" onclick="recalcAllClientsGlobal()" style="width:100%; background:#fff; border:1px solid #90CAF9; color:#1565C0; text-align:left; padding:10px; display:flex; align-items:center;">
+                    <span style="font-size:18px; margin-right:10px;">🔄</span> 
+                    <div><b>Пересчитать суммы</b><br><small style="color:#666;">Исправляет ошибки в LTV клиентов</small></div>
+                </button>
+                
+                <button class="main-btn" onclick="forceLoadFromCloud()" style="width:100%; background:#7E57C2; display:flex; align-items:center;">
+                    <span style="font-size:18px; margin-right:10px;">📥</span> 
+                    <div><b>Загрузить из Облака</b><br><small>Заменяет данные в телефоне данными из Таблицы</small></div>
+                </button>
+
+                <button class="main-btn" onclick="syncAllToCloud()" style="width:100%; background:#4CAF50; display:flex; align-items:center;">
+                    <span style="font-size:18px; margin-right:10px;">☁️</span> 
+                    <div><b>Выгрузить всё в Облако</b><br><small>Принудительно отправить все данные на сервер</small></div>
+                </button>
+
+                <button class="del-btn" onclick="forcePushClientsToCloud()" style="width:100%; background:#FFEBEE; border:1px solid #FFCDD2; color:#D32F2F; text-align:left; padding:10px; display:flex; align-items:center;">
+                    <span style="font-size:18px; margin-right:10px;">⚠️</span> 
+                    <div><b>Восстановить Клиентов</b><br><small style="color:#D32F2F;">Перезаписать облачную базу клиентов локальной</small></div>
+                </button>
+            </div>
         </div>
 
         <div class="modal-actions" style="margin-top:20px;">
@@ -9454,11 +9490,14 @@ function openSettingsModal() {
         </div>
     `;
     
-    // Заполняем поля значениями (потому что мы перезаписали HTML)
+    // Заполняем поля данными
     loadHourlyRate();
     loadFinance();
     loadListSettings();
-  renderTabsSorter();
+    
+    // Рисуем динамические списки
+    renderTabsSorter(); // Вкладки
+    loadStatusSettings(); // Статусы
 }
 
      // Временный массив для сортировки (пока окно настроек открыто)
@@ -14813,6 +14852,7 @@ function applySettingsFromCloud(s) {
   </body>
 
 </html>
+
 
 
 
