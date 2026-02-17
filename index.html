@@ -6281,7 +6281,20 @@ function updBN(bIndex, val) {
 }
       
       // Extras & Labor & Finance & Print & Queue - все функции из предыдущих версий остаются (они есть выше в коде или стандартные)
-      function loadFinance() { document.getElementById('finTax').value = localStorage.getItem('cakeFinTax')||3; document.getElementById('finBank').value = localStorage.getItem('cakeFinBank')||1; document.getElementById('finOverhead').value = localStorage.getItem('cakeFinOverhead')||5; }
+      function loadFinance() {
+    // 1. Цифры процентов
+    document.getElementById('finTax').value = localStorage.getItem('cakeFinTax') || 3;
+    document.getElementById('finBank').value = localStorage.getItem('cakeFinBank') || 1;
+    document.getElementById('finOverhead').value = localStorage.getItem('cakeFinOverhead') || 5;
+
+    // 2. Словари для Умного чека (Дефолтные значения)
+    const defaultShow = "ярус, фигур, доставка, аренда, подставка, мишка, топпер, печать, пряник, леден";
+    const defaultHide = "замес, выпечка, сборка, черновое, покрытие, выравнивание, ганаш, бисквит, начинка, крем";
+
+    // Загружаем или ставим дефолт
+    document.getElementById('finForceShow').value = localStorage.getItem('cakeFinForceShow') || defaultShow;
+    document.getElementById('finForceHide').value = localStorage.getItem('cakeFinForceHide') || defaultHide;
+}
       // --- ОБНОВЛЕННЫЕ ФУНКЦИИ ФИНАНСОВ ---
 
 function saveFinance() { 
@@ -14800,6 +14813,7 @@ function applySettingsFromCloud(s) {
   </body>
 
 </html>
+
 
 
 
