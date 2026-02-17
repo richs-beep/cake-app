@@ -6470,25 +6470,48 @@ function addExtraItem() {
 }
 
       function removeExtraItem(i) { extrasList.splice(i,1); renderExtras(); }
-    function renderExtras() {
+   function renderExtras() {
     saveToHistory();
     const c = document.getElementById('extrasContainer');
     c.innerHTML = '';
     
+    const currency = SYMBOLS[currentCurrency] || '';
+    let totalClientSum = 0; // То, что платит клиент (галочки включены)
+    let totalRealCost = 0;  // Реальная себестоимость всего списка
+
     extrasList.forEach((item, i) => {
-        // Чекбокс "Платно"
+        // Находим товар в базе, чтобы узнать актуальную цену
+        const ing = myIngredients.find(x => x.id === item.id);
+        
+        let cost = 0;
+        if (ing) {
+            // Считаем стоимость: (Кол-во * ЦенаПачки / ВесПачки)
+            cost = item.amount * (ing.packPrice / ing.packWeight);
+        }
+
+        totalRealCost += cost;
+        if (item.isPaid) {
+            totalClientSum += cost;
+        }
+
+        // Оформление
         const paidChecked = item.isPaid ? 'checked' : '';
-        // Если выключен (бесплатно), делаем текст бледным
-        const style = item.isPaid ? 'color:#333;' : 'color:#999; text-decoration:line-through;';
+        // Если выключено (бесплатно для клиента), делаем бледным
+        const rowOpacity = item.isPaid ? '1' : '0.6';
+        const priceStyle = item.isPaid ? 'color:#2E7D32; font-weight:bold;' : 'color:#999; text-decoration:line-through;';
         
         c.innerHTML += `
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e0e0e0; padding:6px 0; font-size:13px;">
-            <div style="flex:1; ${style}">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e0e0e0; padding:6px 0; font-size:13px; opacity:${rowOpacity};">
+            <div style="flex:1;">
                 ${item.name}
             </div>
             
             <div style="display:flex; align-items:center; gap:10px;">
-                <span><b>${item.amount}</b> ${item.unit}</span>
+                <span style="font-size:12px;"><b>${item.amount}</b> ${item.unit}</span>
+                
+                <span style="min-width:60px; text-align:right; ${priceStyle}">
+                    ${Math.ceil(cost).toLocaleString('ru-RU')} ${currency}
+                </span>
                 
                 <label title="Включить в счет клиента?" style="cursor:pointer; display:flex; align-items:center; background:#eee; padding:2px 5px; border-radius:4px;">
                     <input type="checkbox" ${paidChecked} onchange="toggleExtraPaid(${i})"> 
@@ -6499,8 +6522,18 @@ function addExtraItem() {
             </div>
         </div>`;
     });
-}
 
+    // Итоговая строка
+    if (extrasList.length > 0) {
+        c.innerHTML += `
+        <div style="margin-top:10px; text-align:right; font-size:12px; padding-top:5px; border-top:2px solid #eee;">
+            <div>Себестоимость: <span style="color:#666;">${Math.ceil(totalRealCost).toLocaleString('ru-RU')} ${currency}</span></div>
+            <div style="font-size:14px; color:#2E7D32;">К оплате (Клиент): <b>${Math.ceil(totalClientSum).toLocaleString('ru-RU')} ${currency}</b></div>
+        </div>`;
+    } else {
+        c.innerHTML = '<div style="text-align:center; color:#ccc; font-size:12px; padding:5px;">Список пуст</div>';
+    }
+}
 // Новая функция переключения платности
 function toggleExtraPaid(idx) {
     extrasList[idx].isPaid = !extrasList[idx].isPaid;
@@ -6555,48 +6588,74 @@ function removeLaborTask(i) {
     saveToHistory(); 
     performAutoSave(); // <--- ВАЖНО: Сохраняем сразу же!
 }
-    function renderLaborTasks() {
+    
+function renderLaborTasks() {
     const c = document.getElementById('laborListContainer');
     c.innerHTML = '';
-    let totalNorm = 0;
+    
+    // 1. Берем ставку часа из настроек
+    const hourlyRate = parseFloat(document.getElementById('hourlyRate').value) || 0;
+    const currency = SYMBOLS[currentCurrency] || '';
+
+    let totalHours = 0;
+    let totalMoney = 0;
     
     currentLaborList.forEach((l, i) => {
-        const norm = l.realHours * l.coeff;
-        totalNorm += norm;
+        // Формула: Часы * Коэффициент * Ставка
+        const hoursWithCoeff = l.realHours * l.coeff;
+        const money = hoursWithCoeff * hourlyRate;
+        
+        totalHours += hoursWithCoeff;
+        totalMoney += money;
         
         // Логика кнопки переключения
         const icon = l.isHelper ? '👷‍♂️' : '👤';
         const title = l.isHelper ? 'Помощник (Расход)' : 'Я сам (Доход)';
-        const btnBg = l.isHelper ? '#ffebee' : '#e8f5e9'; // Красный или Зеленый фон кнопки
-        const style = l.isHelper ? 'color:#d32f2f;' : 'color:#00695c;';
-
+        const btnBg = l.isHelper ? '#ffebee' : '#e8f5e9'; 
+        
+        // Если время введено вручную, подсвечиваем поле
         const isManualStyle = l.isManual ? 'background-color: #fff3e0; border-color: #ffb74d;' : '';
 
-        c.innerHTML += `<div style="display:flex; justify-content:space-between; border-bottom:1px dotted #b2dfdb; padding:4px 0; align-items:center;">
-            <div style="flex:2; display:flex; align-items:center;">
+        c.innerHTML += `
+        <div style="display:flex; justify-content:space-between; border-bottom:1px dotted #b2dfdb; padding:6px 0; align-items:center;">
+            <div style="flex:1.5; display:flex; align-items:center;">
                 <button onclick="toggleLaborHelper(${i})" title="${title}" 
-                    style="cursor:pointer; border:1px solid #ccc; background:${btnBg}; border-radius:4px; padding:2px 6px; margin-right:8px; font-size:14px; transition:0.2s;">
+                    style="cursor:pointer; border:1px solid #ccc; background:${btnBg}; border-radius:4px; padding:2px 6px; margin-right:8px; font-size:14px;">
                     ${icon}
                 </button>
                 
-                <span>
-                    ${l.name} <small style="color:#888;">x${l.coeff}</small>
-                </span>
+                <div style="line-height:1.1;">
+                    <div style="font-weight:bold; font-size:13px; color:#444;">${l.name}</div>
+                    <div style="font-size:10px; color:#888;">Сложность: x${l.coeff}</div>
+                </div>
             </div>
             
-            <span style="flex:1; display:flex; align-items:center; gap:5px;">
-                <input type="number" value="${l.realHours}" step="0.1" 
-                    style="width:45px; padding:2px; border:1px solid #ccc; border-radius:4px; text-align:center; font-size:12px; ${isManualStyle}"
-                    onchange="updateLaborHours(${i}, this.value)"> ч
-            </span>
-            <span style="flex:0.5; text-align:right;">
-                <b style="${style}">${norm.toFixed(1)}</b> 
-                <span onclick="removeLaborTask(${i})" style="color:#ccc; cursor:pointer; margin-left:10px; font-weight:bold;">✕</span>
-            </span>
+            <div style="flex:1; display:flex; justify-content:flex-end; align-items:center; gap:10px;">
+                <div style="position:relative;">
+                    <input type="number" value="${l.realHours}" step="0.5" 
+                        style="width:50px; padding:4px; border:1px solid #ccc; border-radius:4px; text-align:center; font-weight:bold; ${isManualStyle}"
+                        onchange="updateLaborHours(${i}, this.value)">
+                    <span style="font-size:10px; color:#666; position:absolute; right:-10px; top:6px;">ч</span>
+                </div>
+
+                <div style="text-align:right; min-width:70px;">
+                    <div style="font-weight:bold; color:#00695c; font-size:13px;">${Math.round(money).toLocaleString('ru-RU')} ${currency}</div>
+                </div>
+                
+                <span onclick="removeLaborTask(${i})" style="color:#e57373; cursor:pointer; font-weight:bold; font-size:16px; padding-left:5px;">✕</span>
+            </div>
         </div>`;
     });
-    document.getElementById('totalNormHoursDisplay').innerText = totalNorm.toFixed(1);
+    
+    // Обновляем ИТОГ внизу блока
+    // (Я изменил ID элемента в HTML коде ниже, чтобы было понятнее, но оставил совместимость)
+    const totalEl = document.getElementById('totalNormHoursDisplay');
+    if(totalEl) {
+        // Теперь показываем: 15 000 ₸ (5.5 ч)
+        totalEl.innerHTML = `<span style="font-size:14px; color:#004d40;">${Math.round(totalMoney).toLocaleString('ru-RU')} ${currency}</span> <span style="color:#888; font-weight:normal;">(${totalHours.toFixed(1)} н/ч)</span>`;
+    }
 }
+     
 // Новая вспомогательная функция для обновления часов
 function updateLaborHours(idx, val) {
     const newHours = parseFloat(val) || 0;
@@ -15020,6 +15079,7 @@ function toggleCalcMode() {
   </body>
 
 </html>
+
 
 
 
