@@ -13851,7 +13851,7 @@ function getShapeCalculation() {
         const consumption = (parseFloat(coatRecipe.outputWeight) || 500) / refVol;
         
         // [ИЗМЕНЕНИЕ]: Вернули 1.1 (10% тех. запас), так как периметр теперь точный
-        neededCoatWeight = totalSurfaceArea * consumption * 1.1; 
+        neededCoatWeight = totalSurfaceArea * consumption * 1; 
         
         const coatScale = neededCoatWeight / (parseFloat(coatRecipe.outputWeight) || 1);
         coatingBlock = _generateBlockFromRecipe(coatRecipe, coatScale, "🎨 Покрытие (Фигура)", "coating");
@@ -14441,6 +14441,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
