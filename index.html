@@ -3081,6 +3081,84 @@ body {
 .rv-type-filling { border-left-color: #42A5F5; } /* Начинка - Синий */
 .rv-type-coating { border-left-color: #795548; } /* Покрытие - Коричневый */
 .rv-type-extra   { border-left-color: #FF9800; } /* Декор - Оранжевый */
+
+
+/* --- СТИЛИ КАЛЕНДАРЯ --- */
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.calendar-day-header {
+    text-align: center;
+    font-weight: bold;
+    font-size: 12px;
+    color: #666;
+    padding-bottom: 5px;
+}
+
+.calendar-cell {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    min-height: 60px; /* Высота ячейки */
+    padding: 4px;
+    cursor: pointer;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: 0.2s;
+}
+
+.calendar-cell:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    z-index: 2;
+}
+
+.cal-date-num {
+    font-weight: bold;
+    font-size: 12px;
+    color: #333;
+}
+
+/* Маркер "Сегодня" */
+.cal-today {
+    border: 2px solid #2196F3 !important;
+}
+
+/* Индикаторы загрузки */
+.cal-load-green { background-color: #E8F5E9; border-color: #C8E6C9; }
+.cal-load-yellow { background-color: #FFF3E0; border-color: #FFE0B2; }
+.cal-load-red { background-color: #FFEBEE; border-color: #FFCDD2; }
+
+/* Точки заказов внутри ячейки */
+.cal-dots {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.cal-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #555;
+}
+.cal-dot.booking { background: #FF9800; } /* Бронь - оранжевая */
+.cal-dot.order { background: #4CAF50; }   /* Заказ - зеленый */
+
+.cal-info-text {
+    font-size: 9px;
+    color: #666;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1;
+}
       
     </style>
     
@@ -3850,9 +3928,11 @@ body {
            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">
               <h2 style="margin:0; border:none; padding:0;">🏭 План (Очередь)</h2>
               <div>
-                 <button class="add-btn-small" onclick="openBookingModal()" style="background:#FF9800; margin-right:10px; padding:6px 12px; font-size:13px;">📅 Забронировать дату</button>
-                 <button class="del-btn" onclick="clearQueue()" style="font-size:12px; background:#ffebee; padding:5px 10px; border-radius:4px;">🗑️ Очистить</button>
-              </div>
+    <button class="add-btn-small" onclick="openFullCalendar()" style="background:#2196F3; margin-right:5px; padding:6px 12px; font-size:13px;">🗓️ Календарь</button>
+    
+    <button class="add-btn-small" onclick="openBookingModal()" style="background:#FF9800; margin-right:10px; padding:6px 12px; font-size:13px;">⏳ Бронь</button>
+    <button class="del-btn" onclick="clearQueue()" ...>🗑️</button>
+</div>
            </div>
 
            <div style="margin-bottom: 15px; position: relative;">
@@ -12580,6 +12660,37 @@ function printWindow(content, title) {
             <div class="page">
                 ${content}
             </div>
+
+<div id="calendarModal" class="modal-overlay">
+    <div class="modal-box" style="width: 600px; max-width: 98%;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <button class="tab-btn" onclick="changeCalendarMonth(-1)">◀</button>
+            <h3 id="calMonthTitle" style="margin:0; width:150px; text-align:center;">Февраль 2026</h3>
+            <button class="tab-btn" onclick="changeCalendarMonth(1)">▶</button>
+            <button class="del-btn" onclick="document.getElementById('calendarModal').style.display='none'" style="margin-left:auto; font-size:24px;">×</button>
+        </div>
+        
+        <div style="display:grid; grid-template-columns: repeat(7, 1fr); text-align:center; margin-bottom:5px;">
+            <div class="calendar-day-header">ПН</div>
+            <div class="calendar-day-header">ВТ</div>
+            <div class="calendar-day-header">СР</div>
+            <div class="calendar-day-header">ЧТ</div>
+            <div class="calendar-day-header">ПТ</div>
+            <div class="calendar-day-header" style="color:#d32f2f;">СБ</div>
+            <div class="calendar-day-header" style="color:#d32f2f;">ВС</div>
+        </div>
+
+        <div id="calendarGrid" class="calendar-grid"></div>
+        
+        <div style="margin-top:15px; font-size:11px; color:#666; display:flex; gap:10px; justify-content:center;">
+            <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#E8F5E9; border:1px solid #ccc;"></span> Свободно</span>
+            <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#FFF3E0; border:1px solid #ccc;"></span> Плотно</span>
+            <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#FFEBEE; border:1px solid #ccc;"></span> Перегруз</span>
+        </div>
+    </div>
+</div>
+
+  
         </body>
         </html>
     `);
@@ -15135,6 +15246,119 @@ function toggleCalcMode() {
         calculateSide(appState.activeSide);
     }
 }
+
+  // --- 📅 ПОЛНОЦЕННЫЙ КАЛЕНДАРЬ ---
+
+let currentCalDate = new Date(); // Текущий месяц просмотра
+
+function openFullCalendar() {
+    currentCalDate = new Date(); // При открытии всегда ставим текущий месяц
+    renderCalendarModal();
+    document.getElementById('calendarModal').style.display = 'flex';
+}
+
+function changeCalendarMonth(delta) {
+    // Меняем месяц
+    currentCalDate.setMonth(currentCalDate.getMonth() + delta);
+    renderCalendarModal();
+}
+
+function renderCalendarModal() {
+    const grid = document.getElementById('calendarGrid');
+    const title = document.getElementById('calMonthTitle');
+    grid.innerHTML = '';
+
+    const year = currentCalDate.getFullYear();
+    const month = currentCalDate.getMonth();
+    
+    // Название месяца
+    const monthNames = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+    title.innerText = `${monthNames[month]} ${year}`;
+
+    // Настройки лимитов (Светофор)
+    const limGreen = parseInt(localStorage.getItem('cakeLoadGreen') || 2);
+    const limYellow = parseInt(localStorage.getItem('cakeLoadYellow') || 4);
+
+    // 1. Первый день месяца
+    const firstDay = new Date(year, month, 1);
+    // День недели (0-ВС, 1-ПН...). Нам надо 0-ПН, 6-ВС
+    let startDay = firstDay.getDay() - 1; 
+    if (startDay === -1) startDay = 6; // Если воскресенье
+
+    // 2. Кол-во дней в месяце
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // 3. Сегодняшняя дата (для рамки)
+    const todayObj = new Date();
+    const isCurrentMonth = (todayObj.getFullYear() === year && todayObj.getMonth() === month);
+    const todayDate = todayObj.getDate();
+
+    // 4. ПУСТЫЕ ЯЧЕЙКИ ДО (смещение)
+    for(let i=0; i<startDay; i++) {
+        grid.innerHTML += `<div style="background:transparent;"></div>`;
+    }
+
+    // 5. РИСУЕМ ДНИ
+    for(let day=1; day<=daysInMonth; day++) {
+        // Форматируем дату YYYY-MM-DD для поиска заказов
+        const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        
+        // Ищем заказы на этот день
+        const dayOrders = productionQueue.filter(o => o.date === dateStr);
+        const count = dayOrders.length;
+
+        // Определяем цвет (Светофор)
+        let bgClass = "cal-load-green";
+        if (count > limGreen && count <= limYellow) bgClass = "cal-load-yellow";
+        if (count > limYellow) bgClass = "cal-load-red";
+        if (count === 0) bgClass = ""; // Белый, если пусто
+
+        // Рамка "Сегодня"
+        const todayClass = (isCurrentMonth && day === todayDate) ? "cal-today" : "";
+
+        // Формируем точки/инфо
+        let dotsHtml = "";
+        let infoHtml = "";
+        
+        if (count > 0) {
+            // Рисуем точки (до 5 штук)
+            dayOrders.slice(0, 6).forEach(o => {
+                const typeClass = (o.type === 'booking') ? 'booking' : 'order';
+                dotsHtml += `<div class="cal-dot ${typeClass}"></div>`;
+            });
+            // Текст: "3 шт" или имя первого
+            infoHtml = `<div class="cal-info-text" style="text-align:right; margin-top:auto;">
+                ${count} шт.
+            </div>`;
+        }
+
+        const cell = document.createElement('div');
+        cell.className = `calendar-cell ${bgClass} ${todayClass}`;
+        cell.onclick = () => selectCalendarDate(dateStr);
+        
+        cell.innerHTML = `
+            <div style="display:flex; justify-content:space-between;">
+                <span class="cal-date-num">${day}</span>
+                <div class="cal-dots">${dotsHtml}</div>
+            </div>
+            ${infoHtml}
+        `;
+        
+        grid.appendChild(cell);
+    }
+}
+
+function selectCalendarDate(dateStr) {
+    // 1. Закрываем календарь
+    document.getElementById('calendarModal').style.display = 'none';
+    
+    // 2. Включаем фильтр в Плане на эту дату
+    // (Вызываем вашу существующую функцию setDateFilter)
+    setDateFilter(dateStr); 
+    
+    // 3. Обновляем визуально кнопки табов (чтобы подсветилась нужная или сбросилась)
+    // Это уже делает renderQueue, но на всякий случай можно добавить логику
+}
     </script>
 
 <script>
@@ -15148,6 +15372,7 @@ function toggleCalcMode() {
   </body>
 
 </html>
+
 
 
 
