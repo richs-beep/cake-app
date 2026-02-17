@@ -3759,7 +3759,10 @@ body {
   <div class="form-row" style="margin-bottom:10px; border-top:1px dashed #ccc; padding-top:10px;">
       <div class="form-group" style="flex:1;">
           <span class="form-label" style="color:#2E7D32;">🏷️ Цена продажи (за кг)</span>
-          <input type="number" id="editRecSalePrice" placeholder="Например: 11000" style="font-weight:bold; color:#2E7D32;" onchange="saveMeta()">
+          <input type="text" id="editRecSalePrice" class="money-input" placeholder="Например: 11 000" 
+       style="font-weight:bold; color:#2E7D32;" 
+       oninput="formatMoneyInput(this)" 
+       onchange="saveMeta()">
       </div>
       <div class="form-group" style="flex:2; display:flex; align-items:end;">
           <span style="font-size:11px; color:#666; margin-bottom:10px;">* Оставьте пустым, чтобы считать по себестоимости</span>
@@ -6007,7 +6010,9 @@ function loadRec(id){
     chk.checked = (r.targetFinishedWeight && r.targetFinishedWeight > 0);
     document.getElementById('editTargetFinWeight').value = r.targetFinishedWeight || '';
     toggleFinishedWeight(false); // false = не сохранять при загрузке, просто обновить UI
-document.getElementById('editRecSalePrice').value = r.salePricePerKg || ''; // Загружаем цену
+// Форматируем при загрузке (11000 -> "11 000")
+const priceVal = r.salePricePerKg || 0;
+document.getElementById('editRecSalePrice').value = priceVal ? parseFloat(priceVal).toLocaleString('ru-RU') : '';
     renderBlocks(r);
   setRecipeLockState(true);
 }
@@ -6158,7 +6163,9 @@ function toggleFinishedWeight(doSave = true) {
     // ... остальной код (вес готового торта и т.д.)
     const useFin = document.getElementById('chkFinishedWeight').checked;
     r.targetFinishedWeight = useFin ? (parseFloat(document.getElementById('editTargetFinWeight').value)||0) : null;
-    r.salePricePerKg = parseFloat(document.getElementById('editRecSalePrice').value) || null;
+    // Очищаем от пробелов перед сохранением ("11 000" -> 11000)
+const rawPrice = document.getElementById('editRecSalePrice').value.replace(/\D/g, ''); 
+r.salePricePerKg = rawPrice ? parseFloat(rawPrice) : null;
     saveRecs(); 
 }
       // Остальные функции рецептов (resIng, updBI, delBI, addBI, addBlock, delBlk, updBN, createNew, delete)
@@ -15013,6 +15020,7 @@ function toggleCalcMode() {
   </body>
 
 </html>
+
 
 
 
