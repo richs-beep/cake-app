@@ -588,10 +588,6 @@ class CakeCalculator {
     } else {
         // РЕЖИМ 2: АВТО (КАЛЬКУЛЯЦИЯ) - Тут всё по старому (себестоимость + наценка)
         finalPrice = Math.ceil((this.totalCost + laborCost) * (1 + (this.data.urgencyPercent || 0) / 100));
-    } else {
-        // РЕЖИМ 2: АВТО (КАЛЬКУЛЯЦИЯ)
-        // Тут Велюр уже сидит внутри this.totalCost, поэтому ничего менять не надо
-        finalPrice = Math.ceil((this.totalCost + laborCost) * (1 + (this.data.urgencyPercent || 0) / 100));
     }
 
     // 4. Визуализация (SVG)
@@ -15152,6 +15148,7 @@ function toggleCalcMode() {
   </body>
 
 </html>
+
 
 
 
