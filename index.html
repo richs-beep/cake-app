@@ -4217,7 +4217,11 @@ body {
         </div>
 
         <div id="shapeCalcBlock" style="display:none; margin-top:20px;">
-            
+            <div class="form-group" style="margin-bottom:10px;">
+    <span class="form-label">🎨 Покрытие (Крем)</span>
+    <select id="shapeCoatingSelect" onchange="recalcFromWeight()" style="font-weight:bold; background:#EFEBE9;">
+        </select>
+</div>
             <div class="form-group" style="margin-bottom:15px;">
                 <span class="form-label">🍰 Начинка (Плотность)</span>
                 <select id="shapeRecipeSelect" onchange="recalcFromWeight()" style="font-weight:bold; background:#fff3e0;">
@@ -13438,19 +13442,38 @@ function cropAndAnalyze(img) {
 }
 
 function updateShapeRecipes() { 
-    const sel = document.getElementById('shapeRecipeSelect');
-    if (!sel) return;
-    sel.innerHTML = '';
-    const fillings = myRecipes.filter(r => r.type === 'filling');
-    fillings.forEach(r => {
-        const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
-        const density = r.outputWeight / vol; 
-        const opt = document.createElement('option');
-        opt.value = r.id; 
-        opt.dataset.density = density; 
-        opt.innerText = `${r.name} (~${density.toFixed(2)} г/см³)`;
-        sel.appendChild(opt);
-    });
+    // 1. Начинки
+    const selRecipe = document.getElementById('shapeRecipeSelect');
+    if (selRecipe) {
+        selRecipe.innerHTML = '';
+        const fillings = myRecipes.filter(r => r.type === 'filling');
+        fillings.forEach(r => {
+            const vol = Math.PI * Math.pow(r.calibrationD/2, 2) * r.calibrationH;
+            
+            const opt = document.createElement('option');
+            opt.value = r.id; 
+            // Сохраняем чистый вес и объем эталона
+            opt.dataset.weight = r.outputWeight; 
+            opt.dataset.vol = vol;
+            opt.innerText = `${r.name}`;
+            selRecipe.appendChild(opt);
+        });
+    }
+
+    // 2. Покрытия (Заполняем новый список)
+    const selCoating = document.getElementById('shapeCoatingSelect');
+    if (selCoating) {
+        selCoating.innerHTML = '<option value="" data-weight="0">-- Без покрытия --</option>';
+        const coatings = myRecipes.filter(r => r.type === 'coating');
+        coatings.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            // Вес покрытия на эталонный торт
+            opt.dataset.weight = r.outputWeight || 0;
+            opt.innerText = r.name;
+            selCoating.appendChild(opt);
+        });
+    }
 }
 
 function generate3DLayers() { 
@@ -13491,11 +13514,38 @@ function toggleShapeType() {
 }
 
 // 4. РАСЧЕТЫ
+// --- НОВАЯ ЛОГИКА: ПЛОТНОСТЬ ГОТОВОГО ИЗДЕЛИЯ ---
 function getDensity() {
-    const sel = document.getElementById('shapeRecipeSelect');
-    if (!sel) return 0.8;
-    const selectedOpt = sel.options[sel.selectedIndex];
-    return selectedOpt ? parseFloat(selectedOpt.dataset.density) : 0.8; 
+    // 1. Берем данные выбранной начинки
+    const selRecipe = document.getElementById('shapeRecipeSelect');
+    if (!selRecipe || selRecipe.selectedIndex === -1) return 0.8; // Дефолт, если ничего не выбрано
+    
+    const optRecipe = selRecipe.options[selRecipe.selectedIndex];
+    // Вес начинки в эталоне (например, 1500г)
+    const fillWeight = parseFloat(optRecipe.dataset.weight) || 0;
+    // Объем эталона (например, ~2000 см3)
+    const refVol = parseFloat(optRecipe.dataset.vol) || 1000;
+
+    // 2. Берем данные выбранного покрытия
+    let coatWeight = 0;
+    const selCoating = document.getElementById('shapeCoatingSelect');
+    if (selCoating && selCoating.selectedIndex !== -1) {
+        const optCoating = selCoating.options[selCoating.selectedIndex];
+        // Вес покрытия на этот эталон (например, 500г)
+        coatWeight = parseFloat(optCoating.dataset.weight) || 0;
+    }
+
+    // 3. Складываем веса (Итого вес эталона: 2000г)
+    const totalRefWeight = fillWeight + coatWeight;
+
+    // 4. Считаем ОБЩУЮ плотность готового торта
+    // (Сколько весит 1 см³ торта вместе с кремом)
+    const combinedDensity = totalRefWeight / refVol;
+
+    // Для проверки в консоли браузера (F12)
+    console.log(`Плотность: (${fillWeight}г начинка + ${coatWeight}г крем) / ${refVol.toFixed(0)}см3 = ${combinedDensity.toFixed(3)}`);
+    
+    return combinedDensity;
 }
 
 function recalcFromWeight() {
@@ -14235,6 +14285,7 @@ function repeatOrder(id) {
   </body>
 
 </html>
+
 
 
 
