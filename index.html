@@ -283,15 +283,17 @@
     }
 
     // 3. Сохранение данных
-    // 3. Сохранение данных (С разбиением на чанки по 50к символов)
+// 3. Сохранение данных (С защитой от ошибок и разбивкой на части)
 async function apiSaveDataImpl(sheetName, data) {
-    // 1. Проверка ID базы
+    // 1. Проверка ID базы (если нет - выходим)
     if (!USER_DB_ID) return false;
     
-    // 2. ЗАЩИТА: Проверяем, готова ли библиотека Google Sheets
-    if (!gapi.client || !gapi.client.sheets) {
-        console.warn("⚠️ API Google Sheets еще не готово. Сохранение в облако пропущено.");
-        return false; // Просто выходим, не ломая программу
+    // 2. ГЛАВНАЯ ЗАЩИТА: Проверяем, готова ли библиотека Google Sheets
+    // Если gapi.client или gapi.client.sheets не существуют — просто выходим.
+    // Данные останутся в localStorage телефона, программа не сломается.
+    if (typeof gapi === 'undefined' || !gapi.client || !gapi.client.sheets) {
+        console.warn("⚠️ API Google Sheets еще не загрузился. Сохранение в облако пропущено.");
+        return false; 
     }
 
     try {
@@ -307,13 +309,13 @@ async function apiSaveDataImpl(sheetName, data) {
             chunks.push([jsonString.substring(i, i + CHUNK_SIZE)]);
         }
 
-        // Очищаем колонку A перед записью
+        // Очищаем колонку A перед записью (чтобы не осталось хвостов от старых данных)
         await gapi.client.sheets.spreadsheets.values.clear({
             spreadsheetId: USER_DB_ID,
             range: `${sheetName}!A:A`
         });
 
-        // Записываем куски
+        // Записываем куски в столбик (A1, A2, A3...)
         await gapi.client.sheets.spreadsheets.values.update({
             spreadsheetId: USER_DB_ID,
             range: `${sheetName}!A1`,
@@ -328,7 +330,6 @@ async function apiSaveDataImpl(sheetName, data) {
         return false;
     }
 }
-
       // --- 5. РАБОТА С ФОТОГРАФИЯМИ (GOOGLE DRIVE) ---
 
 // А. Найти или создать папку для фото
@@ -15474,6 +15475,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
