@@ -15125,65 +15125,82 @@ function repeatOrder(id) {
     switchTab('production'); // Переходим в план
 }
 
-     function saveAllSettingsAndClose() {
-    // 1. Считываем значения из полей
-    const loadGreen = document.getElementById('setLoadGreen').value;
-    const txtGreen = document.getElementById('setTxtGreen').value;
-    const loadYellow = document.getElementById('setLoadYellow').value;
-    const txtYellow = document.getElementById('setTxtYellow').value;
-    const txtRed = document.getElementById('setTxtRed').value;
-    const banks = document.getElementById('settingBanks').value;
-    const sources = document.getElementById('settingSources').value;
+// Помощник: Собирает ВСЕ настройки в один объект для сохранения
+function collectAllSettings() {
+    // 1. Берем режим калькулятора
+    const modeEl = document.querySelector('input[name="calcMode"]:checked');
+    const currentMode = modeEl ? modeEl.value : 'auto';
 
-    // 2. Сохраняем в LocalStorage (для мгновенного доступа)
-    localStorage.setItem('cakeLoadGreen', loadGreen);
-    localStorage.setItem('cakeTxtGreen', txtGreen);
-    localStorage.setItem('cakeLoadYellow', loadYellow);
-    localStorage.setItem('cakeTxtYellow', txtYellow);
-    localStorage.setItem('cakeTxtRed', txtRed);
+    // 2. Берем списки
+    const banks = document.getElementById('settingBanks') ? document.getElementById('settingBanks').value : "";
+    const sources = document.getElementById('settingSources') ? document.getElementById('settingSources').value : "";
+    const tabOrder = JSON.parse(localStorage.getItem('cakeTabOrder') || '[]');
+
+    // 3. Берем настройки загруженности
+    const loadGreen = document.getElementById('setLoadGreen') ? document.getElementById('setLoadGreen').value : 2;
+    // ... если поля скрыты, берем из памяти, чтобы не стереть
+    // Но так как модалка создается динамически, лучше брать из localStorage, если элемента нет в DOM
+    // Для простоты возьмем основные финансовые поля, они точно есть в DOM после loadFinance()
     
-    // Сохраняем порядок вкладок (если он менялся)
-    if (typeof tempTabOrder !== 'undefined' && tempTabOrder.length > 0) {
-        localStorage.setItem('cakeTabOrder', JSON.stringify(tempTabOrder));
-        renderNavbar(); // Перерисовываем меню
-        tempTabOrder = []; // Сброс
-    }
-
-    // Вызываем сохранения подсистем (финансы, списки)
-    saveHourlyRate();
-    saveFinance();
-    // saveListSettings мы заменим ниже ручным сохранением в объект, чтобы не дублировать вызовы
-
-    document.getElementById('settingsModal').style.display='none';
-    
-    // 3. ФОРМИРУЕМ ПОЛНЫЙ ПАКЕТ ДЛЯ ОБЛАКА
-    const settingsObj = {
+    return {
         // Финансы
         tax: document.getElementById('finTax').value,
         bank: document.getElementById('finBank').value,
         overhead: document.getElementById('finOverhead').value,
         hourlyRate: document.getElementById('hourlyRate').value,
-        currency: currentCurrency, // Валюта
+        currency: currentCurrency,
 
-        // Загруженность (Лимиты + Тексты)
-        loadGreen: loadGreen,
-        txtGreen: txtGreen,
-        loadYellow: loadYellow,
-        txtYellow: txtYellow,
-        txtRed: txtRed,
+        // --- НОВОЕ: ЗАПОМИНАЕМ РЕЖИМ ---
+        calcMode: currentMode,
+        // -------------------------------
 
-        // Списки
-        banksList: banks,
-        sourcesList: sources,
+        // Списки и Интерфейс
+        banksList: banks || localStorage.getItem('cakeBanksList'),
+        sourcesList: sources || localStorage.getItem('cakeSourcesList'),
+        tabOrder: tabOrder,
 
-        // Интерфейс (Порядок вкладок)
-        tabOrder: JSON.parse(localStorage.getItem('cakeTabOrder') || '[]')
+        // Загруженность (сохраняем то, что в памяти, чтобы не потерять)
+        loadGreen: localStorage.getItem('cakeLoadGreen'),
+        txtGreen: localStorage.getItem('cakeTxtGreen'),
+        loadYellow: localStorage.getItem('cakeLoadYellow'),
+        txtYellow: localStorage.getItem('cakeTxtYellow'),
+        txtRed: localStorage.getItem('cakeTxtRed')
     };
+}
+     
+     function saveAllSettingsAndClose() {
+    // 1. Считываем и сохраняем локально (для скорости)
+    localStorage.setItem('cakeLoadGreen', document.getElementById('setLoadGreen').value);
+    localStorage.setItem('cakeTxtGreen', document.getElementById('setTxtGreen').value);
+    localStorage.setItem('cakeLoadYellow', document.getElementById('setLoadYellow').value);
+    localStorage.setItem('cakeTxtYellow', document.getElementById('setTxtYellow').value);
+    localStorage.setItem('cakeTxtRed', document.getElementById('setTxtRed').value);
+    
+    localStorage.setItem('cakeBanksList', document.getElementById('settingBanks').value);
+    localStorage.setItem('cakeSourcesList', document.getElementById('settingSources').value);
 
-    // 4. Отправляем в Google Таблицу (лист 'settings')
+    saveHourlyRate();
+    saveFinance();
+
+    // 2. Формируем пакет для Облака (используем помощника)
+    // Но перед вызовом помощника обновим локальные переменные из полей ввода, 
+    // так как помощник читает некоторые из localStorage
+    const settingsObj = collectAllSettings();
+
+    // Перезаписываем данные помощника актуальными значениями из открытого окна настроек
+    settingsObj.loadGreen = document.getElementById('setLoadGreen').value;
+    settingsObj.txtGreen = document.getElementById('setTxtGreen').value;
+    settingsObj.loadYellow = document.getElementById('setLoadYellow').value;
+    settingsObj.txtYellow = document.getElementById('setTxtYellow').value;
+    settingsObj.txtRed = document.getElementById('setTxtRed').value;
+    settingsObj.banksList = document.getElementById('settingBanks').value;
+    settingsObj.sourcesList = document.getElementById('settingSources').value;
+
+    // 3. Отправляем
     saveToCloud('settings', settingsObj);
     
-    alert("✅ Все настройки (включая интерфейс) сохранены в Облако!");
+    document.getElementById('settingsModal').style.display='none';
+    alert("✅ Все настройки (включая режим калькулятора) сохранены в Облако!");
 }
      // --- НОВАЯ ФУНКЦИЯ: ПРИМЕНЕНИЕ НАСТРОЕК ИЗ ОБЛАКА ---
 function applySettingsFromCloud(s) {
@@ -15198,6 +15215,15 @@ function applySettingsFromCloud(s) {
     if (s.bank) localStorage.setItem('cakeFinBank', s.bank);
     if (s.overhead) localStorage.setItem('cakeFinOverhead', s.overhead);
     loadFinance(); // Обновляем переменные в памяти
+  // --- НОВОЕ: ПРИМЕНЯЕМ РЕЖИМ КАЛЬКУЛЯТОРА ---
+    if (s.calcMode) {
+        // Находим радио-кнопку с нужным значением (auto или fixed)
+        const radio = document.querySelector(`input[name="calcMode"][value="${s.calcMode}"]`);
+        if (radio) {
+            radio.checked = true;
+            // Если мы уже что-то считали, можно обновить расчет, но при старте это не обязательно
+        }
+    }
 
     // 3. Загруженность
     if (s.loadGreen) localStorage.setItem('cakeLoadGreen', s.loadGreen);
@@ -15218,10 +15244,15 @@ function applySettingsFromCloud(s) {
 }
 
 function toggleCalcMode() {
-    // Просто пересчитываем (если уже есть расчет на экране)
+    // 1. Пересчитываем (если уже есть расчет на экране)
     if (appState.results[appState.activeSide]) {
         calculateSide(appState.activeSide);
     }
+
+    // 2. Сохраняем выбор в Облако (тихо, без уведомлений)
+    // Мы используем helper, чтобы сохранить и остальные настройки тоже (не стереть их)
+    const settings = collectAllSettings();
+    saveToCloud('settings', settings);
 }
 
   // --- 📅 ПОЛНОЦЕННЫЙ КАЛЕНДАРЬ ---
@@ -15397,6 +15428,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
