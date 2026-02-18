@@ -13470,73 +13470,123 @@ if (data.settings) {
   
 
 // --- ИНИЦИАЛИЗАЦИЯ ПЕРСОНАЛЬНОЙ БАЗЫ ---
+// --- ИНИЦИАЛИЗАЦИЯ ПЕРСОНАЛЬНОЙ БАЗЫ (ЗАЩИЩЕННАЯ ВЕРСИЯ) ---
 function initializeApp() {
-    const statusDiv = document.createElement('div');
-    statusDiv.style.cssText = "position:fixed; bottom:10px; left:10px; font-size:11px; color:#444; z-index:9999; background:rgba(255,255,255,0.9); padding:4px 8px; border-radius:20px; box-shadow:0 2px 5px rgba(0,0,0,0.1); display:flex; align-items:center; gap:5px; font-weight:bold;";
-    statusDiv.id = "dbStatus";
-    statusDiv.innerText = "🔌 Подключение к облаку...";
-    document.body.appendChild(statusDiv);
-      setTimeout(() => {
+    // 1. Создаем индикатор (с проверкой, чтобы не дублировать)
+    let statusDiv = document.getElementById('dbStatus');
+    if (!statusDiv) {
+        statusDiv = document.createElement('div');
+        statusDiv.style.cssText = "position:fixed; bottom:10px; left:10px; font-size:11px; color:#444; z-index:9999; background:rgba(255,255,255,0.9); padding:4px 8px; border-radius:20px; box-shadow:0 2px 5px rgba(0,0,0,0.1); display:flex; align-items:center; gap:5px; font-weight:bold;";
+        statusDiv.id = "dbStatus";
+        document.body.appendChild(statusDiv);
+    }
+    statusDiv.innerHTML = "🔌 Подключение к облаку...";
+
+    // 2. Страховка: Если загрузка висит больше 15 секунд — убираем её
+    setTimeout(() => {
         const loader = document.getElementById('loadingOverlay');
         if (loader && loader.style.display !== 'none') {
-            console.warn("Загрузка затянулась, принудительное скрытие");
+            console.warn("Загрузка затянулась (страховка)");
             loader.style.display = 'none';
-            alert("Загрузка заняла слишком много времени. Проверьте интернет, но вы можете продолжать работу.");
         }
     }, 15000);
 
+    // 3. Подключаемся к базе
     google.script.run.withSuccessHandler(function(res) {
         if (res.success) {
             USER_DB_ID = res.id;
-            document.getElementById('dbStatus').innerHTML = "⏳ Загрузка данных...";
+            statusDiv.innerHTML = "⏳ Загрузка данных...";
             
-            // Загружаем данные из таблицы
+            // 4. Загружаем данные
             google.script.run.withSuccessHandler(function(data) {
-                if(data.ingredients) { myIngredients = data.ingredients; localStorage.setItem('myCakeIngredients', JSON.stringify(myIngredients)); updateUI(); }
-                if(data.recipes) { myRecipes = data.recipes; localStorage.setItem('myCakeRecipes', JSON.stringify(myRecipes)); renderRecipesList(); }
-                if(data.labor) { myLaborServices = data.labor; localStorage.setItem('myCakeLabor', JSON.stringify(myLaborServices)); renderLaborTable(); }
-                if(data.queue) { productionQueue = data.queue; localStorage.setItem('cakeProductionQueue', JSON.stringify(productionQueue)); renderQueue(); updateQueueBadge(); }
-                if(data.clients) { clientsDataLocal = data.clients; localStorage.setItem('cachedClients', JSON.stringify(clientsDataLocal)); renderClientsCloud(); }
-                if(data.archive) { archiveOrders = data.archive; }
-                if(data.history_stock) { stockHistory = data.history_stock; }
-                // Настройки
-               if(data.settings) {
-    applySettingsFromCloud(data.settings); // <--- Одна строка делает всё!
-}
+                
+                // ВАЖНО: Сразу говорим "Готово", чтобы интерфейс не завис
+                statusDiv.innerHTML = "🟢 Облако активно";
+                statusDiv.style.color = "#2E7D32";
+                
+                // Если есть лоадер - скрываем его сейчас
+                const loader = document.getElementById('loadingOverlay');
+                if(loader) loader.style.display = 'none';
 
-                document.getElementById('dbStatus').innerHTML = "🟢 Облако активно";
+                console.log("📦 Данные получены, начинаем безопасную обработку...");
+
+                // 5. БЕЗОПАСНАЯ ОБРАБОТКА (try-catch)
+                // Если сломаются рецепты, склад всё равно загрузится!
+                
+                try {
+                    if (data.ingredients) { 
+                        myIngredients = data.ingredients; 
+                        localStorage.setItem('myCakeIngredients', JSON.stringify(myIngredients)); 
+                        updateUI(); 
+                    }
+                } catch(e) { console.error("Ошибка Ингредиентов:", e); }
+
+                try {
+                    if (data.recipes) { 
+                        myRecipes = data.recipes; 
+                        localStorage.setItem('myCakeRecipes', JSON.stringify(myRecipes)); 
+                        renderRecipesList(); 
+                    }
+                } catch(e) { console.error("Ошибка Рецептов:", e); }
+
+                try {
+                    if (data.labor) { 
+                        myLaborServices = data.labor; 
+                        localStorage.setItem('myCakeLabor', JSON.stringify(myLaborServices)); 
+                        renderLaborTable(); 
+                    }
+                } catch(e) { console.error("Ошибка Работ:", e); }
+
+                try {
+                    if (data.queue) { 
+                        productionQueue = data.queue; 
+                        localStorage.setItem('cakeProductionQueue', JSON.stringify(productionQueue)); 
+                        renderQueue(); 
+                        updateQueueBadge(); 
+                    }
+                } catch(e) { console.error("Ошибка Плана:", e); }
+
+                try {
+                    if (data.clients) { 
+                        clientsDataLocal = data.clients; 
+                        localStorage.setItem('cachedClients', JSON.stringify(clientsDataLocal)); 
+                        renderClientsCloud(); 
+                    }
+                } catch(e) { console.error("Ошибка Клиентов:", e); }
+
+                try {
+                    if (data.archive) archiveOrders = data.archive;
+                    if (data.history_stock) stockHistory = data.history_stock;
+                    // Исправленный вызов настроек
+                    if (data.settings) applySettingsFromCloud(data.settings);
+                } catch(e) { console.error("Ошибка Настроек/Архива:", e); }
+
             }).apiLoadAllData();
 
         } else {
-            // Если ошибка "Email missing", просто молчим (пользователь еще не вошел)
             if (res.error === "Email missing") return;
-            
             alert('Ошибка подключения БД: ' + res.error);
-            document.getElementById('dbStatus').innerHTML = "🔴 Ошибка облака";
-            document.getElementById('dbStatus').style.color = "red";
+            statusDiv.innerHTML = "🔴 Ошибка облака";
+            statusDiv.style.color = "red";
         }
     }).apiInitDatabase();
-    
-    // --- МОНИТОРИНГ ОФФЛАЙН РЕЖИМА ---
-    function updateOnlineStatus() {
-        const statusEl = document.getElementById('dbStatus');
-        if (!statusEl) return;
-        
+
+    // 6. Мониторинг сети
+    const updateStatus = () => {
         if (navigator.onLine) {
-            const dbId = typeof USER_DB_ID !== 'undefined' && USER_DB_ID ? "🟢" : "⏳";
-            statusEl.innerHTML = `${dbId} В сети`;
-            statusEl.style.color = "#2E7D32";
+             // Если ID базы есть - значит мы подключены
+             if(typeof USER_DB_ID !== 'undefined' && USER_DB_ID) {
+                 statusDiv.innerHTML = "🟢 В сети"; 
+                 statusDiv.style.color = "#2E7D32";
+             }
         } else {
-            statusEl.innerHTML = `⚠️ Оффлайн (сохранение в память)`;
-            statusEl.style.color = "#d32f2f";
+            statusDiv.innerHTML = "⚠️ Оффлайн"; 
+            statusDiv.style.color = "red";
         }
-    }
-
-    window.addEventListener('online',  updateOnlineStatus);
-    window.addEventListener('offline', updateOnlineStatus);
-    updateOnlineStatus();
+    };
+    window.addEventListener('online', updateStatus);
+    window.addEventListener('offline', updateStatus);
 }
-
 // --- МОБИЛЬНАЯ АДАПТАЦИЯ (АВТОМАТИЧЕСКАЯ) ---
 // --- МОБИЛЬНАЯ АДАПТАЦИЯ (ГЛОБАЛЬНАЯ) ---
 document.addEventListener('focusin', function(e) {
@@ -15660,6 +15710,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
