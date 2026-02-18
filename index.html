@@ -250,42 +250,70 @@
         }
     }
 
- 
+ // 2. Загрузка всех данных (Чтение ячеек A1 со всех листов)
+  // 2. Загрузка всех данных (С чтением чанков)
+async function apiLoadAllDataImpl() {
+    if (!USER_DB_ID) return {};
+    const sheets = ['ingredients', 'recipes', 'labor', 'queue', 'settings', 'clients', 'archive', 'history_stock'];
+    
+    // Читаем не просто A1, а весь столбец A (A:A)
+    const ranges = sheets.map(s => `${s}!A:A`);
+    
+    try {
+        const response = await gapi.client.sheets.spreadsheets.values.batchGet({
+            spreadsheetId: USER_DB_ID,
+            ranges: ranges
+        });
+        
+        const result = {};
+        const valueRanges = response.result.valueRanges;
+        
+        valueRanges.forEach((range, index) => {
+            const sheetName = sheets[index];
+            // Если данные есть
+            if (range.values && range.values.length > 0) {
+                try {
+                    // Склеиваем все ячейки столбца A в одну строку
+                    const fullJson = range.values.map(row => row[0]).join('');
+                    result[sheetName] = JSON.parse(fullJson);
+                } catch(parseErr) {
+                    console.warn("Ошибка парсинга листа:", sheetName);
+                }
+            }
+        });
+        return result;
+    } catch (e) {
+        console.error("Ошибка загрузки:", e);
+        return {};
+    }
+}
 
-    // 3. Сохранение данных
-// 3. Сохранение данных (С защитой от ошибок и разбивкой на части)
-// 3. Сохранение данных (С ЗАЩИТОЙ ОТ ПЕРЕПОЛНЕНИЯ)
+
+        // 3. Сохранение данных
+    // 3. Сохранение данных (С разбиением на чанки по 50к символов)
 async function apiSaveDataImpl(sheetName, data) {
-    // 1. Проверка ID базы
     if (!USER_DB_ID) return false;
     
-    // 2. Проверка библиотеки
-    if (typeof gapi === 'undefined' || !gapi.client || !gapi.client.sheets) {
-        console.warn("⚠️ API Google Sheets еще не загрузился.");
-        return false; 
-    }
-
     try {
         // Превращаем данные в строку
         const jsonString = JSON.stringify(data);
         
-        // --- ИСПРАВЛЕНИЕ ТУТ ---
-        // Было 49000. Ставим 20000, чтобы русские буквы точно влезали в лимит Google.
-        const CHUNK_SIZE = 20000; 
+        // Лимит Google Sheets на ячейку ~50000 символов
+        const CHUNK_SIZE = 49000; 
         const chunks = [];
         
-        // Режем строку на безопасные куски
+        // Режем строку на куски
         for (let i = 0; i < jsonString.length; i += CHUNK_SIZE) {
             chunks.push([jsonString.substring(i, i + CHUNK_SIZE)]);
         }
 
-        // Очищаем колонку A перед записью
+        // Очищаем колонку A перед записью (чтобы не осталось хвостов от старых данных)
         await gapi.client.sheets.spreadsheets.values.clear({
             spreadsheetId: USER_DB_ID,
             range: `${sheetName}!A:A`
         });
 
-        // Записываем куски столбиком (A1, A2, A3...)
+        // Записываем куски в столбик (A1, A2, A3...)
         await gapi.client.sheets.spreadsheets.values.update({
             spreadsheetId: USER_DB_ID,
             range: `${sheetName}!A1`,
@@ -297,11 +325,10 @@ async function apiSaveDataImpl(sheetName, data) {
         return true;
     } catch (e) {
         console.error("Ошибка сохранения:", e);
-        // Выводим ошибку пользователю, если это не автосейв
-        if (sheetName !== 'settings') alert("⚠️ Ошибка сохранения в облако: " + e.message);
         return false;
     }
 }
+
       // --- 5. РАБОТА С ФОТОГРАФИЯМИ (GOOGLE DRIVE) ---
 
 // А. Найти или создать папку для фото
@@ -1244,47 +1271,9 @@ class CakeVisualizer {
   }
 }
 
- // --- ЭТОЙ ФУНКЦИИ НЕ ХВАТАЛО ---
- // 2. Умная загрузка всех данных (собирает куски из колонки A)
-async function apiLoadAllDataImpl() {
-    if (!USER_DB_ID) return {};
-    const sheets = ['ingredients', 'recipes', 'labor', 'queue', 'settings', 'clients', 'archive', 'history_stock'];
-    const ranges = sheets.map(s => `${s}!A:A`); // Читаем весь столбец A
-    
-    try {
-        const response = await gapi.client.sheets.spreadsheets.values.batchGet({
-            spreadsheetId: USER_DB_ID,
-            ranges: ranges
-        });
-        
-        const result = {};
-        const valueRanges = response.result.valueRanges;
-        
-        if (valueRanges) {
-            valueRanges.forEach((range, index) => {
-                const sheetName = sheets[index];
-                if (range.values && range.values.length > 0) {
-                    try {
-                        // Склеиваем ячейки A1, A2, A3... в одну строку JSON
-                        const fullJsonString = range.values.map(row => row[0] || "").join("");
-                        result[sheetName] = JSON.parse(fullJsonString);
-                    } catch(parseErr) {
-                        console.warn("Ошибка парсинга листа:", sheetName);
-                    }
-                }
-            });
-        }
-        return result;
-    } catch (e) {
-        console.error("Ошибка загрузки:", e);
-        return {};
-    }
-}
 
-  // ============================================
-// 🔌 ADAPTER (СТАРАЯ НАДЕЖНАЯ ВЕРСИЯ)
-// ============================================
-const runAdapter = {
+ Этот код перехватывает вызовы google.script.run и направляет их в наши новые функции
+  const runAdapter = {
     _cb: null,
     _fail: null,
     
@@ -1297,6 +1286,7 @@ const runAdapter = {
         return this;
     },
     
+    // Перехват функций
     apiInitDatabase: async function() {
         const res = await apiInitDatabaseImpl();
         if(this._cb) this._cb(res);
@@ -1306,23 +1296,20 @@ const runAdapter = {
         if(this._cb) this._cb(res);
     },
     apiSaveData: async function(node, data) {
+        // Сохранение асинхронное, UI обычно не ждет ответа, но мы вернем true
         const res = await apiSaveDataImpl(node, data);
         if(this._cb) this._cb(res); 
     },
     apiCalculateOrder: function(data) {
+        // Расчет теперь мгновенный (синхронный)
         const res = apiCalculateOrderImpl(data);
-        // ВАЖНО: всегда возвращаем результат в успех, 
-        // так как логика внутри приложения сама проверяет res.success
         if(this._cb) this._cb(res);
     }
-};
+  };
 
-// Подменяем объект google.script.run
-window.google = { 
-    script: { 
-        run: runAdapter 
-    } 
-};
+  // Подменяем объект google.script.run
+  window.google = { script: { run: runAdapter } };
+
 
 
   
@@ -15584,6 +15571,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
