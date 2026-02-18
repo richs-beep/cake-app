@@ -3131,9 +3131,10 @@ body {
 }
 
 /* Индикаторы загрузки */
-.cal-load-green { background-color: #E8F5E9; border-color: #C8E6C9; }
-.cal-load-yellow { background-color: #FFF3E0; border-color: #FFE0B2; }
-.cal-load-red { background-color: #FFEBEE; border-color: #FFCDD2; }
+/* Индикаторы загрузки для календаря */
+.cal-load-green { background-color: #C8E6C9 !important; border-color: #81C784 !important; }
+.cal-load-yellow { background-color: #FFE0B2 !important; border-color: #FFB74D !important; }
+.cal-load-red { background-color: #FFCDD2 !important; border-color: #E57373 !important; }
 
 /* Точки заказов внутри ячейки */
 .cal-dots {
@@ -15339,6 +15340,7 @@ function selectCalendarDate(dateStr) {
 }
 
                                                   // Функция, которая создает окно календаря, если его нет в HTML
+// Функция, которая создает окно календаря, если его нет в HTML
 function createCalendarModalHTML() {
     // Если окно уже есть — ничего не делаем
     if (document.getElementById('calendarModal')) return;
@@ -15368,9 +15370,15 @@ function createCalendarModalHTML() {
             <div id="calendarGrid" class="calendar-grid"></div>
             
             <div style="margin-top:15px; font-size:11px; color:#666; display:flex; gap:10px; justify-content:center;">
-                <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#E8F5E9; border:1px solid #ccc;"></span> Свободно</span>
-                <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#FFF3E0; border:1px solid #ccc;"></span> Плотно</span>
-                <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#FFEBEE; border:1px solid #ccc;"></span> Перегруз</span>
+                <span style="display:flex; align-items:center; gap:4px;">
+                    <span style="display:inline-block; width:12px; height:12px; background:#C8E6C9; border:1px solid #4CAF50; border-radius:2px;"></span> Свободно
+                </span>
+                <span style="display:flex; align-items:center; gap:4px;">
+                    <span style="display:inline-block; width:12px; height:12px; background:#FFE0B2; border:1px solid #FF9800; border-radius:2px;"></span> Плотно
+                </span>
+                <span style="display:flex; align-items:center; gap:4px;">
+                    <span style="display:inline-block; width:12px; height:12px; background:#FFCDD2; border:1px solid #F44336; border-radius:2px;"></span> Перегруз
+                </span>
             </div>
         </div>
     `;
@@ -15389,6 +15397,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
