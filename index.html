@@ -1272,10 +1272,14 @@ class CakeVisualizer {
 }
 
 
- const runAdapter = {
+ // ============================================
+// 🔌 ADAPTER (ФИНАЛЬНАЯ ВЕРСИЯ С ОЧИСТКОЙ)
+// ============================================
+const runAdapter = {
     _cb: null,
     _fail: null,
     
+    // Методы регистрации обработчиков
     withSuccessHandler: function(cb) {
         this._cb = cb;
         return this;
@@ -1285,31 +1289,44 @@ class CakeVisualizer {
         return this;
     },
     
-    // Перехват функций
+    // Функции API
     apiInitDatabase: async function() {
         const res = await apiInitDatabaseImpl();
-        if(this._cb) this._cb(res);
+        this._finish(res);
     },
     apiLoadAllData: async function() {
         const res = await apiLoadAllDataImpl();
-        if(this._cb) this._cb(res);
+        this._finish(res);
     },
     apiSaveData: async function(node, data) {
-        // Сохранение асинхронное, UI обычно не ждет ответа, но мы вернем true
         const res = await apiSaveDataImpl(node, data);
-        if(this._cb) this._cb(res); 
+        this._finish(res); 
     },
     apiCalculateOrder: function(data) {
-        // Расчет теперь мгновенный (синхронный)
         const res = apiCalculateOrderImpl(data);
-        if(this._cb) this._cb(res);
+        this._finish(res);
+    },
+
+    // Внутренний метод завершения: вызывает колбэк и СРАЗУ ЗАБЫВАЕТ ЕГО
+    _finish: function(res) {
+        if (this._cb) {
+            this._cb(res);
+            this._cb = null; // <--- ОЧИСТКА ПАМЯТИ
+        }
+        if (this._fail) this._fail = null;
     }
-  };
+};
 
-  // Подменяем объект google.script.run
-  window.google = { script: { run: runAdapter } };
-
-
+// Подменяем объект google.script.run с автоматическим сбросом
+Object.defineProperty(window.google.script, 'run', {
+    get: function() {
+        // Каждый раз, когда код пишет "google.script.run",
+        // мы сбрасываем старые обработчики, чтобы они не всплывали в ненужный момент.
+        runAdapter._cb = null;
+        runAdapter._fail = null;
+        return runAdapter;
+    }
+});
 
   
 
@@ -15570,6 +15587,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
