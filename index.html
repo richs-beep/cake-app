@@ -1274,99 +1274,84 @@ class CakeVisualizer {
 
 
 // ============================================
-// 🔌 ADAPTER (ФИНАЛЬНАЯ ВЕРСИЯ: SAFE & CLEAN)
-// ============================================
-const runAdapter = {
-    _cb: null,
-    _fail: null,
+    // 🔌 ADAPTER (FIXED: ПОДДЕРЖКА МНОГОПОТОЧНОСТИ)
+    // ============================================
     
-    // Методы регистрации обработчиков (возвращают this для цепочки)
-    withSuccessHandler: function(cb) {
-        this._cb = cb;
-        return this;
-    },
-    withFailureHandler: function(cb) {
-        this._fail = cb;
-        return this;
-    },
-    
-    // Функции API (прямые вызовы локальных функций)
-    apiInitDatabase: async function() {
-        // Здесь мы не используем _finish сразу, так как init может вернуть ошибку
-        // и нам нужно обработать её через failCb, если она есть
-        const res = await apiInitDatabaseImpl();
-        this._finish(res);
-    },
-    apiLoadAllData: async function() {
-        const res = await apiLoadAllDataImpl();
-        this._finish(res);
-    },
-    apiSaveData: async function(node, data) {
-        const res = await apiSaveDataImpl(node, data);
-        this._finish(res); 
-    },
-    apiCalculateOrder: function(data) {
-        const res = apiCalculateOrderImpl(data);
-        this._finish(res);
-    },
+    // Класс-бегун, который создается заново для каждого вызова
+    class GoogleScriptRunner {
+        constructor() {
+            this._cb = null;
+            this._fail = null;
+        }
 
-    // Внутренний метод завершения: вызывает колбэк и СРАЗУ ЗАБЫВАЕТ ЕГО
-    // Это решает проблему "призрака" старого запроса
-    _finish: function(res) {
-        // Если это успех
-        if (res && (res.success === undefined || res.success === true)) {
-            if (this._cb) {
-                this._cb(res);
-                this._cb = null; // Очистка
+        // Регистрируем успех
+        withSuccessHandler(cb) {
+            this._cb = cb;
+            return this;
+        }
+
+        // Регистрируем ошибку
+        withFailureHandler(cb) {
+            this._fail = cb;
+            return this;
+        }
+
+        // Внутренний метод выполнения
+        async _execute(promise) {
+            try {
+                const res = await promise;
+                
+                // Логика обработки ответа
+                if (res && (res.success === undefined || res.success === true)) {
+                    if (this._cb) this._cb(res);
+                } 
+                else if (res && res.success === false) {
+                    if (this._fail) this._fail(res.error);
+                    else console.error("API Error:", res.error);
+                }
+            } catch (e) {
+                if (this._fail) this._fail(e);
+                else console.error("System Error:", e);
             }
-        } 
-        // Если это ошибка (структура {success: false, error: ...})
-        else if (res && res.success === false) {
-             if (this._fail) {
-                this._fail(res.error);
-                this._fail = null; // Очистка
-             } else {
-                 // Если обработчика ошибок нет, но есть ошибка - кидаем в консоль
-                 console.error("API Error:", res.error);
-                 // Можно и в успех передать, если приложение так привыкло, 
-                 // но лучше разделить. В вашем createRunner всё шло в _cb.
-                 // Для совместимости с вашим текущим кодом:
-                 if (this._cb) { this._cb(res); this._cb = null; }
-             }
+        }
+
+        // --- МЕТОДЫ API ---
+        apiInitDatabase() { 
+            this._execute(apiInitDatabaseImpl()); 
         }
         
-        // Страховочная очистка
-        this._cb = null;
-        this._fail = null;
+        apiLoadAllData() { 
+            this._execute(apiLoadAllDataImpl()); 
+        }
+        
+        apiSaveData(node, data) { 
+            this._execute(apiSaveDataImpl(node, data)); 
+        }
+        
+        apiCalculateOrder(data) { 
+            // Оборачиваем синхронную функцию в Promise для совместимости
+            this._execute(Promise.resolve(apiCalculateOrderImpl(data))); 
+        }
     }
-};
 
-// --- БЕЗОПАСНАЯ ИНИЦИАЛИЗАЦИЯ GOOGLE SCRIPT MOCK ---
+    // --- БЕЗОПАСНАЯ ИНИЦИАЛИЗАЦИЯ ---
+    if (!window.google) window.google = {};
+    if (!window.google.script) window.google.script = {};
 
-// 1. Создаем namespace, если его нет (чтобы не сломать Google Sign-In)
-if (!window.google) window.google = {};
-
-// 2. Создаем script, если его нет
-if (!window.google.script) window.google.script = {};
-
-// 3. Внедряем 'run' с геттером (каждый раз при обращении выдает чистый адаптер)
-// Используем try-catch на случай конфликтов
-try {
-    Object.defineProperty(window.google.script, 'run', {
-        get: function() {
-            // Сбрасываем "хвосты" перед новым вызовом
-            runAdapter._cb = null;
-            runAdapter._fail = null;
-            return runAdapter;
-        },
-        configurable: true
-    });
-} catch (e) {
-    // Фолбек для старых браузеров (простое присваивание)
-    window.google.script.run = runAdapter;
-}
-  
-
+    // Переопределяем .run так, чтобы он всегда возвращал НОВЫЙ объект
+    // Это и решает проблему зависания!
+    try {
+        Object.defineProperty(window.google.script, 'run', {
+            get: function() {
+                return new GoogleScriptRunner(); 
+            },
+            configurable: true
+        });
+    } catch (e) {
+        console.warn("Не удалось переопределить google.script.run, возможно конфликт.");
+        // Фолбек не нужен, если мы не в Apps Script среде, 
+        // а в браузере этот код и так сработает.
+    }
       
       </script>
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7888,6 +7873,8 @@ async function confirmAddToQueueWithClient() {
     saveQueue();
     localStorage.setItem('cachedClients', JSON.stringify(clientsDataLocal));
     saveToCloud('clients', clientsDataLocal);
+  // 🔥 ДОБАВЬТЕ ВОТ ЭТУ СТРОКУ (Сохраняем заказы в облако МГНОВЕННО)
+    google.script.run.apiSaveData('queue', productionQueue);
     performAutoSave();
 
     document.getElementById('orderFinalizeModal').style.display = 'none';
@@ -15710,6 +15697,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
