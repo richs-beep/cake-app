@@ -7933,7 +7933,6 @@ function clearOrderImage() {
 }
 
 
-// --- 2. ПРОСМОТР ФОТО (УМНЫЙ: ИЩЕТ ВЕЗДЕ) ---
 // --- 2. ПРОСМОТР ФОТО (УМНЫЙ: С ПРОВЕРКОЙ ВЕРСИИ) ---
 async function viewOrderRef(orderId) {
     // 1. Сначала ищем в ПЛАНЕ (Активные)
@@ -8026,7 +8025,6 @@ async function viewOrderRef(orderId) {
         alert("⚠️ Фото еще не загружено или ссылка устарела.");
     }
 }
-
 // 4. ФУНКЦИЯ ПЕРЕСЧЕТА ОБЩЕЙ СУММЫ (Безопасная)
 function recalculateClientTotal(clientId) {
     db.ref(`clients/${clientId}/history`).once('value', (snapshot) => {
@@ -15590,6 +15588,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
