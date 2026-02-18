@@ -908,18 +908,36 @@ _calculateSingleTier(tierInput, isBottom) {
           this.totalCost += blockCost;
       });
   }
-  _processExtras(extras) {
+ _processExtras(extras) {
       let exCost = 0;
       let exIngs = [];
       extras.forEach(ex => {
+          // Ищем товар в базе (чтобы знать название и категорию)
           const item = this.ingredients.find(i => i.id === ex.id);
-          if (item) {
-             const cost = ex.amount * (item.packPrice / item.packWeight);
-             this._addToShoppingList(item, ex.amount, cost);
-             exCost += cost;
-             exIngs.push({name: item.name, amount: ex.amount, unit: item.unit, cost: Math.ceil(cost)});
+          let cost = 0;
+
+          // Если цена задана вручную (через поле ввода), берем её
+          if (ex.customCost !== undefined) {
+              cost = ex.customCost;
+          } 
+          // Иначе считаем по формуле (вес * цена за единицу)
+          else if (item) {
+              cost = ex.amount * (item.packPrice / item.packWeight);
           }
+
+          // Добавляем в общий список покупок (если это не услуга)
+          // Услуги (service) не добавляем в шопинг лист, чтобы не портить КБЖУ и вес
+          if (item && item.category !== 'service') {
+               this._addToShoppingList(item, ex.amount, cost);
+          }
+
+          exCost += cost;
+          // Добавляем в список для отображения в чеке
+          const name = item ? item.name : ex.name;
+          const unit = item ? item.unit : ex.unit;
+          exIngs.push({name: name, amount: ex.amount, unit: unit, cost: Math.ceil(cost)});
       });
+
       this.detailedBlocks.push({
           name: "📦 Декор и Упаковка", type: 'extra', ingredients: exIngs, totalCost: Math.ceil(exCost)
       });
@@ -3690,7 +3708,8 @@ body {
     <div style="background:white; padding:4px; border-radius:6px; border:1px solid #ddd; display:flex; gap:5px;">
         <button class="shelf-btn active" onclick="setStockShelf('all', this)" style="border:none; background:#eee; border-radius:4px; padding:5px 10px; cursor:pointer; font-weight:bold;">Все</button>
         <button class="shelf-btn" onclick="setStockShelf('food', this)" style="border:none; background:white; border-radius:4px; padding:5px 10px; cursor:pointer;">🍎 Продукты</button>
-        <button class="shelf-btn" onclick="setStockShelf('pack', this)" style="border:none; background:white; border-radius:4px; padding:5px 10px; cursor:pointer;">📦 Упак/Декор</button>
+        <button class="shelf-btn" onclick="setStockShelf('pack', this)" style="border:none; background:white; border-radius:4px; padding:5px 10px; cursor:pointer;">📦 Упак</button>
+        <button class="shelf-btn" onclick="setStockShelf('service', this)" style="border:none; background:white; border-radius:4px; padding:5px 10px; cursor:pointer;">🚚 Услуги</button>
     </div>
     
     <div style="width:1px; height:20px; background:#ccc; margin:0 5px;"></div>
@@ -3738,6 +3757,7 @@ body {
             <select id="newIngCat" style="width:40px; padding:0;" title="Категория">
                 <option value="food">🍎</option>
                 <option value="pack">📦</option>
+              <option value="service">🚚</option>
             </select>
             <input id="newIngName" placeholder="Название" style="flex:1;">
         </td>
@@ -5799,21 +5819,27 @@ function renderStockTable() {
     list.forEach(wrapper => {
         const i = wrapper.data;
         const x = wrapper.originalIndex;
+        const isService = (i.category === 'service');
 
         const stockVal = i.stock || 0;
-        let stockStyle = 'font-weight:bold; text-align:center; width:80px;';
-        if (stockVal < 0) stockStyle += ' background:#ffebee; color:#d32f2f; border:1px solid #ef9a9a;';
-        else if (stockVal < (i.packWeight * 0.2)) stockStyle += ' background:#fffde7; color:#f57f17;'; 
-        else stockStyle += ' background:#e8f5e9; color:#2e7d32;';
-
-        const disabledAttr = isInventoryMode ? '' : 'disabled';
-        const opacityStyle = isInventoryMode ? '' : 'opacity:0.8; cursor:not-allowed;';
-        const isPack = (i.category === 'pack');
+        let stockStyle = 'font-weight:bold; text-align:center; width:80px; border-radius:4px;';
         
-        // --- НОВОЕ: Иконка авто-добавления ---
-        // Если isAutoAdd = true, то иконка яркая, иначе блеклая
+        // Цвета остатков (для обычных товаров)
+        if (stockVal < 0) stockStyle += ' background:#FFCDD2; color:#b71c1c; border:1px solid #E57373;';
+        else if (stockVal < (i.packWeight * 0.2)) stockStyle += ' background:#FFF9C4; color:#F57F17; border:1px solid #FBC02D;'; 
+        else stockStyle += ' background:#DCEDC8; color:#1B5E20; border:1px solid #8BC34A;';
+
+        // Если это Услуга - делаем серым и бесконечным
+        let stockDisplay = parseFloat(stockVal).toLocaleString('ru-RU');
+        if (isService) {
+            stockDisplay = "∞";
+            stockStyle = 'font-weight:bold; text-align:center; width:80px; background:#F5F5F5; color:#999; border:1px solid #ccc;';
+        }
+
+        const disabledAttr = (isInventoryMode && !isService) ? '' : 'disabled';
+        const opacityStyle = (isInventoryMode && !isService) ? '' : 'opacity:0.8; cursor:not-allowed;';
+        
         const autoIcon = i.isAutoAdd ? '⚡' : '⚪';
-        const autoTitle = i.isAutoAdd ? 'Убрать из авто-добавления' : 'Добавлять в каждый торт';
         const autoStyle = i.isAutoAdd ? 'opacity:1; transform:scale(1.2);' : 'opacity:0.3; filter:grayscale(100%);';
 
         tb.innerHTML += `<tr>
@@ -5821,8 +5847,9 @@ function renderStockTable() {
              <select onchange="updIng(${x}, 'category', this.value); renderStockTable();" 
                      style="font-size: 16px; border: none; background: transparent; cursor: pointer; width: 30px; padding: 0; appearance: none; -webkit-appearance: none; text-align: center;" 
                      title="Сменить полку">
-                 <option value="food" ${!isPack ? 'selected' : ''}>🍎</option>
-                 <option value="pack" ${isPack ? 'selected' : ''}>📦</option>
+                 <option value="food" ${i.category === 'food' || !i.category ? 'selected' : ''}>🍎</option>
+                 <option value="pack" ${i.category === 'pack' ? 'selected' : ''}>📦</option>
+                 <option value="service" ${i.category === 'service' ? 'selected' : ''}>🚚</option>
              </select>
              
              <input value="${i.name}" onchange="updIng(${x},'name',this.value)" style="flex: 1; min-width: 0;">
@@ -5860,16 +5887,15 @@ function renderStockTable() {
               ${(i.packPrice/i.packWeight).toLocaleString('ru-RU', {maximumFractionDigits: 1})}
           </td>
           
-          <td style="text-align:center;"> 
-            <input type="text" value="${parseFloat(stockVal).toLocaleString('ru-RU')}" 
+          <td style="text-align:center;">
+            <input type="text" value="${stockDisplay}" 
                    onchange="updIng(${x},'stock',this.value)" 
-                   /* Убрали text-align:right отсюда, чтобы цифра была по центру плашки */
                    style="${stockStyle} ${opacityStyle}" 
                    ${disabledAttr}>
           </td>
           
           <td style="text-align:center;">
-             <button onclick="toggleAutoAdd(${x})" title="${autoTitle}" 
+             <button onclick="toggleAutoAdd(${x})" title="Авто-добавление" 
                      style="background:none; border:none; cursor:pointer; font-size:16px; transition:0.2s; ${autoStyle}">
                  ${autoIcon}
              </button>
@@ -6631,23 +6657,26 @@ function addExtraItem() {
 }
 
       function removeExtraItem(i) { extrasList.splice(i,1); renderExtras(); }
-   function renderExtras() {
+function renderExtras() {
     saveToHistory();
     const c = document.getElementById('extrasContainer');
     c.innerHTML = '';
     
     const currency = SYMBOLS[currentCurrency] || '';
-    let totalClientSum = 0; // То, что платит клиент (галочки включены)
-    let totalRealCost = 0;  // Реальная себестоимость всего списка
+    let totalClientSum = 0; 
+    let totalRealCost = 0; 
 
     extrasList.forEach((item, i) => {
-        // Находим товар в базе, чтобы узнать актуальную цену
         const ing = myIngredients.find(x => x.id === item.id);
         
+        // --- ЛОГИКА ЦЕНЫ ---
+        // Если цена была изменена вручную (customCost), берем её.
+        // Если нет — считаем по базе (Кол-во * Цена базы).
         let cost = 0;
-        if (ing) {
-            // Считаем стоимость: (Кол-во * ЦенаПачки / ВесПачки)
-            cost = item.amount * (ing.packPrice / ing.packWeight);
+        if (item.customCost !== undefined) {
+             cost = item.customCost;
+        } else if (ing) {
+             cost = item.amount * (ing.packPrice / ing.packWeight);
         }
 
         totalRealCost += cost;
@@ -6655,26 +6684,31 @@ function addExtraItem() {
             totalClientSum += cost;
         }
 
-        // Оформление
         const paidChecked = item.isPaid ? 'checked' : '';
-        // Если выключено (бесплатно для клиента), делаем бледным
         const rowOpacity = item.isPaid ? '1' : '0.6';
-        const priceStyle = item.isPaid ? 'color:#2E7D32; font-weight:bold;' : 'color:#999; text-decoration:line-through;';
         
+        // Если цена введена вручную, подсвечиваем поле желтым
+        const manualStyle = item.customCost !== undefined ? 'background:#fff3e0; border-color:#ffb74d;' : 'border:1px solid #eee;';
+
         c.innerHTML += `
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e0e0e0; padding:6px 0; font-size:13px; opacity:${rowOpacity};">
             <div style="flex:1;">
                 ${item.name}
             </div>
             
-            <div style="display:flex; align-items:center; gap:10px;">
+            <div style="display:flex; align-items:center; gap:8px;">
                 <span style="font-size:12px;"><b>${item.amount}</b> ${item.unit}</span>
                 
-                <span style="min-width:60px; text-align:right; ${priceStyle}">
-                    ${Math.ceil(cost).toLocaleString('ru-RU')} ${currency}
-                </span>
+                <div style="position:relative; width:80px;">
+                    <input type="text" class="money-input" 
+                           value="${Math.ceil(cost).toLocaleString('ru-RU')}" 
+                           oninput="formatMoneyInput(this)"
+                           onchange="updateExtraCost(${i}, this.value)"
+                           style="width:100%; text-align:right; font-weight:bold; font-size:13px; padding:4px; border-radius:4px; color:${item.isPaid ? '#2E7D32' : '#999'}; ${manualStyle}">
+                </div>
+                <span style="font-size:10px; color:#999;">${currency}</span>
                 
-                <label title="Включить в счет клиента?" style="cursor:pointer; display:flex; align-items:center; background:#eee; padding:2px 5px; border-radius:4px;">
+                <label title="Включить в счет?" style="cursor:pointer; display:flex; align-items:center; background:#eee; padding:2px 5px; border-radius:4px;">
                     <input type="checkbox" ${paidChecked} onchange="toggleExtraPaid(${i})"> 
                     <span style="font-size:14px; margin-left:2px;">💰</span>
                 </label>
@@ -6684,7 +6718,6 @@ function addExtraItem() {
         </div>`;
     });
 
-    // Итоговая строка
     if (extrasList.length > 0) {
         c.innerHTML += `
         <div style="margin-top:10px; text-align:right; font-size:12px; padding-top:5px; border-top:2px solid #eee;">
@@ -6695,6 +6728,22 @@ function addExtraItem() {
         c.innerHTML = '<div style="text-align:center; color:#ccc; font-size:12px; padding:5px;">Список пуст</div>';
     }
 }
+
+function updateExtraCost(index, valueStr) {
+    // Убираем пробелы ("3 500" -> 3500)
+    const val = parseFloat(valueStr.replace(/\D/g, '')) || 0;
+    
+    // Записываем жесткую цену в объект
+    extrasList[index].customCost = val;
+    
+    // Сохраняем и пересчитываем
+    saveToHistory();
+    performAutoSave();
+    
+    // Если есть расчет, обновляем общую цену торта
+    if (appState.results[appState.activeSide]) calculateSide(appState.activeSide);
+}
+     
 // Новая функция переключения платности
 function toggleExtraPaid(idx) {
     extrasList[idx].isPaid = !extrasList[idx].isPaid;
@@ -11230,10 +11279,16 @@ async function confirmFinishOrder() {
         }
 
         // В. Списание со склада (оставляем старую логику)
+       
         if (order.data && order.data.shoppingList) {
             order.data.shoppingList.forEach(shopItem => {
+                // 1. Находим товар в базе
                 const ing = myIngredients.find(i => i.id === shopItem.id);
-                if (ing) {
+                
+                // --- ЗАМЕНИТЕ ВЕСЬ БЛОК НИЖЕ ---
+                
+                // Проверяем: товар найден И это НЕ "Услуга"
+                if (ing && ing.category !== 'service') {
                     const deduction = parseFloat(shopItem.amount);
                     ing.stock = (parseFloat(ing.stock) || 0) - deduction;
                     
@@ -11247,7 +11302,8 @@ async function confirmFinishOrder() {
                         comment: `Заказ: ${order.name}`
                     });
                 }
-            });
+                
+              });
         }
         saveIngs();
         saveToCloud('history_stock', stockHistory);
@@ -15475,6 +15531,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
