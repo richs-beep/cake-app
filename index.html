@@ -1283,8 +1283,12 @@ class CakeVisualizer {
             if(cb) cb(res);
         },
         apiSaveData: async function(node, data) {
-            const res = await apiSaveDataImpl(node, data);
-            if(cb) cb(res); 
+            try {
+                const res = await apiSaveDataImpl(node, data);
+                if(cb) cb(res); 
+            } catch (err) {
+                if(failCb) failCb(err);
+            }
         },
         apiCalculateOrder: function(data) {
             // ВАЖНОЕ ИСПРАВЛЕНИЕ:
@@ -1299,6 +1303,7 @@ class CakeVisualizer {
   }
 
   // --- 2. АДАПТЕР (СВЯЗЬ С ИНТЕРФЕЙСОМ) ---
+  // --- ГЛОБАЛЬНЫЙ ИСПРАВЛЕННЫЙ АДАПТЕР ---
   const runAdapter = {
       successCb: null,
       failureCb: null,
@@ -1311,33 +1316,39 @@ class CakeVisualizer {
           this.failureCb = cb;
           return this;
       },
-      // Проброс функций
-      apiInitDatabase: function() {
-          createRunner(this.successCb, this.failureCb).apiInitDatabase();
-      },
-      apiLoadAllData: function() {
-          createRunner(this.successCb, this.failureCb).apiLoadAllData();
-      },
-      apiSaveData: function(node, data) {
-          createRunner(this.successCb, this.failureCb).apiSaveData(node, data);
-      },
-      apiCalculateOrder: function(data) {
-          createRunner(this.successCb, this.failureCb).apiCalculateOrder(data);
+
+      // Универсальный вызывальщик функций
+      execute: function(functionName, args) {
+          const runner = createRunner(this.successCb, this.failureCb);
+          if (typeof runner[functionName] === 'function') {
+              // Вызываем функцию из createRunner и передаем аргументы
+              return runner[functionName](...args);
+          } else {
+              console.error("❌ Метод " + functionName + " не реализован в createRunner");
+              if (this.failureCb) this.failureCb("Метод не найден");
+          }
       }
   };
 
-  // --- 3. ПОДМЕНА GOOGLE SCRIPT RUN ---
+  // Прокси, который делает вид, что он google.script.run
   window.google = {
       script: {
           run: new Proxy(runAdapter, {
               get: function(target, prop) {
-                  if (target[prop]) return target[prop].bind(target);
-                  return target[prop];
+                  // Если вызываем обработчики - возвращаем их
+                  if (prop === 'withSuccessHandler' || prop === 'withFailureHandler') {
+                      return target[prop].bind(target);
+                  }
+                  
+                  // Для любой другой функции (apiSaveData, apiLoadAllData и т.д.)
+                  // возвращаем функцию, которая запустит execute
+                  return function(...args) {
+                      target.execute(prop, args);
+                  };
               }
           })
       }
   };
-
 
   // --- АДАПТЕР ДЛЯ ПОДМЕНЫ GOOGLE SCRIPT RUN ---
 const runnerProxy = {
@@ -15633,6 +15644,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
