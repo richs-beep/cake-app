@@ -254,15 +254,14 @@
 
     // 3. Сохранение данных
 // 3. Сохранение данных (С защитой от ошибок и разбивкой на части)
+// 3. Сохранение данных (С ЗАЩИТОЙ ОТ ПЕРЕПОЛНЕНИЯ)
 async function apiSaveDataImpl(sheetName, data) {
-    // 1. Проверка ID базы (если нет - выходим)
+    // 1. Проверка ID базы
     if (!USER_DB_ID) return false;
     
-    // 2. ГЛАВНАЯ ЗАЩИТА: Проверяем, готова ли библиотека Google Sheets
-    // Если gapi.client или gapi.client.sheets не существуют — просто выходим.
-    // Данные останутся в localStorage телефона, программа не сломается.
+    // 2. Проверка библиотеки
     if (typeof gapi === 'undefined' || !gapi.client || !gapi.client.sheets) {
-        console.warn("⚠️ API Google Sheets еще не загрузился. Сохранение в облако пропущено.");
+        console.warn("⚠️ API Google Sheets еще не загрузился.");
         return false; 
     }
 
@@ -270,22 +269,23 @@ async function apiSaveDataImpl(sheetName, data) {
         // Превращаем данные в строку
         const jsonString = JSON.stringify(data);
         
-        // Лимит Google Sheets на ячейку ~50000 символов
-        const CHUNK_SIZE = 49000; 
+        // --- ИСПРАВЛЕНИЕ ТУТ ---
+        // Было 49000. Ставим 20000, чтобы русские буквы точно влезали в лимит Google.
+        const CHUNK_SIZE = 20000; 
         const chunks = [];
         
-        // Режем строку на куски
+        // Режем строку на безопасные куски
         for (let i = 0; i < jsonString.length; i += CHUNK_SIZE) {
             chunks.push([jsonString.substring(i, i + CHUNK_SIZE)]);
         }
 
-        // Очищаем колонку A перед записью (чтобы не осталось хвостов от старых данных)
+        // Очищаем колонку A перед записью
         await gapi.client.sheets.spreadsheets.values.clear({
             spreadsheetId: USER_DB_ID,
             range: `${sheetName}!A:A`
         });
 
-        // Записываем куски в столбик (A1, A2, A3...)
+        // Записываем куски столбиком (A1, A2, A3...)
         await gapi.client.sheets.spreadsheets.values.update({
             spreadsheetId: USER_DB_ID,
             range: `${sheetName}!A1`,
@@ -297,6 +297,8 @@ async function apiSaveDataImpl(sheetName, data) {
         return true;
     } catch (e) {
         console.error("Ошибка сохранения:", e);
+        // Выводим ошибку пользователю, если это не автосейв
+        if (sheetName !== 'settings') alert("⚠️ Ошибка сохранения в облако: " + e.message);
         return false;
     }
 }
@@ -15505,6 +15507,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
