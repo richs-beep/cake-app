@@ -285,8 +285,15 @@
     // 3. Сохранение данных
     // 3. Сохранение данных (С разбиением на чанки по 50к символов)
 async function apiSaveDataImpl(sheetName, data) {
+    // 1. Проверка ID базы
     if (!USER_DB_ID) return false;
     
+    // 2. ЗАЩИТА: Проверяем, готова ли библиотека Google Sheets
+    if (!gapi.client || !gapi.client.sheets) {
+        console.warn("⚠️ API Google Sheets еще не готово. Сохранение в облако пропущено.");
+        return false; // Просто выходим, не ломая программу
+    }
+
     try {
         // Превращаем данные в строку
         const jsonString = JSON.stringify(data);
@@ -300,13 +307,13 @@ async function apiSaveDataImpl(sheetName, data) {
             chunks.push([jsonString.substring(i, i + CHUNK_SIZE)]);
         }
 
-        // Очищаем колонку A перед записью (чтобы не осталось хвостов от старых данных)
+        // Очищаем колонку A перед записью
         await gapi.client.sheets.spreadsheets.values.clear({
             spreadsheetId: USER_DB_ID,
             range: `${sheetName}!A:A`
         });
 
-        // Записываем куски в столбик (A1, A2, A3...)
+        // Записываем куски
         await gapi.client.sheets.spreadsheets.values.update({
             spreadsheetId: USER_DB_ID,
             range: `${sheetName}!A1`,
@@ -15267,6 +15274,41 @@ function openFullCalendar() {
     document.getElementById('calendarModal').style.display = 'flex';
 }
 
+          // --- ЛОГИКА СВАЙПА КАЛЕНДАРЯ ---
+let calSwipeStartX = 0;
+let calSwipeStartY = 0;
+
+function calTouchStart(e) {
+    // Запоминаем точку касания
+    calSwipeStartX = e.changedTouches[0].screenX;
+    calSwipeStartY = e.changedTouches[0].screenY;
+}
+
+function calTouchEnd(e) {
+    const endX = e.changedTouches[0].screenX;
+    const endY = e.changedTouches[0].screenY;
+    
+    // Считаем разницу
+    const diffX = endX - calSwipeStartX;
+    const diffY = endY - calSwipeStartY;
+
+    // 1. Проверяем, что это горизонтальный свайп, а не скролл
+    // (движение вбок должно быть сильнее, чем вверх-вниз)
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+        
+        // 2. Проверяем длину свайпа (чтобы не срабатывало от случайного дрожания)
+        if (Math.abs(diffX) > 50) { 
+            if (diffX < 0) {
+                // Свайп влево (палец идет <-) = Следующий месяц
+                changeCalendarMonth(1);
+            } else {
+                // Свайп вправо (палец идет ->) = Предыдущий месяц
+                changeCalendarMonth(-1);
+            }
+        }
+    }
+}
+
 function changeCalendarMonth(delta) {
     // Меняем месяц
     currentCalDate.setMonth(currentCalDate.getMonth() + delta);
@@ -15370,7 +15412,6 @@ function selectCalendarDate(dateStr) {
     // Это уже делает renderQueue, но на всякий случай можно добавить логику
 }
 
-                                                  // Функция, которая создает окно календаря, если его нет в HTML
 // Функция, которая создает окно календаря, если его нет в HTML
 function createCalendarModalHTML() {
     // Если окно уже есть — ничего не делаем
@@ -15379,8 +15420,13 @@ function createCalendarModalHTML() {
     const div = document.createElement('div');
     div.id = 'calendarModal';
     div.className = 'modal-overlay';
+    
+    // ВАЖНО: Добавлены ontouchstart и ontouchend в следующую строку
     div.innerHTML = `
-        <div class="modal-box" style="width: 600px; max-width: 98%;">
+        <div class="modal-box" style="width: 600px; max-width: 98%;" 
+             ontouchstart="calTouchStart(event)" 
+             ontouchend="calTouchEnd(event)">
+             
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                 <button class="tab-btn" onclick="changeCalendarMonth(-1)">◀</button>
                 <h3 id="calMonthTitle" style="margin:0; width:150px; text-align:center;"></h3>
@@ -15428,6 +15474,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
