@@ -1219,7 +1219,51 @@ class CakeVisualizer {
   }
 }
 
- 
+ // --- ЭТОЙ ФУНКЦИИ НЕ ХВАТАЛО ---
+   // 2. Загрузка всех данных из Гугл Таблицы
+   async function apiLoadAllDataImpl() {
+       // Если базы нет, возвращаем пустоту
+       if (!USER_DB_ID) return {};
+
+       // Список листов, которые мы читаем
+       const sheets = ['ingredients', 'recipes', 'labor', 'queue', 'settings', 'clients', 'archive', 'history_stock'];
+       
+       // Формируем запрос: читать ячейку A1 с каждого листа
+       const ranges = sheets.map(s => `${s}!A1`);
+
+       try {
+           // Запрос к Google API (batchGet - получить всё сразу)
+           const response = await gapi.client.sheets.spreadsheets.values.batchGet({
+               spreadsheetId: USER_DB_ID,
+               ranges: ranges
+           });
+
+           const result = {};
+           const valueRanges = response.result.valueRanges;
+
+           // Разбираем ответ
+           if (valueRanges) {
+               valueRanges.forEach((range, index) => {
+                   const sheetName = sheets[index];
+                   // Если в ячейке A1 что-то есть
+                   if (range.values && range.values[0] && range.values[0][0]) {
+                       try {
+                           // Пытаемся превратить текст из ячейки обратно в объект (JSON)
+                           result[sheetName] = JSON.parse(range.values[0][0]);
+                       } catch(parseErr) {
+                           console.warn("Ошибка чтения листа:", sheetName);
+                       }
+                   }
+               });
+           }
+           console.log("✅ Данные загружены из облака");
+           return result;
+
+       } catch (e) {
+           console.error("Ошибка загрузки:", e);
+           return {}; // Возвращаем пустой объект, чтобы приложение не упало
+       }
+   }
  
 
   function createRunner(cb, failCb) {
@@ -15543,6 +15587,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
