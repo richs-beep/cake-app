@@ -7316,6 +7316,7 @@ function clearQueue() {
         // Скрываем блок ведомости, если он был открыт
         const batchBlock = document.getElementById('batchResultBlock');
         if (batchBlock) batchBlock.style.display = 'none';
+     
     }
 }
 
@@ -7340,6 +7341,10 @@ function clearQueue() {
     
     saveQueue();
     updateQueueBadge();
+      renderQueue(); // <--- Не забудьте, что renderQueue тут тоже нужен, если его нет
+
+    // --- ВСТАВИТЬ СЮДА ---
+    document.getElementById('batchResultBlock').style.display = 'none';
 }
       // --- ДОБАВЛЕНИЕ В ПЛАН (С поддержкой многоярусности) ---
 
@@ -8453,11 +8458,32 @@ function generateBatchReport() {
         tasksHtml += '</ul>';
 
         // СПИСОК ИНГРЕДИЕНТОВ
+       // СПИСОК ИНГРЕДИЕНТОВ
         let ingsHtml = '<table style="width:100%; font-size:12px; border-collapse:collapse;">';
         Object.values(b.ingredients).forEach(ing => {
              let val = ing.amount;
              let valStr = (ing.unit === 'шт' || val > 10) ? Math.round(val) : val.toFixed(1);
-             ingsHtml += `<tr style="border-bottom:1px solid rgba(0,0,0,0.05);"><td style="padding:2px;">${ing.name}</td><td style="text-align:right; font-weight:bold;">${valStr} ${ing.unit}</td></tr>`;
+             
+             // --- ЛОГИКА ДЛЯ ЯИЦ (Пересчет в шт) ---
+             let extraInfo = "";
+             // Если единица "г", пробуем найти товар в базе по имени
+             if (ing.unit === 'г') {
+                 const dbItem = myIngredients.find(x => x.name === ing.name);
+                 // Если нашли и у него указан вес 1 шт (например, 55г)
+                 if (dbItem && dbItem.singleWeight > 0) {
+                     // Считаем шт
+                     const pcs = Math.round(val / dbItem.singleWeight);
+                     // Показываем, если это яйца или просто если шт > 0
+                     // Обычно это актуально именно для яиц, можно добавить проверку имени, 
+                     // но можно и для всего, у чего есть вес штуки (например, пряники на вес)
+                     if (dbItem.name.toLowerCase().includes('яйцо')) {
+                        extraInfo = ` <span style="color:#666; font-weight:normal; font-size:11px;">(~${pcs} шт)</span>`;
+                     }
+                 }
+             }
+             // --------------------------------------
+
+             ingsHtml += `<tr style="border-bottom:1px solid rgba(0,0,0,0.05);"><td style="padding:2px;">${ing.name}</td><td style="text-align:right; font-weight:bold;">${valStr} ${ing.unit}${extraInfo}</td></tr>`;
         });
         ingsHtml += '</table>';
 
@@ -11382,6 +11408,10 @@ async function confirmFinishOrder() {
         productionQueue.splice(orderIdx, 1);
         saveQueue();
         updateQueueBadge();
+      renderQueue(); // Обновляем список на экране
+
+        // --- ВСТАВИТЬ СЮДА ---
+        document.getElementById('batchResultBlock').style.display = 'none';
 
         document.getElementById('finishOrderModal').style.display = 'none';
         alert("✅ Заказ успешно перенесен в Архив!");
@@ -15575,6 +15605,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
