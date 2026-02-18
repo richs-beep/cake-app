@@ -250,37 +250,7 @@
         }
     }
 
-    // 2. Загрузка всех данных
-    async function apiLoadAllDataImpl() {
-        if (!USER_DB_ID) return {};
-        const sheets = ['ingredients', 'recipes', 'labor', 'queue', 'settings', 'clients', 'archive', 'history_stock'];
-        const ranges = sheets.map(s => `${s}!A1`);
-        
-        try {
-            const response = await gapi.client.sheets.spreadsheets.values.batchGet({
-                spreadsheetId: USER_DB_ID,
-                ranges: ranges
-            });
-            
-            const result = {};
-            const valueRanges = response.result.valueRanges;
-            
-            valueRanges.forEach((range, index) => {
-                const sheetName = sheets[index];
-                if (range.values && range.values[0] && range.values[0][0]) {
-                    try {
-                        result[sheetName] = JSON.parse(range.values[0][0]);
-                    } catch(parseErr) {
-                        console.warn("Ошибка парсинга листа:", sheetName);
-                    }
-                }
-            });
-            return result;
-        } catch (e) {
-            console.error("Ошибка загрузки:", e);
-            return {};
-        }
-    }
+ 
 
     // 3. Сохранение данных
 // 3. Сохранение данных (С защитой от ошибок и разбивкой на части)
@@ -1247,184 +1217,8 @@ class CakeVisualizer {
   }
 }
 
-  // ============================================
-  // ДВИЖОК БАЗЫ ДАННЫХ (GOOGLE SHEETS API)
-  // ============================================
-
-  // 1. Инициализация (Поиск или Создание файла)
-// 1. Инициализация (Поиск или Создание Персональной БД)
-  async function apiInitDatabaseImpl() {
-    try {
-        // Проверка Email
-        if (!CURRENT_USER_EMAIL) {
-            return { success: false, error: "Email не определен. Попробуйте войти заново." };
-        }
-
-        // Проверка загрузки библиотеки Drive (Диск)
-        if (!gapi.client.drive) {
-            return { success: false, error: "Библиотека Google Drive API не загрузилась. Обновите страницу." };
-        }
-
-        // Формируем имя файла
-        const targetName = `CakePro_DB_${CURRENT_USER_EMAIL}`;
-
-        // Ищем файл
-        const response = await gapi.client.drive.files.list({
-            q: `name = '${targetName}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
-            fields: 'files(id, name)',
-            spaces: 'drive'
-        });
-
-        const files = response.result.files;
-        if (files && files.length > 0) {
-            // Файл найден
-            USER_DB_ID = files[0].id;
-            localStorage.setItem('cake_db_id', USER_DB_ID);
-            console.log(`✅ Найдена БД: ${targetName}`, USER_DB_ID);
-            return { success: true, id: USER_DB_ID, status: 'connected' };
-        } else {
-            // Файл не найден - создаем
-            console.log(`⚠️ БД не найдена, создаем: ${targetName}...`);
-            const createResp = await gapi.client.sheets.spreadsheets.create({
-                properties: { title: targetName },
-                sheets: [
-                    { properties: { title: "ingredients" } },
-                    { properties: { title: "recipes" } },
-                    { properties: { title: "labor" } },
-                    { properties: { title: "queue" } },
-                    { properties: { title: "clients" } },
-                    { properties: { title: "archive" } },
-                    { properties: { title: "settings" } },
-                    { properties: { title: "history_stock" } }
-                ]
-            });
-            USER_DB_ID = createResp.result.spreadsheetId;
-            localStorage.setItem('cake_db_id', USER_DB_ID);
-            console.log('✅ БД создана:', USER_DB_ID);
-            return { success: true, id: USER_DB_ID, status: 'created' };
-        }
-    } catch (e) {
-        console.error("Полная ошибка API:", e);
-        // Пытаемся достать текст ошибки из разных мест объекта Google
-        let msg = e.message || (e.result && e.result.error && e.result.error.message) || JSON.stringify(e);
-        return { success: false, error: msg };
-    }
-  }
-
-  // 2. Загрузка всех данных (Чтение ячеек A1 со всех листов)
-  // 2. Загрузка всех данных (С чтением чанков)
-async function apiLoadAllDataImpl() {
-    if (!USER_DB_ID) return {};
-    const sheets = ['ingredients', 'recipes', 'labor', 'queue', 'settings', 'clients', 'archive', 'history_stock'];
-    
-    // Читаем не просто A1, а весь столбец A (A:A)
-    const ranges = sheets.map(s => `${s}!A:A`);
-    
-    try {
-        const response = await gapi.client.sheets.spreadsheets.values.batchGet({
-            spreadsheetId: USER_DB_ID,
-            ranges: ranges
-        });
-        
-        const result = {};
-        const valueRanges = response.result.valueRanges;
-        
-        valueRanges.forEach((range, index) => {
-            const sheetName = sheets[index];
-            // Если данные есть
-            if (range.values && range.values.length > 0) {
-                try {
-                    // Склеиваем все ячейки столбца A в одну строку
-                    const fullJson = range.values.map(row => row[0]).join('');
-                    result[sheetName] = JSON.parse(fullJson);
-                } catch(parseErr) {
-                    console.warn("Ошибка парсинга листа:", sheetName);
-                }
-            }
-        });
-        return result;
-    } catch (e) {
-        console.error("Ошибка загрузки:", e);
-        return {};
-    }
-}
-  // 3. Сохранение данных (Запись в ячейку A1)
-  async function apiSaveDataImpl(sheetName, data) {
-    if (!USER_DB_ID) return false;
-    try {
-        const body = { values: [[JSON.stringify(data)]] };
-        await gapi.client.sheets.spreadsheets.values.update({
-            spreadsheetId: USER_DB_ID,
-            range: `${sheetName}!A1`,
-            valueInputOption: "RAW",
-            resource: body
-        });
-        console.log(`💾 Сохранено: ${sheetName}`);
-        return true;
-    } catch (e) {
-        console.error("Ошибка сохранения:", e);
-        return false;
-    }
-  }
-
-  // 4. Расчет торта (Теперь выполняется на телефоне клиента!)
-  function apiCalculateOrderImpl(data) {
-      try {
-        // Адаптер совместимости (старый код)
-        if (!data.tiers || data.tiers.length === 0) {
-           data.tiers = [{
-             id: 1,
-             weight: data.targetWeight,
-             recipeId: data.standardId,
-             fixedDiameter: data.fixedDiameter,
-             fixedHeight: data.fixedHeight
-           }];
-        }
-        
-        // Запуск локального калькулятора
-        const calc = new CakeCalculator(data);
-        const result = calc.calculate();
-    
-        return {
-          success: true,
-          svg: result.svg,
-          data: result.data
-        };
-    
-      } catch (e) {
-        return { success: false, error: e.message, stack: e.stack };
-      }
-  }
-
-  // ============================================
-  // ADAPTER (МОСТ МЕЖДУ СТАРЫМ UI И НОВЫМ API)
-  // ============================================
-  // Этот код перехватывает вызовы google.script.run и направляет их в наши новые функции
-  // ============================================
-  // ADAPTER (МОСТ МЕЖДУ СТАРЫМ UI И НОВЫМ API)
-  // ============================================
-  const runAdapter = {
-    withSuccessHandler: function(cb) {
-        // Возвращаем объект, который "помнит" именно этот callback (замыкание)
-        return {
-            withFailureHandler: function(failCb) {
-                // Если добавили обработку ошибок, возвращаем объект, помнящий и успех, и ошибку
-                return createRunner(cb, failCb);
-            },
-            ...createRunner(cb, null)
-        };
-    },
-    withFailureHandler: function(failCb) {
-         return {
-            withSuccessHandler: function(cb) {
-                return createRunner(cb, failCb);
-            },
-            ...createRunner(null, failCb)
-         }
-    },
-    // Прямые вызовы (без хендлеров)
-    ...createRunner(null, null)
-  };
+ 
+ 
 
   function createRunner(cb, failCb) {
       return {
@@ -1450,8 +1244,6 @@ async function apiLoadAllDataImpl() {
       };
   }
 
-  // Подменяем объект google.script.run
-  window.google = { script: { run: runAdapter } };
 
   // Подменяем объект google.script.run
   window.google = { script: { run: runAdapter } };
@@ -3188,6 +2980,80 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1;
+}
+
+      /* --- СТИЛИ ТЕХКАРТЫ (СПИСОК ПРОДУКТОВ) --- */
+.recipe-view-card {
+    background: #fff;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    overflow: hidden;
+    border: 1px solid #eee;
+}
+
+.rv-header {
+    padding: 8px 12px;
+    font-weight: 800;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+/* Цвета заголовков для разных типов */
+.rv-type-filling .rv-header { background: #E3F2FD; color: #1565C0; } /* Синий */
+.rv-type-coating .rv-header { background: #FBE9E7; color: #D84315; } /* Оранжевый */
+.rv-type-extra   .rv-header { background: #E8F5E9; color: #2E7D32; } /* Зеленый */
+
+.rv-body {
+    padding: 10px 15px;
+}
+
+/* Строка с точками */
+.rv-row {
+    display: flex;
+    align-items: baseline; /* Выравнивание по тексту */
+    margin-bottom: 4px;
+    font-size: 13px;
+    color: #333;
+}
+
+/* Название продукта */
+.rv-name {
+    font-weight: 500;
+    white-space: nowrap; /* Не переносить, если влезает */
+    max-width: 70%; /* Чтобы цифра всегда влезала */
+    overflow: hidden;
+    text-overflow: ellipsis; /* Троеточие, если длинно */
+}
+
+/* Точки-заполнители */
+.rv-dots {
+    flex: 1;
+    border-bottom: 1px dotted #ccc;
+    margin: 0 5px;
+    position: relative;
+    top: -4px; /* Чуть поднять точки */
+    opacity: 0.5;
+}
+
+/* Значение веса */
+.rv-val {
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+/* --- СТИЛЬ ДЛЯ ИСКЛЮЧЕННЫХ ИЗ СЧЕТА --- */
+.rv-row.is-excluded {
+    color: #999; /* Серый текст */
+    text-decoration: line-through; /* Зачеркнуто */
+    opacity: 0.7;
+}
+.rv-row.is-excluded .rv-val {
+    color: #999;
+    font-weight: normal;
 }
       
     </style>
@@ -5653,7 +5519,8 @@ function renderSideControls(side) {
 }
 
 // ОБНОВЛЕНИЕ СПИСКА (ТЕХКАРТА) - КОМПАКТНЫЙ ВИД С ТОЧКАМИ
-function setActiveSide(side) {
+
+     function setActiveSide(side) {
     appState.activeSide = side;
     
     // 1. Переключаем колонки
@@ -5669,7 +5536,7 @@ function setActiveSide(side) {
     // 3. Обновляем Плавающий Футер
     updateStickyFooter(side);
 
-    // 4. ОТРИСОВКА РЕЦЕПТА
+    // 4. ОТРИСОВКА РЕЦЕПТА (ТЕХКАРТА)
     const res = appState.results[side];
     if (!res) return;
 
@@ -5682,6 +5549,9 @@ function setActiveSide(side) {
 
     const container = document.getElementById('shopListContainer');
     container.innerHTML = '';
+    
+    // ВАЖНО: Убираем класс сетки, чтобы блоки шли друг под другом
+    container.className = ''; 
     container.style.display = 'block'; 
 
     if (!res.detailedBlocks || res.detailedBlocks.length === 0) {
@@ -5689,7 +5559,7 @@ function setActiveSide(side) {
         return;
     }
 
-    // Создаем карту перевода ID -> Номер яруса
+    // Создаем карту перевода ID -> Номер яруса (чтобы писать "Ярус 1" вместо ID)
     const tierMap = {};
     if (res.tiers) {
         res.tiers.forEach((t, index) => {
@@ -5703,11 +5573,10 @@ function setActiveSide(side) {
         if (!block.ingredients || block.ingredients.length === 0) return;
 
         let typeClass = 'rv-type-filling';
-        // Если хотите убрать иконки, оставьте icon пустой строкой
-        let icon = ''; 
+        let icon = '🎂'; 
         const nameLow = block.name.toLowerCase();
 
-        // Простая логика цветов
+        // Оформление заголовков
         if (block.type === 'coating') { typeClass = 'rv-type-coating'; icon = '🎨'; }
         else if (block.type === 'extra') { typeClass = 'rv-type-extra'; icon = '📦'; }
         else if (nameLow.includes('бисквит')) icon = '🍞';
@@ -5715,7 +5584,7 @@ function setActiveSide(side) {
         else if (nameLow.includes('пропитка')) icon = '💧';
         else if (nameLow.includes('конфи') || nameLow.includes('начинка')) icon = '🍓';
 
-        // Очищаем название
+        // Очищаем название (Заменяем "Ярус 1673..." на "Ярус 1")
         let displayName = block.name;
         displayName = displayName.replace(/Ярус\s+(\d+)/g, (match, id) => {
             return tierMap[id] ? `Ярус ${tierMap[id]}` : match;
@@ -5724,16 +5593,32 @@ function setActiveSide(side) {
         let rows = '';
         block.ingredients.forEach(ing => {
             let val = ing.amount;
-            let valStr = (val > 10) ? Math.round(val) : parseFloat(val.toFixed(1));
+            let valStr = '';
             
+            if (ing.unit === 'шт') {
+                valStr = `${Math.round(val)}`;
+            } else {
+                valStr = (val > 10) ? Math.round(val) : parseFloat(val.toFixed(1));
+            }
+            
+            // --- ЛОГИКА ГАЛОЧКИ "ВКЛЮЧИТЬ В СЧЕТ" ---
+            let excludedClass = '';
+            let note = '';
+            
+            // Если это Услуга/Декор и галочка снята (isPaid === false)
+            if (block.type === 'extra' && ing.isPaid === false) {
+                excludedClass = 'is-excluded'; // Добавляем класс для серого цвета
+                note = ' (не вкл.)';
+            }
+            // ----------------------------------------
+
             // --- ГЕНЕРАЦИЯ СТРОКИ С ТОЧКАМИ ---
             rows += `
-            <div class="rv-row">
-                <div class="rv-name">${ing.name}</div>
+            <div class="rv-row ${excludedClass}">
+                <div class="rv-name">${ing.name}${note}</div>
                 <div class="rv-dots"></div>
                 <div class="rv-val">${valStr} ${ing.unit}</div>
             </div>`;
-            // ----------------------------------
         });
 
         html += `
@@ -5749,7 +5634,6 @@ function setActiveSide(side) {
 
     container.innerHTML = html;
 }
-
 
 // Новая функция для обновления футера
 function updateStickyFooter(side) {
@@ -6633,18 +6517,14 @@ function addExtraItem() {
     if(!name || !amount) return; 
     
     const ing = myIngredients.find(i => i.name === name); 
-    if(!ing) return; 
-    
-    // Проверяем режим: если Фикс цена, то Упаковку делаем бесплатной по умолчанию?
-    // Для простоты пока ставим isPaid: true, пользователь сам снимет галочку если надо.
     
     extrasList.push({
-        id: ing.id,
-        name: ing.name,
+        id: ing ? ing.id : 'manual_' + Date.now(), // Если ручной ввод
+        name: name,
         amount: amount,
-        unit: ing.unit,
-        type: 'extra',
-        isPaid: true // <--- НОВОЕ ПОЛЕ (По умолчанию платно)
+        unit: ing ? ing.unit : 'шт',
+        // ВАЖНО: По умолчанию галочка включена
+        isPaid: true 
     }); 
     
     renderExtras(); 
@@ -6655,7 +6535,7 @@ function addExtraItem() {
     saveToHistory(); 
     performAutoSave();
     
-    // Если расчет уже есть - пересчитываем цену
+    // Сразу пересчитываем цену торта
     if (appState.results[appState.activeSide]) calculateSide(appState.activeSide);
 }
 
@@ -6759,17 +6639,17 @@ function updateExtraCost(index, valueStr) {
 // Новая функция переключения платности
 
 function toggleExtraPaid(idx) {
-    // 1. Меняем состояние галочки
+    // 1. Меняем состояние
     extrasList[idx].isPaid = !extrasList[idx].isPaid;
     
-    // 2. Сохраняем локально
+    // 2. Сохраняем
     saveToHistory();
     performAutoSave();
     
-    // 3. МГНОВЕННО обновляем интерфейс списка (чтобы сумма внизу пересчиталась)
+    // 3. Обновляем список (чтобы пересчиталась сумма внизу списка)
     renderExtras(); 
 
-    // 4. Запускаем пересчет всего торта (чтобы обновилась итоговая цена заказа)
+    // 4. ГЛАВНОЕ: Запускаем полный пересчет торта (чтобы обновилась Большая Цена)
     if (appState.results[appState.activeSide]) {
         calculateSide(appState.activeSide);
     }
@@ -15625,6 +15505,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
