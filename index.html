@@ -457,9 +457,11 @@ async function apiDownloadPhotoFromDrive(fileId) {
               data: result.data
             };
         
-        } catch (e) {
-            return { success: false, error: e.message, stack: e.stack };
-        }
+      } catch (e) {
+    // Улучшенная обработка ошибки
+    const errText = e.message || e.toString() || "Неизвестная ошибка";
+    return { success: false, error: errText, stack: e.stack };
+}
     }
 
    
@@ -1268,7 +1270,7 @@ class CakeVisualizer {
            return {}; 
        }
    }
-
+// --- 1. ФАБРИКА RUNNER (ИСПРАВЛЕННАЯ) ---
   function createRunner(cb, failCb) {
       return {
         apiInitDatabase: async function() {
@@ -1277,7 +1279,7 @@ class CakeVisualizer {
             else { if(failCb) failCb(res.error); else console.error(res); }
         },
         apiLoadAllData: async function() {
-            const res = await apiLoadAllDataImpl();
+            const res = await apiLoadAllDataImpl(); 
             if(cb) cb(res);
         },
         apiSaveData: async function(node, data) {
@@ -1285,13 +1287,56 @@ class CakeVisualizer {
             if(cb) cb(res); 
         },
         apiCalculateOrder: function(data) {
-            // Синхронный вызов
+            // ВАЖНОЕ ИСПРАВЛЕНИЕ:
+            // Мы вызываем расчет
             const res = apiCalculateOrderImpl(data);
-            if(res.success) { if(cb) cb(res); }
-            else { if(failCb) failCb(res.error); else console.error(res); }
+            
+            // И ВСЕГДА отдаем результат в cb (successHandler), 
+            // потому что ваше приложение само проверяет if(res.success) внутри.
+            if(cb) cb(res); 
         }
       };
   }
+
+  // --- 2. АДАПТЕР (СВЯЗЬ С ИНТЕРФЕЙСОМ) ---
+  const runAdapter = {
+      successCb: null,
+      failureCb: null,
+
+      withSuccessHandler: function(cb) {
+          this.successCb = cb;
+          return this;
+      },
+      withFailureHandler: function(cb) {
+          this.failureCb = cb;
+          return this;
+      },
+      // Проброс функций
+      apiInitDatabase: function() {
+          createRunner(this.successCb, this.failureCb).apiInitDatabase();
+      },
+      apiLoadAllData: function() {
+          createRunner(this.successCb, this.failureCb).apiLoadAllData();
+      },
+      apiSaveData: function(node, data) {
+          createRunner(this.successCb, this.failureCb).apiSaveData(node, data);
+      },
+      apiCalculateOrder: function(data) {
+          createRunner(this.successCb, this.failureCb).apiCalculateOrder(data);
+      }
+  };
+
+  // --- 3. ПОДМЕНА GOOGLE SCRIPT RUN ---
+  window.google = {
+      script: {
+          run: new Proxy(runAdapter, {
+              get: function(target, prop) {
+                  if (target[prop]) return target[prop].bind(target);
+                  return target[prop];
+              }
+          })
+      }
+  };
 
 
   // --- АДАПТЕР ДЛЯ ПОДМЕНЫ GOOGLE SCRIPT RUN ---
@@ -15588,6 +15633,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
