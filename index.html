@@ -1247,8 +1247,44 @@ class CakeVisualizer {
   }
 
 
-  // Подменяем объект google.script.run
-  window.google = { script: { run: runAdapter } };
+  // --- АДАПТЕР ДЛЯ ПОДМЕНЫ GOOGLE SCRIPT RUN ---
+const runnerProxy = {
+  successHandler: null,
+  failureHandler: null,
+
+  withSuccessHandler: function(cb) {
+    this.successHandler = cb;
+    return this;
+  },
+
+  withFailureHandler: function(cb) {
+    this.failureHandler = cb;
+    return this;
+  }
+};
+
+// Динамически пробрасываем вызовы функций в твой createRunner
+window.google = {
+  script: {
+    run: new Proxy(runnerProxy, {
+      get: function(target, prop) {
+        if (prop in target) return target[prop];
+        
+        // Когда вызывается любая функция (apiSaveData и т.д.)
+        return function(...args) {
+          const runner = createRunner(target.successHandler, target.failureHandler);
+          if (runner[prop]) {
+            return runner[prop](...args);
+          } else {
+            console.error("Функция " + prop + " не найдена в createRunner");
+          }
+        };
+      }
+    })
+  }
+};
+
+      
       </script>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="manifest" href="manifest.json">
@@ -15507,6 +15543,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
