@@ -257,7 +257,7 @@ async function apiLoadAllDataImpl() {
     const sheets = ['ingredients', 'recipes', 'labor', 'queue', 'settings', 'clients', 'archive', 'history_stock'];
     
     // Читаем не просто A1, а весь столбец A (A:A)
-    const ranges = sheets.map(s => `${s}!A:A`);
+    const ranges = sheets.map(s => `${s}!A1:A5000`);
     
     try {
         const response = await gapi.client.sheets.spreadsheets.values.batchGet({
@@ -281,6 +281,7 @@ async function apiLoadAllDataImpl() {
                 }
             }
         });
+      console.log("✅ Данные загружены (Быстрый режим)");
         return result;
     } catch (e) {
         console.error("Ошибка загрузки:", e);
@@ -4786,21 +4787,49 @@ function renderNavbar() {
      
 
      function switchTab(t) {
+    // 1. Скрываем все вкладки
     document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
     document.querySelectorAll('.nav-group .tab-btn').forEach(b => b.classList.remove('active'));
     
+    // 2. Показываем нужную
     const targetDiv = document.getElementById('tab-' + t);
     if (targetDiv) targetDiv.style.display = 'block';
     
-    // Ищем кнопку, у которой onclick содержит нужное имя вкладки
+    // 3. Подсвечиваем кнопку в меню
     const targetBtn = document.querySelector(`.nav-group .tab-btn[onclick*="'${t}'"]`);
     if (targetBtn) targetBtn.classList.add('active');
     
+    // --- ОБНОВЛЕНИЕ ДАННЫХ ПРИ ПЕРЕХОДЕ ---
+    
+    // 🏭 План производства
+    if(t === 'production') {
+        renderQueue(); 
+    }
+
+    // 📦 Склад (Обновляем и продукты, и работы)
+    if(t === 'stock') {
+        renderStockTable();
+        renderLaborTable();
+    }
+
+    // 📖 Рецепты (Обновляем список, чтобы видеть новые/импортированные)
+    if(t === 'recipes') {
+        renderRecipesList();
+    }
+
+    // 👥 Клиенты (Загружаем актуальный LTV и статусы)
     if(t === 'clients') {
         renderClientsCloud(); 
     }
-       if(t === 'archive') {
+    
+    // 🗄️ Архив (Применяем фильтры)
+    if(t === 'archive') {
         renderArchive();
+    }
+
+    // 🎨 Цвета (Если нужно обновить палитру)
+    if(t === 'colors' && typeof renderPaletteUI === 'function') {
+        renderPaletteUI();
     }
 }
 
@@ -13447,6 +13476,14 @@ function initializeApp() {
     statusDiv.id = "dbStatus";
     statusDiv.innerText = "🔌 Подключение к облаку...";
     document.body.appendChild(statusDiv);
+      setTimeout(() => {
+        const loader = document.getElementById('loadingOverlay');
+        if (loader && loader.style.display !== 'none') {
+            console.warn("Загрузка затянулась, принудительное скрытие");
+            loader.style.display = 'none';
+            alert("Загрузка заняла слишком много времени. Проверьте интернет, но вы можете продолжать работу.");
+        }
+    }, 15000);
 
     google.script.run.withSuccessHandler(function(res) {
         if (res.success) {
@@ -15623,6 +15660,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
