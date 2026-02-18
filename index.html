@@ -8212,16 +8212,32 @@ function generateBatchReport() {
             }
 
             // 2. Считаем веса
+            // 2. Считаем веса
             let currentBlockRawSum = 0;
             let taskBaseReadyWeight = 0; 
-            let taskSpecialItems = [];   
+            let taskSpecialItems = [];    
 
-            block.ingredients.forEach(ing => {
-                const ingKey = ing.name; 
-                if (!batch.ingredients[ingKey]) batch.ingredients[ingKey] = { name: ing.name, amount: 0, unit: ing.unit };
+            // ВАЖНО: Добавили iIdx (индекс строки)
+            block.ingredients.forEach((ing, iIdx) => {
+                
+                // ИЗМЕНЕНИЕ: Теперь ключ уникален для каждой строки рецепта.
+                // Если сливки встречаются 2 раза, они не склеятся.
+                const ingKey = `${ing.name}_${iIdx}`; 
+                
+                if (!batch.ingredients[ingKey]) {
+                    batch.ingredients[ingKey] = { 
+                        name: ing.name, 
+                        amount: 0, 
+                        unit: ing.unit,
+                        // На всякий случай сохраняем ID для точности
+                        id: ing.id 
+                    };
+                }
+                
                 batch.ingredients[ingKey].amount += ing.amount;
                 
                 let weightInGrams = ing.amount;
+                // ... (далее код пересчета веса остается без изменений) ...
                 if(ing.unit === 'шт') {
                     const dbIng = myIngredients.find(i => i.id === ing.id);
                     if(dbIng) weightInGrams *= (dbIng.singleWeight || 55);
@@ -8232,18 +8248,22 @@ function generateBatchReport() {
                 currentBlockRawSum += weightInGrams;
                 batch.totalWeight += weightInGrams;
 
-                // Уварка
+                // Уварка (оставляем как было)
                 let readyWeight = weightInGrams; 
                 let isSpecial = false;
 
                 if (originalBlock) {
+                    // Пытаемся найти ингредиент в оригинале по ID или по Имени+Индексу
+                    // Для уварки лучше искать по ID, если он есть
                     let origIng = originalBlock.ingredients.find(i => i.id === ing.id);
+                    
+                    // Если не нашли по ID (старые данные), ищем по имени и позиции
                     if (!origIng) {
-                         origIng = originalBlock.ingredients.find(i => {
-                            const dbIng = myIngredients.find(mi => mi.id === i.id);
-                            return dbIng && dbIng.name.toLowerCase().trim() === ing.name.toLowerCase().trim();
-                        });
+                         origIng = originalBlock.ingredients[iIdx]; 
+                         // Проверка имени, чтобы не взять чужое при смещении
+                         if (origIng && origIng.name !== ing.name) origIng = null;
                     }
+
                     if (origIng) {
                         const oIn = parseFloat(origIng.weight);
                         const oOut = parseFloat(origIng.outputWeight);
@@ -15605,6 +15625,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
