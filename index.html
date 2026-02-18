@@ -7831,21 +7831,39 @@ async function confirmAddToQueueWithClient() {
     clearOrderImage();
 
     // --- ФИНАЛЬНОЕ ОКНО ---
-    // (Показываем те же ссылки на WhatsApp/Календарь с новыми данными)
+  // --- ФИНАЛЬНОЕ ОКНО ---
     const waBtn = document.getElementById('btnSuccessWA');
     const calBtn = document.getElementById('btnSuccessCal');
-    
+    const currency = SYMBOLS[currentCurrency] || '₸'; // Берем валюту из настроек
+
     if (orderData.phone) {
+        // Подготовка данных для сообщения
         const dateRu = orderData.date.split('-').reverse().join('.');
         const cleanPhone = orderData.phone.replace(/\D/g, '');
-        // Формируем текст сообщения... (можно скопировать из старой функции)
-        const waText = `Обновление по заказу 🎂\n\nДата: *${dateRu}*\n...`; 
+        
+        // Получаем названия начинок
+        const fillingNames = resData.tiers.map(t => t.recipeName).join(' + ');
+        const orderWeight = (resData.weights.total / 1000).toFixed(2);
+        
+        // Заголовок: Если редактировали - "Обновление", если новый - "Принят"
+        const headerText = editingOrderId ? "Данные по заказу обновлены" : "Ваш заказ принят";
+
+        const waText = `${headerText}\n\n` +
+            `📅 Дата: *${dateRu}*\n` +
+            `🍰 Начинка: ${fillingNames}\n` +
+            `⚖️ Вес: ${orderWeight} кг\n` +
+            `📝 Оформление (декор): ${orderData.comment || 'По фото'}\n\n` +
+            `💳 Предоплата: ${prepaymentVal.toLocaleString('ru-RU')} ${currency}\n` +
+            `💳 Остаток: ${balanceVal.toLocaleString('ru-RU')} ${currency}\n\n` +
+            `Всё верно?`;
+
         waBtn.style.display = 'flex';
         waBtn.onclick = () => window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(waText)}`, '_blank');
     } else {
         waBtn.style.display = 'none';
     }
     
+    // Календарь
     const links = createCalendarLinks(orderData);
     calBtn.onclick = () => window.open(links.googleUrl, '_blank');
 
@@ -15531,6 +15549,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
