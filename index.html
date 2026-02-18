@@ -522,7 +522,7 @@ class CakeCalculator {
       this.totalWeight += tierResult.weight;
     });
 
-    // 2. Ручные добавки (Extras)
+    // 2. Обработка добавок (Это нужно для формирования списка покупок и detailedBlocks)
     if (this.data.extras && this.data.extras.length > 0) {
       this._processExtras(this.data.extras);
     }
@@ -543,7 +543,6 @@ class CakeCalculator {
     let finalPrice = 0;
 
     // --- РАЗВИЛКА РЕЖИМОВ ---
-    // --- РАЗВИЛКА РЕЖИМОВ ---
     if (this.data.calculationMode === 'fixed') {
         // РЕЖИМ 1: ФИКСИРОВАННАЯ ЦЕНА
         let totalCakesPrice = 0;
@@ -559,10 +558,18 @@ class CakeCalculator {
         if (this.data.extras) {
             this.data.extras.forEach(ex => {
                 if (ex.isPaid) {
-                     const item = this.ingredients.find(i => i.id === ex.id);
-                     if (item) {
-                         const cost = ex.amount * (item.packPrice / item.packWeight);
-                         paidExtrasCost += cost;
+                     // --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+                     // 1. Сначала смотрим, есть ли РУЧНАЯ цена
+                     if (ex.customCost !== undefined) {
+                         paidExtrasCost += ex.customCost;
+                     } 
+                     // 2. Если нет, считаем по базе (для весовых товаров без правки)
+                     else {
+                         const item = this.ingredients.find(i => i.id === ex.id);
+                         if (item) {
+                             const cost = ex.amount * (item.packPrice / item.packWeight);
+                             paidExtrasCost += cost;
+                         }
                      }
                 }
             });
@@ -571,20 +578,14 @@ class CakeCalculator {
         // В. ВЕЛЮР / ДОП. ПОКРЫТИЕ (Умный расчет: Цена или Себестоимость)
         let velourCost = 0;
         this.detailedBlocks.forEach(block => {
-            // Ищем блоки велюра
             if (block.name.startsWith('Велюр')) {
-                // 1. Пытаемся найти рецепт этого блока
                 const rec = this.recipes.find(r => r.id === block.recipeId);
                 const salePrice = rec ? (parseFloat(rec.salePricePerKg) || 0) : 0;
 
                 if (salePrice > 0) {
-                    // ВАРИАНТ 1: Есть цена продажи (напр. 20 000 тг/кг)
-                    // Считаем вес покрытия (суммируем вес ингредиентов в блоке)
                     let blockWeight = block.ingredients.reduce((sum, i) => sum + i.amount, 0);
-                    // Считаем цену: Вес(кг) * Цена
                     velourCost += (blockWeight / 1000) * salePrice;
                 } else {
-                    // ВАРИАНТ 2: Цены нет -> Берем Себестоимость ингредиентов
                     velourCost += block.totalCost;
                 }
             }
@@ -594,7 +595,9 @@ class CakeCalculator {
         finalPrice = Math.ceil(totalCakesPrice + paidExtrasCost + velourCost + laborCost);
         
     } else {
-        // РЕЖИМ 2: АВТО (КАЛЬКУЛЯЦИЯ) - Тут всё по старому (себестоимость + наценка)
+        // РЕЖИМ 2: АВТО (КАЛЬКУЛЯЦИЯ) - Тут всё по старому
+        // В _processExtras мы уже учли customCost при расчете this.totalCost,
+        // поэтому тут ничего менять не нужно.
         finalPrice = Math.ceil((this.totalCost + laborCost) * (1 + (this.data.urgencyPercent || 0) / 100));
     }
 
@@ -649,7 +652,7 @@ class CakeCalculator {
       }
     };
   }
-
+  
 _calculateSingleTier(tierInput, isBottom) {
     const recipe = this.recipes.find(r => r.id === tierInput.recipeId);
     if (!recipe) throw new Error(`Рецепт не найден (ID: ${tierInput.recipeId})`);
@@ -6657,38 +6660,46 @@ function addExtraItem() {
 }
 
       function removeExtraItem(i) { extrasList.splice(i,1); renderExtras(); }
-function renderExtras() {
+
+
+     function renderExtras() {
     saveToHistory();
     const c = document.getElementById('extrasContainer');
     c.innerHTML = '';
     
     const currency = SYMBOLS[currentCurrency] || '';
-    let totalClientSum = 0; 
-    let totalRealCost = 0; 
+    let totalClientSum = 0; // Сумма для клиента (только с галочками)
+    let totalRealCost = 0;  // Общая себестоимость (все пункты)
 
     extrasList.forEach((item, i) => {
         const ing = myIngredients.find(x => x.id === item.id);
         
-        // --- ЛОГИКА ЦЕНЫ ---
-        // Если цена была изменена вручную (customCost), берем её.
-        // Если нет — считаем по базе (Кол-во * Цена базы).
+        // 1. ОПРЕДЕЛЯЕМ ЦЕНУ (Ручная или Базовая)
         let cost = 0;
         if (item.customCost !== undefined) {
+             // Если ввели цену руками - берем её
              cost = item.customCost;
         } else if (ing) {
+             // Если нет - считаем по весу
              cost = item.amount * (ing.packPrice / ing.packWeight);
         }
 
-        totalRealCost += cost;
+        // 2. СУММИРУЕМ
+        totalRealCost += cost; // Себестоимость растет всегда
+        
         if (item.isPaid) {
-            totalClientSum += cost;
+            totalClientSum += cost; // Клиент платит, только если галочка стоит
         }
 
+        // Оформление строки
         const paidChecked = item.isPaid ? 'checked' : '';
         const rowOpacity = item.isPaid ? '1' : '0.6';
         
-        // Если цена введена вручную, подсвечиваем поле желтым
+        // Если цена ручная - подсвечиваем поле желтым
         const manualStyle = item.customCost !== undefined ? 'background:#fff3e0; border-color:#ffb74d;' : 'border:1px solid #eee;';
+        
+        // Цвет цены в строке
+        const priceColor = item.isPaid ? '#2E7D32' : '#999';
 
         c.innerHTML += `
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e0e0e0; padding:6px 0; font-size:13px; opacity:${rowOpacity};">
@@ -6697,14 +6708,14 @@ function renderExtras() {
             </div>
             
             <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-size:12px;"><b>${item.amount}</b> ${item.unit}</span>
+                <span style="font-size:12px; color:#555;"><b>${item.amount}</b> ${item.unit}</span>
                 
                 <div style="position:relative; width:80px;">
                     <input type="text" class="money-input" 
                            value="${Math.ceil(cost).toLocaleString('ru-RU')}" 
                            oninput="formatMoneyInput(this)"
                            onchange="updateExtraCost(${i}, this.value)"
-                           style="width:100%; text-align:right; font-weight:bold; font-size:13px; padding:4px; border-radius:4px; color:${item.isPaid ? '#2E7D32' : '#999'}; ${manualStyle}">
+                           style="width:100%; text-align:right; font-weight:bold; font-size:13px; padding:4px; border-radius:4px; color:${priceColor}; ${manualStyle}">
                 </div>
                 <span style="font-size:10px; color:#999;">${currency}</span>
                 
@@ -6718,11 +6729,12 @@ function renderExtras() {
         </div>`;
     });
 
+    // ИТОГИ (Отображаем всегда, если список не пуст)
     if (extrasList.length > 0) {
         c.innerHTML += `
         <div style="margin-top:10px; text-align:right; font-size:12px; padding-top:5px; border-top:2px solid #eee;">
-            <div>Себестоимость: <span style="color:#666;">${Math.ceil(totalRealCost).toLocaleString('ru-RU')} ${currency}</span></div>
-            <div style="font-size:14px; color:#2E7D32;">К оплате (Клиент): <b>${Math.ceil(totalClientSum).toLocaleString('ru-RU')} ${currency}</b></div>
+            <div style="margin-bottom:2px;">Себестоимость: <span style="color:#666;">${Math.ceil(totalRealCost).toLocaleString('ru-RU')} ${currency}</span></div>
+            <div style="font-size:14px; color:#2E7D32; font-weight:bold;">К оплате (Клиент): ${Math.ceil(totalClientSum).toLocaleString('ru-RU')} ${currency}</div>
         </div>`;
     } else {
         c.innerHTML = '<div style="text-align:center; color:#ccc; font-size:12px; padding:5px;">Список пуст</div>';
@@ -6745,13 +6757,26 @@ function updateExtraCost(index, valueStr) {
 }
      
 // Новая функция переключения платности
+
 function toggleExtraPaid(idx) {
+    // 1. Меняем состояние галочки
     extrasList[idx].isPaid = !extrasList[idx].isPaid;
+    
+    // 2. Сохраняем локально
     saveToHistory();
     performAutoSave();
-    // Пересчет цены
-    if (appState.results[appState.activeSide]) calculateSide(appState.activeSide);
+    
+    // 3. МГНОВЕННО обновляем интерфейс списка (чтобы сумма внизу пересчиталась)
+    renderExtras(); 
+
+    // 4. Запускаем пересчет всего торта (чтобы обновилась итоговая цена заказа)
+    if (appState.results[appState.activeSide]) {
+        calculateSide(appState.activeSide);
+    }
 }
+
+
+     
       // Пример того, как должна выглядеть функция в Index.html
 // --- ДОБАВЛЕНИЕ РАБОТЫ (С УЧЕТОМ ПОМОЩНИКА) ---
 // --- ДОБАВЛЕНИЕ РАБОТЫ (ИСПРАВЛЕНО: Учет настройки из справочника) ---
@@ -7661,6 +7686,7 @@ function optimizeOrderPayload(resData) {
 // 3. Сохранение заказа и пересчет суммы
 // 3. Сохранение заказа (С ПОДДЕРЖКОЙ РЕДАКТИРОВАНИЯ)
 async function confirmAddToQueueWithClient() {
+  const isEditMode = editingOrderId; // Запоминаем состояние до сброса
     let resData;
     let laborData;
     let extrasData;
@@ -7814,12 +7840,15 @@ async function confirmAddToQueueWithClient() {
     }
 
     // --- СБРОС И СОХРАНЕНИЕ ---
-    editingOrderId = null; // Выходим из режима редактирования
+  // --- СБРОС И СОХРАНЕНИЕ ---
+    editingOrderId = null; // Сбрасываем глобальную переменную (выходим из режима)
     
     // Возвращаем кнопку в исходное состояние
     const btn = document.querySelector('#orderFinalizeModal .main-btn');
-    btn.innerText = "Создать заказ";
-    btn.style.background = "#4CAF50"; 
+    if(btn) {
+        btn.innerText = "Создать заказ";
+        btn.style.background = "#4CAF50"; 
+    }
 
     // Сохраняем всё
     saveQueue();
@@ -7831,22 +7860,19 @@ async function confirmAddToQueueWithClient() {
     clearOrderImage();
 
     // --- ФИНАЛЬНОЕ ОКНО ---
-  // --- ФИНАЛЬНОЕ ОКНО ---
     const waBtn = document.getElementById('btnSuccessWA');
     const calBtn = document.getElementById('btnSuccessCal');
-    const currency = SYMBOLS[currentCurrency] || '₸'; // Берем валюту из настроек
+    const currency = SYMBOLS[currentCurrency] || '₸';
 
     if (orderData.phone) {
-        // Подготовка данных для сообщения
         const dateRu = orderData.date.split('-').reverse().join('.');
         const cleanPhone = orderData.phone.replace(/\D/g, '');
         
-        // Получаем названия начинок
         const fillingNames = resData.tiers.map(t => t.recipeName).join(' + ');
         const orderWeight = (resData.weights.total / 1000).toFixed(2);
         
-        // Заголовок: Если редактировали - "Обновление", если новый - "Принят"
-        const headerText = editingOrderId ? "Данные по заказу обновлены" : "Ваш заказ принят";
+        // ВОТ ЗДЕСЬ ИСПОЛЬЗУЕМ isEditMode ВМЕСТО editingOrderId
+        const headerText = isEditMode ? "Данные по заказу обновлены" : "Ваш заказ принят";
 
         const waText = `${headerText}\n\n` +
             `📅 Дата: *${dateRu}*\n` +
@@ -15549,6 +15575,7 @@ function createCalendarModalHTML() {
   </body>
 
 </html>
+
 
 
 
